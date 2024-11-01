@@ -5,7 +5,6 @@ import requests
 import zipfile
 from typing import Optional, Union, List, Dict
 import pandas as pd
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 def run_downloadCADICA(destination_folder: str, 
@@ -203,33 +202,3 @@ def run_saveToCsv(df: pd.DataFrame, outputCsvPath: str) -> None:
     None
     """
     df.to_csv(outputCsvPath, index=False)
-
-def run_plotLesionLabelDistribution(df: pd.DataFrame) -> None:
-    """
-    Plots the distribution of lesion labels within the DataFrame and saves the figure.
-
-    Args
-    -------------
-    df : pd.DataFrame
-        The DataFrame containing lesion labels for plotting.
-
-    Returns
-    -------------
-    None
-    """
-    os.makedirs('./figures', exist_ok=True)
-    lesionLabels = df['LesionLabel'].dropna()
-    labelCounts = lesionLabels.value_counts()
-    labelOrder = ['p0_20', 'p20_50', 'p50_70', 'p70_90', 'p90_98', 'p99', 'p100']
-    labelCounts = labelCounts.reindex(labelOrder).fillna(0)
-    
-    plt.figure(figsize=(10, 6))
-    labelCounts.plot(kind='bar')
-    plt.xlabel('Lesion Labels')
-    plt.ylabel('Frequency')
-    plt.title('Distribution of Lesion Labels')
-    plt.xticks(rotation=0)
-    plt.tight_layout()
-
-    plt.savefig('./figures/lesion_label_distribution.png')
-    plt.close()

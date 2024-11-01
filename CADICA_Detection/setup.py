@@ -15,7 +15,8 @@ setup(
         "pandas",
         "numpy",
         "matplotlib",
-        "tqdm"
+        "tqdm",
+        "Scikit-Learn"
 
     ],
     python_requires='>=3.9',

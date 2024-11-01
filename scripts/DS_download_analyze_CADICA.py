@@ -22,10 +22,22 @@ from tqdm import tqdm
 DATASET_URL = "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/p9bpx9ctcv-2.zip"
 
 # Configurable variables
+
+# Globlal
 DESTINATION_FOLDER = "/home/mariopasc/Python/Datasets/try_coronario"  # Change this to the desired destination
-OUTPUT_PATH = "/home/mariopasc/Python/Datasets/try_coronario/output.csv"  # Path where the CSV file will be saved
+OUTPUT_PATH = "/home/mariopasc/Python/Datasets/try_coronario"  # Path where all the results will be saved
+
+# First stage variables
 DS_NAME = "CADICA" # Giving the downloaded dataset a custom name
 
+# Second stage variables
+DATA_CSV_NAME = "information_dataset.csv" # This csv will contain pathLike information about the images of the dataset and the lesion's distrbution.
+
+# Third stage variables
+LABELS = ["p0_20", "p20_50", "p50_70", "p70_90", "p90_98", "p99", "p100"] # Lesion labels used to generate the dataset. In the paper, we used all of them.
+VAL_SIZE = .2 # Percentaje of data that will be split for the validation dataset. In the paper, we used 20%
+TEST_SIZE = .2 # Percentaje of data that will be split for the test dataset. In the paper, we used 20%
+RANDOM_SEED = 42 # Random seed set for ensuring reproducibility. The paper's results are generated with 42, but we tested other partitions to ensure stability.
 
 #############
 #  SCRIPT   #
@@ -110,11 +122,30 @@ data = {
     'SelectedFramesLesionVideo': selected_frames_lesion_video_list,
     'GroundTruthFile': groundtruth_file_list,
 }
-df = pd.DataFrame(data)
+
+dataset_info_df = pd.DataFrame(data)
 
 # Save the DataFrame to a CSV file
-DatasetTools.saveToCsv(df, OUTPUT_PATH)
+csv_path = os.path.join(OUTPUT_PATH, DATA_CSV_NAME)
+DatasetTools.saveToCsv(dataset_info_df, csv_path)
 
-print(f"Data downloading complete. CSV file saved at: {OUTPUT_PATH}")
+print(f"Data downloading complete. CSV file saved at: {csv_path}")
 
 # 3. Holdout the CSV File
+# Load and prepare dataset
+df = DatasetTools.cleanGroundTruthFileDatasetField(csv_path)
+
+# Filter dataset by specified labels
+filtered_df = DatasetTools.filterByLabels(dataset_info_df, LABELS)
+
+# Split data into training, validation, and test sets
+train_df, val_df, test_df = DatasetTools.splitData(filtered_df, VAL_SIZE, TEST_SIZE, RANDOM_SEED)
+
+# Save each split to a separate CSV file
+holdout_folder = os.path.join(OUTPUT_PATH, "holdout_information")
+os.makedirs(holdout_folder, exist_ok=True)
+DatasetTools.saveSplit(train_df, holdout_folder, 'train')
+DatasetTools.saveSplit(val_df, holdout_folder, 'val')
+DatasetTools.saveSplit(test_df, holdout_folder, 'test')
+
+print(f"Data splits saved in {holdout_folder}")

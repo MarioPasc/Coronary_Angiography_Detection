@@ -9,7 +9,15 @@ from .data_loader import (
     run_saveToCsv
 )
 
-from typing import Optional, Union, List, Dict
+from .holdout import (
+    run_cleanGroundTruthFileDatasetField,
+    run_filterByLabels,
+    run_saveSplit,
+    run_splitData
+)
+
+# Mostly modules needed for typing 
+from typing import Optional, Union, List, Dict, Tuple
 import os
 import pandas as pd
 
@@ -18,6 +26,8 @@ class DatasetTools:
     A utility class for handling dataset-related tasks, such as downloading, preprocessing,
     and splitting data for analysis and model training.
     """
+
+    # data_loader.py tools
 
     @staticmethod
     def downloadCADICA(destination_folder: str, 
@@ -150,3 +160,90 @@ class DatasetTools:
         """
         return run_saveToCsv(df = df, 
                              outputCsvPath = outputCsvPath)
+    
+    # holdout.py tools
+
+    @staticmethod
+    def cleanGroundTruthFileDatasetField(csv_path: str) -> pd.DataFrame:
+        """
+        Loads the dataset CSV and fills missing 'GroundTruthFile' values with 'nolesion'.
+        
+        Args
+        -------------
+        csv_path : str
+            Path to the CSV file containing the dataset.
+            
+        Returns
+        -------------
+        pd.DataFrame
+            A DataFrame loaded from the CSV with missing 'GroundTruthFile' values filled.
+        """
+        return run_cleanGroundTruthFileDatasetField(csv_path = csv_path)
+
+    @staticmethod
+    def filterByLabels(df: pd.DataFrame, labels: List[str]) -> pd.DataFrame:
+        """
+        Filters the dataset to retain only samples without lesions or those with specified lesion labels.
+
+        Args
+        -------------
+        df : pd.DataFrame
+            The original dataset DataFrame.
+        labels : List[str]
+            A list of lesion labels to keep in the filtered dataset.
+
+        Returns
+        -------------
+        pd.DataFrame
+            A filtered DataFrame containing only the specified lesion labels and non-lesion samples.
+        """
+        return run_filterByLabels(df = df, labels = labels)
+
+    @staticmethod
+    def splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """
+        Splits the dataset into training, validation, and testing sets based on unique video samples.
+
+        Args
+        -------------
+        filtered_df : pd.DataFrame
+            The filtered DataFrame to split into train, validation, and test sets.
+        val_size : float
+            Proportion of the dataset used for validation in relation to training set.
+        test_size : float
+            Proportion of the dataset used for testing.
+        random_state : int, optional
+            Random state for reproducibility. Defaults to 39.
+
+        Returns
+        -------------
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+            DataFrames for training, validation, and testing sets, respectively.
+        """
+        return run_splitData(filtered_df = filtered_df, 
+                             val_size = val_size, 
+                             test_size = test_size, 
+                             random_state = random_state)
+
+    @staticmethod
+    def saveSplit(df: pd.DataFrame, output_path: str, split_name: str) -> None:
+        """
+        Saves the dataset split to a CSV file.
+
+        Args
+        -------------
+        df : pd.DataFrame
+            DataFrame containing the dataset split.
+        output_path : str
+            Directory where the split CSV will be saved.
+        split_name : str
+            Name of the split ('train', 'val', or 'test') used in the output filename.
+
+        Returns
+        -------------
+        None
+        """
+        return run_saveSplit(df = df, 
+                             output_path = output_path, 
+                             split_name = split_name)
+
