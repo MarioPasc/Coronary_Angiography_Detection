@@ -6,7 +6,7 @@ import pandas as pd
 import logging
 from typing import Dict, List
 import yaml
-import ultralytics
+import external.ultralytics as ultralytics
 
 # Define hyperparameter limits
 HYPERPARAMETER_LIMITS = {

@@ -1,4 +1,8 @@
-import ultralytics as ultralytics
+# This file was used to perform the training and validation of our YOLO model configurations. 
+# The validation performed in the script is a epoch-wise validation, where we save each epoch in the training stage and use that snapshot of the weight of the NN
+# to compute predictions on the validation set, allowing us to make an honest hyperparameter optimization.
+
+import external.ultralytics as ultralytics
 import os
 import glob
 import pandas as pd
