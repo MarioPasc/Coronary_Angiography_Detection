@@ -1,0 +1,3 @@
+[submodule "CADICA_Detection/external/ultralytics"]
+	path = CADICA_Detection/external/ultralytics
+	url = https://github.com/MarioPasc/ultralytics
