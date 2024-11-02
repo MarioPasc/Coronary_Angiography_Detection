@@ -1,8 +1,21 @@
-# This script effectively downloads the CADICA dataset and generates a CSV file with path data corresponding to the dataset downloaded.
-# This data will be useful to holdout the dataset into train, validation, and test set, which will be useful to perform the careful
-# hyperparameter tuning performed in the paper. 
-# The output csv will contain the following columns:
-# Patient | Video | Frame | Video_Paciente | Lesion | LesionLabel | SelectedFramesNonLesionVideo | SelectedFramesLesionVideo | GroundTruthFile
+# This script contains all the functionality necessary to generate the input dataset used to train the YOLOv8 Ultralytic's model
+# used for generating the results of the paper
+# This script uses the tools provided by the class DatasetTools, which serves as an entry point to the dataset submodule from the CADICA_Detection package.
+# The script follows these steps:
+#   1. Dataset downloading
+#   2. Dataset analysis: Generate a .csv file with all the paths and lesion tags for the images.
+#   3. Holdout: Generate 3 .csv files with the paths and information about the images for each set: train/val/test.
+#   4. Data undersampling: Undersample specific lesion classes from the original dataset to avoid introducing a bias into the model.
+#   5. Data augmentation: Using our own augmentation tools, recreate different scenarios that could take place when adquiring the images to compensate
+#      the lower amount of samples for some lesion classes, effectively creating new images for the model to train on, and balancing the target class.
+#   6. YOLO dataset formatting: Now that we have all the new images generated and our splits done, format the dataset in order to feed it to the YOLO model.
+#
+# Considerations about the code:
+# - The default setting of this script generate the dataset used for the paper.
+# - The test set did not undergo any agumentation/undersampling step.
+
+# export PYTHONPATH="${PYTHONPATH}:/home/mariopasc/Python/Projects/Coronary_Angiography_Detection"
+
 
 #############
 #  MODULES  #
@@ -38,6 +51,12 @@ LABELS = ["p0_20", "p20_50", "p50_70", "p70_90", "p90_98", "p99", "p100"] # Lesi
 VAL_SIZE = .2 # Percentaje of data that will be split for the validation dataset. In the paper, we used 20%
 TEST_SIZE = .2 # Percentaje of data that will be split for the test dataset. In the paper, we used 20%
 RANDOM_SEED = 42 # Random seed set for ensuring reproducibility. The paper's results are generated with 42, but we tested other partitions to ensure stability.
+
+# Fourth stage variables
+CLASS_UNDERSAMPLING = {
+    "p0_20": [46, 17, 0], # 46% ignored in train, 12% ignored in val, 0% ignored in test 
+    "p20_50": [15, 0, 0]  # 10% ignored in train, 0% ignored in val, 0% ignored in test  
+}
 
 #############
 #  SCRIPT   #
@@ -149,3 +168,12 @@ DatasetTools.saveSplit(val_df, holdout_folder, 'val')
 DatasetTools.saveSplit(test_df, holdout_folder, 'test')
 
 print(f"Data splits saved in {holdout_folder}")
+
+# 4. Undersample overrepresented lesion classes 
+# Load the original data for comparison
+pre_undersampling_df = DatasetTools.loadDataSplits(holdout_folder)
+
+# Apply undersampling
+post_undersampling_df = DatasetTools.undersampling(holdout_folder, CLASS_UNDERSAMPLING)
+
+print(f"Undersampling applied modified the contents of {holdout_folder}.")

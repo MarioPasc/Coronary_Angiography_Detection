@@ -16,6 +16,11 @@ from .holdout import (
     run_splitData
 )
 
+from .undersampling import (
+    run_loadDataSplits,
+    run_undersampling
+)
+
 # Mostly modules needed for typing 
 from typing import Optional, Union, List, Dict, Tuple
 import os
@@ -246,4 +251,43 @@ class DatasetTools:
         return run_saveSplit(df = df, 
                              output_path = output_path, 
                              split_name = split_name)
+    
+    # undersampling.py tools
+
+    @staticmethod
+    def loadDataSplits(holdout_path: str) -> pd.DataFrame:
+        """
+        Loads the train, val, and test splits from CSV files and concatenates them into a single DataFrame.
+        
+        Args
+        -------------
+        holdout_path : str
+            Path to the folder containing train.csv, val.csv, and test.csv files.
+        
+        Returns
+        -------------
+        pd.DataFrame
+            A concatenated DataFrame containing data from all three splits.
+        """
+        return run_loadDataSplits(holdout_path = holdout_path)
+
+    @staticmethod
+    def undersampling(holdout_path: str, class_dict: Dict[str, list]) -> pd.DataFrame:
+        """
+        Applies undersampling to the train, val, and test splits based on the specified class distribution.
+
+        Args
+        -------------
+        holdout_path : str
+            Path to the folder containing train.csv, val.csv, and test.csv files.
+        class_dict : dict
+            Dictionary specifying the percentage of images to ignore in each split for each class.
+
+        Returns
+        -------------
+        pd.DataFrame
+            Concatenated DataFrame of all splits after undersampling.
+        """
+        return run_undersampling(holdout_path = holdout_path, 
+                                 class_dict = class_dict)
 

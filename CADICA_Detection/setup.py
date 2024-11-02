@@ -1,6 +1,5 @@
-# setup.py
+# CADICA_Detection/setup.py
 from setuptools import setup, find_packages
-import os 
 
 setup(
     name='CADICA_Detection',
