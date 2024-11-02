@@ -16,7 +16,9 @@ setup(
         "matplotlib",
         "tqdm",
         "Scikit-Learn",
-        "opencv-python-headless"
+        "opencv-python-headless",
+        "ultralytics",
+        "yaml"
 
     ],
     python_requires='>=3.9',

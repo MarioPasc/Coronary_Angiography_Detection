@@ -247,7 +247,7 @@ def format_for_yolo():
 # Main execution
 def main():
     # Execute all steps in sequence
-    #download_and_prepare_dataset()
+    download_and_prepare_dataset()
     generate_dataset_analysis()
     split_holdout_sets()
     apply_undersampling()
