@@ -21,6 +21,11 @@ from .undersampling import (
     run_undersampling
 )
 
+from .augmentation import (
+    run_augmentData,
+    run_loadDataAugmentation
+)
+
 # Mostly modules needed for typing 
 from typing import Optional, Union, List, Dict, Tuple
 import os
@@ -290,4 +295,59 @@ class DatasetTools:
         """
         return run_undersampling(holdout_path = holdout_path, 
                                  class_dict = class_dict)
+    
+    # augmentation.py tools
+
+    @staticmethod
+    def loadDataAugmentation(train_path: str, val_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Loads training and validation datasets from CSV files.
+        
+        Args
+        -------------
+        train_path : str
+            Path to the training dataset CSV.
+        val_path : str
+            Path to the validation dataset CSV.
+        
+        Returns
+        -------------
+        Tuple[pd.DataFrame, pd.DataFrame]
+            DataFrames for the training and validation datasets.
+        """
+        return run_loadDataAugmentation(train_path = train_path, 
+                                        val_path = val_path)
+
+    @staticmethod
+    def augmentData(train_df: pd.DataFrame, val_df: pd.DataFrame, base_output_path: str,
+                    augmented_lesion_images: int, augmented_nolesion_images: int, ignore_top_n: int = 0, seed:int = 42) -> None:
+        """
+        Augments training and validation datasets by applying various augmentations to both lesion and no-lesion images.
+        
+        Args
+        -------------
+        train_df : pd.DataFrame
+            DataFrame containing the training dataset.
+        val_df : pd.DataFrame
+            DataFrame containing the validation dataset.
+        base_output_path : str
+            Base directory where augmented data will be saved.
+        augmented_lesion_images : int
+            Number of augmented lesion images to generate.
+        augmented_nolesion_images : int
+            Number of augmented no-lesion images to generate.
+        ignore_top_n : int, optional
+            Number of most common lesion classes to ignore for augmentation.
+            
+        Returns
+        -------------
+        None
+        """
+        return run_augmentData(train_df = train_df,
+                               val_df = val_df,
+                               base_output_path = base_output_path,
+                               augmented_lesion_images = augmented_lesion_images,
+                               augmented_nolesion_images = augmented_nolesion_images,
+                               ignore_top_n = ignore_top_n,
+                               seed = seed)
 

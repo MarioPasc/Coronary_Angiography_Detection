@@ -58,6 +58,13 @@ CLASS_UNDERSAMPLING = {
     "p20_50": [15, 0, 0]  # 10% ignored in train, 0% ignored in val, 0% ignored in test  
 }
 
+# Fifth stage variables
+AUGMENTATION_PATH = os.path.join(DESTINATION_FOLDER, 'CADICA_Agumented_Images') # Path to save augmented images
+AUGMENTED_LESION_IMAGES = 900 # Number of augmented images with a lesion. This amount will be evenly split among all the lesion class, except the top_n 
+AUGMENTED_NONLESION_IMAGES = 550 # Number of augmneted images without a lesion.
+IGNORE_TOP_N = 2 # Ignore this amount of highest present lesion labels in the dataset,
+                 # "p0_20", "p20_50" are overrepresented, so we will not apply augmentation to them, therefore, IGNORE_TOP_N = 2
+
 #############
 #  SCRIPT   #
 #############
@@ -177,3 +184,10 @@ pre_undersampling_df = DatasetTools.loadDataSplits(holdout_folder)
 post_undersampling_df = DatasetTools.undersampling(holdout_folder, CLASS_UNDERSAMPLING)
 
 print(f"Undersampling applied modified the contents of {holdout_folder}.")
+
+# 5. Apply data augmentation 
+train_path = os.path.join(holdout_folder, 'train.csv')
+val_path = os.path.join(holdout_folder, 'val.csv')
+train_df, val_df = DatasetTools.loadDataAugmentation(train_path, val_path)
+DatasetTools.augmentData(train_df, val_df, AUGMENTATION_PATH, AUGMENTED_LESION_IMAGES, AUGMENTED_NONLESION_IMAGES, IGNORE_TOP_N, RANDOM_SEED)
+print(f"Data augmentation completed. Results saved in {AUGMENTATION_PATH}")

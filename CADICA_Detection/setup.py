@@ -15,7 +15,8 @@ setup(
         "numpy",
         "matplotlib",
         "tqdm",
-        "Scikit-Learn"
+        "Scikit-Learn",
+        "opencv-python-headless"
 
     ],
     python_requires='>=3.9',
