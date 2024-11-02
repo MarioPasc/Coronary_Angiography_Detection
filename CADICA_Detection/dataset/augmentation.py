@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import random
 from typing import Tuple
+from tqdm import tqdm
 
 def _augmentSubset(subset_df: pd.DataFrame, base_output_path: str, dataset_type: str,
                    augmented_lesion_images: int, augmented_nolesion_images: int, ignore_top_n: int = 0) -> None:
@@ -51,13 +52,13 @@ def _augmentSubset(subset_df: pd.DataFrame, base_output_path: str, dataset_type:
 
     augmented_images = []
 
-    for label, count in lesion_augmentation_counts.items():
+    for label, count in tqdm(lesion_augmentation_counts.items(), desc="Applying data augmentation to lesion images ...", colour='green'):
         label_images = lesion_images[lesion_images['LesionLabel'] == label]
         for _ in range(count):
             row = label_images.sample().iloc[0]
             augmented_images.append(_applyAugmentation(row, dataset_type, base_output_path))
 
-    for _ in range(augmented_nolesion_images):
+    for _ in tqdm(range(augmented_nolesion_images), desc='Applying data augmentation to non-lesion images ...', colour='green'):
         row = nolesion_images.sample().iloc[0]
         augmented_images.append(_applyAugmentation(row, dataset_type, base_output_path))
 
@@ -278,5 +279,7 @@ def run_augmentData(train_df: pd.DataFrame, val_df: pd.DataFrame, base_output_pa
     """
     random.seed(seed)
     np.random.seed(seed)
+    print("Applying augmentation to train set.")
     _augmentSubset(train_df, base_output_path, 'train', augmented_lesion_images, augmented_nolesion_images, ignore_top_n)
+    print("Applying augmentation to validation set.")
     _augmentSubset(val_df, base_output_path, 'val', augmented_lesion_images, augmented_nolesion_images, ignore_top_n)

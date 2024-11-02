@@ -26,6 +26,10 @@ from .augmentation import (
     run_loadDataAugmentation
 )
 
+from .formatting import (
+    run_generateDataset
+)
+
 # Mostly modules needed for typing 
 from typing import Optional, Union, List, Dict, Tuple
 import os
@@ -351,3 +355,28 @@ class DatasetTools:
                                ignore_top_n = ignore_top_n,
                                seed = seed)
 
+    # formatting.py tools
+
+    def generateYOLODataset(train_csv: str, val_csv: str, test_csv: str, dataset_dir: str) -> None:
+        """
+        Generate the YOLO dataset by copying files to the appropriate directories.
+
+        Args
+        -------------
+        train_csv : str
+            Path to the training CSV file.
+        val_csv : str
+            Path to the validation CSV file.
+        test_csv : str
+            Path to the test CSV file.
+        dataset_dir : str
+            Path to the output directory where the dataset will be generated.
+
+        Returns
+        -------------
+        None
+        """
+        return run_generateDataset(train_csv = train_csv,
+                                   val_csv = val_csv,
+                                   test_csv = test_csv,
+                                   dataset_dir = dataset_dir)
