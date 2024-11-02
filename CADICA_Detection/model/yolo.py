@@ -9,7 +9,7 @@ from typing import Dict
 logging.basicConfig(filename='yolov8_detection.log', level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
-class Detection_YOLOv8:
+class Detection_YOLO:
     """
     A class to manage the training, tuning, and validation processes of YOLOv8 for object detection.
 
@@ -168,10 +168,11 @@ def main() -> int:
         int: Exit code, 0 for success.
     """
     try:
-        model = Detection_YOLOv8(model_path="", yaml_path="./config.yaml")
+        model = Detection_YOLO(model_path="", yaml_path="./config.yaml")
         model.train()
         model.val()
-        # Uncomment to run hyperparameter tuning with Simulated annealing (https://en.wikipedia.org/wiki/Simulated_annealing). Ultralytics don't really implement a GA for this tuning.
+        # Uncomment to run hyperparameter tuning with Simulated annealing (https://en.wikipedia.org/wiki/Simulated_annealing). 
+        # Ultralytics doesnt really implement a GA for this tuning.
         # model.tune()
         return 0
     except Exception as e:

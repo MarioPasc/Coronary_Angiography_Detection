@@ -8,18 +8,19 @@ setup(
     author_email='mpascualg02@gmail.com',
     description='',
     url='https://github.com/yourusername/CADICA_Detection',
-    packages=find_packages(),  # Finds all submodules automatically
+    packages=find_packages(include=["CADICA_Detection", "CADICA_Detection.*", "CADICA_Detection.external.ultralytics"]),
     install_requires=[
         "requests",
         "pandas",
         "numpy",
         "matplotlib",
         "tqdm",
-        "Scikit-Learn",
+        "scikit-learn",
         "opencv-python-headless",
-        "ultralytics",
-        "yaml"
-
+        "pyyaml"
     ],
     python_requires='>=3.9',
+    package_data={
+        "": ["external/ultralytics/*"]  # Adjust to include all relevant files
+    }
 )

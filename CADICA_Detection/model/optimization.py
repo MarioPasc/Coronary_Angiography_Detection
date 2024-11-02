@@ -259,39 +259,3 @@ class HyperparameterTuning:
                     self._train(provided_hyperparameters, run_name, epochs_per_iteration)
 
         logging.info("Tuning completed.")
-
-# In the paper, we did not apply this random hyperparameter search, but rather did a manual search
-def random_values() -> None:
-    hyperparameters = {'lr0': [], 'momentum': []}
-    tuner = HyperparameterTuning(output='output_folder', model='yolov8l.pt', config_yaml_path='config.yaml', yaml_params_path='params.yaml')
-    tuner.tune_hyperparameters(hyperparameters, coef=0.2, num_iterations=10, epochs_per_iteration=5, random=True)
-
-def fixed_values() -> None:
-    lr0 = 1.0e-05
-    lrf = 0.00829
-    momentum = 0.70064
-    weight_decay = 0.00048
-    warmup_epochs = 3.66787
-    warmup_momentum = 0.78696
-    warmup_bias_lr = 0.1
-    box = 8.57719
-    cls = 0.68361
-    dfl = 1.19862
-
-    hyperparameters = {
-        'lr0': [5.0e-6, 7.5e-6, lr0, 5.0e-5, 7.5e-5],
-        'lrf': [0.004, 0.00614, lrf, 0.012, 0.016],
-        'momentum': [0.68, 0.69, momentum, 0.71, 0.72],
-        'weight_decay': [0.00024, 0.00036, weight_decay, 0.0006, 0.00072],
-        'warmup_momentum': [0.69, 0.74, warmup_momentum, 0.83, 0.88],
-        'warmup_bias_lr': [0.05, 0.075, warmup_bias_lr, 0.15, 0.175],
-        'box': [7.8, 8.18, box, 8.98, 9.38],
-        'cls': [0.61, 0.65, cls, 0.72, 0.75],
-        'dfl': [1.05, 1.12, dfl, 1.27, 1.34]
-    }
-
-    tuner = HyperparameterTuning(output='output_tuning', model='yolov8l.pt', config_yaml_path='config.yaml', yaml_params_path='args.yaml')
-    tuner.tune_hyperparameters(hyperparameters, epochs_per_iteration=100, random=False)
-
-if __name__ == "__main__":
-    fixed_values()
