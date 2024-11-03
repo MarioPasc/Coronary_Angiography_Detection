@@ -11,24 +11,29 @@
 #       II. lineplot for variation of mAP@50-95 per hyperparameter value. X-axis: hyperparameter value, Y-axis: mAP@50-95
 # 5. Results comparison: Lineplot of mAP@50-95 performance per model. X-axis: epoch, Y-axis: mAP@50-95, one data series per model (baseline, Simulated Annealing, iteration 1, iteration 2)
 
-from typing import List
+from typing import List, Dict
 import pandas as pd
 import os
 import logging
 import json
 from collections import defaultdict
 import re
+from natsort import natsorted
 import yaml
 import cv2
+import numpy as np
 import matplotlib.pyplot as plt
 import scienceplots
+
 plt.style.use(['science', 'ieee', 'std-colors'])
 plt.rcParams['font.size'] = 12
-plt.rcParams.update({'figure.dpi': '100'})
+plt.rcParams.update({'figure.dpi': '300'})
 plt.rcParams['axes.spines.top'] = False
 plt.rcParams['axes.spines.right'] = False
 
 CONFIG_PATH = "./scripts/config.yaml"
+FIGSIZE = (15,7.5)
+SHOW = False
 
 # Set up logging
 logging.basicConfig(filename='visualization.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -113,7 +118,7 @@ def original_dataset_visualization():
         max_y = max(counts_per_set[['Lesion', 'No Lesion', 'Total']].values.max(), label_counts.values.max())
 
         # Plotting with adjusted y-axis
-        fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+        fig, axs = plt.subplots(1, 2, figsize=FIGSIZE)
 
         # Plot 1: Set-based visualization with standardized y-axis
         counts_per_set.plot(kind='bar', x='Set', y=['Lesion', 'No Lesion', 'Total'], ax=axs[0])
@@ -143,7 +148,7 @@ def original_dataset_visualization():
         for fmt in save_formats:
             fig.savefig(os.path.join(save_path, f'dataset_visualizations.{fmt}'), format=fmt)
 
-        plt.show()
+        if SHOW: plt.show()
         logging.info(f"Original dataset plots generates and saved in {save_path}.")
     except Exception as e:
         logging.info(f"Error generating original dataset plots. - {e}")
@@ -219,7 +224,7 @@ def processed_dataset_visualization():
         max_y = max(processed_counts[['Lesion', 'No Lesion', 'Total']].values.max(), processed_labels.values.max())
 
         # Plotting with adjusted y-axis
-        fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+        fig, axs = plt.subplots(1, 2, figsize=FIGSIZE)
 
         # Plot 1: Processed set-based visualization with markers for original values
         offset = 0.165
@@ -254,7 +259,7 @@ def processed_dataset_visualization():
         for fmt in save_formats:
             fig.savefig(os.path.join(save_path, f'processed_dataset_visualizations.{fmt}'), format=fmt)
 
-        plt.show()
+        if SHOW: plt.show()
         logging.info(f"Processed dataset plots generated and saved in {save_path}.")
     except Exception as e:
         logging.info(f"Error generating processed dataset plots. - {e}")
@@ -352,6 +357,7 @@ def plot_augmented_bboxes(patient_video: str, frame_id: str):
         save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
         os.makedirs(save_path, exist_ok=True)
         save_formats = CONFIG["FIGURE_FORMATS"]
+
         # Filter original bounding boxes for the specified patient and frame
         train_df = train_df[train_df["Frame_path"].str.contains(patient_video) & train_df["Frame_path"].str.contains(frame_id)]
         
@@ -383,7 +389,7 @@ def plot_augmented_bboxes(patient_video: str, frame_id: str):
         }
 
         # Create 1x4 subplot for the augmentations
-        fig, axes = plt.subplots(1, 4, figsize=(20, 5))
+        fig, axes = plt.subplots(1, 4, figsize=FIGSIZE)
         
         for i, (aug, (aug_image_path, aug_bbox_path)) in enumerate(augmentation_data.items()):
             # Load the augmented image for this augmentation
@@ -410,29 +416,384 @@ def plot_augmented_bboxes(patient_video: str, frame_id: str):
 
             # Remove axis for clarity
             axes[i].axis("off")
+            
 
         # Display legend for bounding boxes
         handles, labels = axes[0].get_legend_handles_labels()
         fig.legend(handles, ["Original Bounding Box", "Augmented Bounding Box"], loc="lower center", ncol=2)
 
-        plt.show()
         # Save figures in specified formats
         for fmt in save_formats:
             fig.savefig(os.path.join(save_path, f'augmented_examples.{fmt}'), format=fmt)
 
-        plt.show()
+        if SHOW: plt.show()
         logging.info(f"Processed dataset plots generated and saved in {save_path}.")
     except Exception as e:
         logging.info(f"Error generating processed dataset plots. - {e}")
 
+def plot_hyperparameter_fitness_scatter():
+    """
+    Generates a 3x3 grid of scatter plots for the first 9 hyperparameters in the provided CSV file.
+    Each plot shows the relationship between a hyperparameter and the fitness score, with points
+    color-coded by density and the maximum fitness point marked in red.
+
+    Args:
+        None
+    """
+    save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
+    os.makedirs(save_path, exist_ok=True)
+    save_formats = CONFIG["FIGURE_FORMATS"]
+    
+    # Load CSV file
+    csv_file = os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], "simulated_annealing_raw", "tune", "tune_results.csv")
+    tuning_results = pd.read_csv(csv_file)
+    
+    # Ensure 'fitness' is the target column
+    fitness_column = 'fitness'  
+    hyperparameters = tuning_results.columns.drop(fitness_column)
+
+    # Create a 3x3 grid for the scatter plots
+    fig, axes = plt.subplots(3, 3, figsize=FIGSIZE)
+    axes = axes.ravel()  # Flatten the axes array for easier iteration
+
+    # Iterate over the first 9 hyperparameters and create scatter plots
+    for idx, hyperparam in enumerate(hyperparameters[:9]):
+        # Identify the maximum fitness configuration for this hyperparameter
+        max_fitness_row = tuning_results.loc[tuning_results[fitness_column].idxmax()]
+        max_fitness_value = max_fitness_row[fitness_column]
+        max_hyperparam_value = max_fitness_row[hyperparam]
+
+        # Calculate the 2D histogram for density-based color mapping
+        hist, xedges, yedges = np.histogram2d(
+            tuning_results[hyperparam], tuning_results[fitness_column], bins=20
+        )
+        colors = [
+            hist[
+                min(np.digitize(tuning_results[hyperparam].iloc[i], xedges, right=True) - 1, hist.shape[0] - 1),
+                min(np.digitize(tuning_results[fitness_column].iloc[i], yedges, right=True) - 1, hist.shape[1] - 1),
+            ]
+            for i in range(len(tuning_results))
+        ]
+
+        # Scatter plot for each hyperparameter, using density-based coloring for points
+        axes[idx].scatter(
+            tuning_results[hyperparam],
+            tuning_results[fitness_column],
+            c=colors,
+            cmap="viridis",
+            s=20,  # Increased marker size for fitness points
+            alpha=0.7
+        )
+        # Mark the maximum fitness point in red with an even larger marker
+        axes[idx].scatter(
+            max_hyperparam_value,
+            max_fitness_value,
+            color='black',
+            marker='x',
+            s=85,  # Larger size for maximum fitness marker
+            label='Max Fitness'
+        )
+
+        # Set titles and labels
+        axes[idx].set_title(f"{hyperparam} = {max_hyperparam_value:.2e}", fontsize=10)
+        if idx % 3 == 0:
+            axes[idx].set_ylabel("Fitness Score")
+        axes[idx].set_xlabel(hyperparam)
+        axes[idx].set_ylim(tuning_results[fitness_column].min()-0.02, tuning_results[fitness_column].max()+0.02)
+        axes[idx].grid(False)
+        axes[idx].spines[['right', 'top']].set_visible(False)
+        axes[idx].get_xaxis().tick_bottom()
+        axes[idx].get_yaxis().tick_left()
+        axes[idx].set_yticks(np.arange(tuning_results[fitness_column].min()-0.02, tuning_results[fitness_column].max()+0.02, 0.05))
+    # Add a single legend at the lower center of the figure
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', fontsize=12, frameon=False, ncol=1)
+
+    # Adjust layout and spacing
+    plt.tight_layout(rect=[0, 0.05, 1, 0.95])  # Leave space for legend
+    # Save figures in specified formats
+    for fmt in save_formats:
+        fig.savefig(os.path.join(save_path, f'simulated_annealing_visualization.{fmt}'), format=fmt)
+    if SHOW: plt.show()
+
+def plot_map_metrics(csv_files: List[Dict]):
+    """
+    Plots mAP metrics (mAP@50 and mAP@50-95) over epochs for multiple CSV files, 
+    each with unique styling attributes.
+    
+    Args:
+        csv_files (List[Dict]): List of dictionaries where each dictionary contains details 
+                                about a CSV file and styling preferences for plotting.
+                                Required keys for each dictionary:
+                                    - 'csv_file' (str): Path to the CSV file.
+                                    - 'title' (str): Title for the plot.
+                                    - 'label' (str): Label for the data series in legend.
+                                    - 'linestyle' (str): Line style for the plot.
+                                    - 'color' (str): Color of the plot line.
+                                    - 'alpha' (float): Alpha for line transparency.
+                                    - 'linewidth' (float): Width of the line.
+                                    - 'marker' (bool): Whether to use a marker.
+                                    - 'markerstyle' (str): Style of the marker.
+                                    - 'markersize' (float): Size of the marker.
+    """
+    save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
+    os.makedirs(save_path, exist_ok=True)
+    save_formats = CONFIG["FIGURE_FORMATS"]
+    
+    # Set up two subplots for 'map_50' and 'map_50_95'
+    fig, axes = plt.subplots(1, 2, figsize=FIGSIZE)
+    metrics = ['map50', 'map50_95']
+    metrics_plots = ['mAP@50', 'mAP@50-95']
+    i = 0
+    unique_handles, unique_labels = [], []
+    
+    # Iterate over the two metrics for each subplot
+    for ax, metric in zip(axes, metrics):
+        ax.set_title(f'{metrics_plots[i]} over Epochs')
+        ax.set_xlabel('Epochs')
+        ax.set_ylabel(metrics_plots[i])
+        ax.spines[['right', 'top']].set_visible(False)
+        ax.get_xaxis().tick_bottom()
+        ax.get_yaxis().tick_left()
+        i += 1
+        
+        # Iterate over each CSV file and plot according to its specifications
+        for file_info in csv_files:
+            # Load the CSV file
+            data = pd.read_csv(file_info['csv_file'])
+            
+            # Filter out rows with epoch=0 and weight='best.pt' as required
+            data = data[~((data['epoch'] == 0) & (data['weight'] == 'best.pt'))]
+            
+            # Sort data by 'epoch' column
+            data = data.sort_values(by='epoch')
+            
+            # Plot data series
+            line, = ax.plot(
+                data['epoch'],
+                data[metric],
+                label=file_info['label'],
+                linestyle=file_info['linestyle'],
+                color=file_info['color'],
+                alpha=file_info['alpha'],
+                linewidth=file_info['linewidth'],
+                marker=file_info['markerstyle'] if file_info['marker'] else None,
+                markersize=file_info['markersize'] if file_info['marker'] else 0
+            )
+            
+            # Only add to unique_handles/labels once per label
+            if file_info['label'] not in unique_labels:
+                unique_handles.append(line)
+                unique_labels.append(file_info['label'])
+        
+        ax.grid(False)
+    
+    # Add a single legend with unique labels at the lower center
+    fig.legend(unique_handles, unique_labels, loc='lower center', ncol=len(csv_files), fontsize=10, frameon=False)
+    
+    # Adjust layout and spacing
+    plt.tight_layout(rect=[0, 0.1, 1, 1])  # Adjust to leave space for the legend below
+    
+    # Save figures in specified formats
+    for fmt in save_formats:
+        fig.savefig(os.path.join(save_path, f'comparison_visualization.{fmt}'), format=fmt)
+    
+    if SHOW: plt.show()
+
+def validation_results_preprocessing(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Preprocess validation results CSV: Strip 'epoch' and '.pt', and adjust epoch numbers.
+
+    :param data: DataFrame with raw validation results.
+    :return: Processed DataFrame.
+    """
+    data = data.rename(columns={'File_name': 'Epoch'})
+    data['Epoch'] = data['Epoch'].str.replace('epoch', '').str.replace('.pt', '', regex=False)
+    data = data[~data['Epoch'].isin(['last', 'best'])]
+    data['Epoch'] = data['Epoch'].astype(int) + 1
+    return data
+
+def load_hyperparameter_data(path: str, hyperparameters: List[str]) -> Dict[str, List[Dict]]:
+    """
+    Load and preprocess data from the specified path.
+
+    :param path: Path to the 'Hyperparameters' directory containing subfolders for each hyperparameter run.
+    :param hyperparameters: List of hyperparameter names to process.
+    :return: Dictionary containing preprocessed data for each hyperparameter.
+    """
+    data = {}
+    for hyperparam in hyperparameters:
+        hyperparam_data = []
+        for folder_name in os.listdir(path):
+            if folder_name.startswith(hyperparam):
+                folder_path = os.path.join(path, folder_name)
+                csv_path = os.path.join(folder_path, 'validation_results.csv')
+                if os.path.exists(csv_path):
+                    df = pd.read_csv(csv_path)
+                    df = validation_results_preprocessing(df)
+                    run_number = folder_name.split('_')[-1]
+                    args_yaml_path = os.path.join(folder_path, 'args.yaml')
+                    if os.path.exists(args_yaml_path):
+                        with open(args_yaml_path, 'r') as f:
+                            args_data = yaml.safe_load(f)
+                        hyperparam_value = args_data.get(hyperparam, 'Unknown')
+                    else:
+                        hyperparam_value = 'Unknown'
+
+                    hyperparam_data.append({
+                        'run_number': run_number,
+                        'hyperparam_value': hyperparam_value,
+                        'data': df
+                    })
+        data[hyperparam] = hyperparam_data
+    return data
+
+def plot_hyperparameter_vs_map(data: Dict[str, List[Dict]]) -> None:
+    """
+    Plot mAP@50-95 as a function of hyperparameter values, with separate lines for "Last map5095" and "Mean map5095".
+
+    :param data: Dictionary containing preprocessed data for each hyperparameter.
+    """
+    fig, axes = plt.subplots(2, 5, figsize=FIGSIZE)
+    axes = axes.flatten()
+
+    for idx, (hyperparam, hyperparam_data) in enumerate(data.items()):
+        ax = axes[idx]
+        hyperparam_data_sorted = sorted(hyperparam_data, key=lambda x: float(x['hyperparam_value']), reverse=True)
+
+        # Prepare lists for plotting
+        values = [float(run_info['hyperparam_value']) for run_info in hyperparam_data_sorted]
+        map50_95_mean = [run_info['data']['map50_95'].mean() for run_info in hyperparam_data_sorted]
+        map50_95_last = [run_info['data']['map50_95'].iloc[-1] for run_info in hyperparam_data_sorted]
+
+        # Plot both mean and last mAP@50-95
+        ax.plot(values, map50_95_mean, '-o', label="Mean map50_95", color='#0C5DA5')
+        ax.plot(values, map50_95_last, '-o', label="Last map50_95", color='#00B945')
+
+        ax.set_title(hyperparam)
+        if idx in [5,6,7,8,9]: ax.set_xlabel('Hyperparameter Value')
+        if idx in [0, 5]: ax.set_ylabel('mAP@50-95')
+        ax.spines[['right', 'top']].set_visible(False)
+        ax.get_xaxis().tick_bottom()
+        ax.get_yaxis().tick_left()
+        ax.set_ylim(0, 0.38)
+        ax.set_yticks(np.arange(0, 0.4, 0.05))
+
+    # Add a single legend at the bottom center for the two series
+    fig.legend(['Mean mAP@50-95', 'Last mAP@50-95'], loc='lower center', ncol=2, fontsize=10, frameon=False)
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
+
+    save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
+    os.makedirs(save_path, exist_ok=True)
+    save_formats = CONFIG["FIGURE_FORMATS"]
+    # Save figures in specified formats
+    for fmt in save_formats:
+        fig.savefig(os.path.join(save_path, f'hyperparameter_vs_map.{fmt}'), format=fmt)
+    if SHOW: plt.show()
+
+def plot_epoch_vs_map(data: Dict[str, List[Dict]]) -> None:
+    """
+    Plot mAP@50-95 as a function of epochs, with the best hyperparameter value in the title for each hyperparameter.
+
+    :param data: Dictionary containing preprocessed data for each hyperparameter.
+    """
+    fig, axes = plt.subplots(2, 5, figsize=FIGSIZE)
+    axes = axes.flatten()
+
+    for idx, (hyperparam, hyperparam_data) in enumerate(data.items()):
+        ax = axes[idx]
+        
+        # Find the best hyperparameter value (highest mean mAP@50-95)
+        best_run_info = max(hyperparam_data, key=lambda x: x['data']['map50_95'].mean())
+        best_hyperparam_value = best_run_info['hyperparam_value']
+
+        # Plot the mAP@50-95 across epochs for each run
+        for run_info in hyperparam_data:
+            df = run_info['data']
+            df['Epoch'] = natsorted(df['Epoch'])
+            ax.plot(df['Epoch'], df['map50_95'], color='gray', alpha=0.5, linewidth=0.8)
+        
+        # Highlight the best run
+        best_run_df = best_run_info['data']
+        ax.plot(best_run_df['Epoch'], best_run_df['map50_95'], color='#0C5DA5', linewidth=1.5, label="Best Run")
+
+        ax.set_title(f"{hyperparam} (Best: {best_hyperparam_value})")
+        if idx in [5,6,7,8,9]: ax.set_xlabel('Epoch')
+        if idx in [0, 5]: ax.set_ylabel('mAP@50-95')
+        ax.set_xlim(1, 100)
+        ax.set_ylim(0, 0.38)
+        ax.set_yticks(np.arange(0, 0.4, 0.05))
+        ax.spines[['right', 'top']].set_visible(False)
+        ax.get_xaxis().tick_bottom()
+        ax.get_yaxis().tick_left()
+
+    plt.tight_layout()
+    save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
+    os.makedirs(save_path, exist_ok=True)
+    save_formats = CONFIG["FIGURE_FORMATS"]
+    # Save figures in specified formats
+    for fmt in save_formats:
+        fig.savefig(os.path.join(save_path, f'epoch_vs_map.{fmt}'), format=fmt)
+    if SHOW: plt.show()
+
+
+
 
 def main():
-    #original_dataset_visualization()
+    original_dataset_visualization()
     processed_dataset_visualization()
-
-    #find_complete_augmentations_with_labels_and_save()
-    # Run the function with the provided patient_video
-    # Test the function with example values
+    find_complete_augmentations_with_labels_and_save()
     plot_augmented_bboxes("p34_v9", "00045")
+    plot_hyperparameter_fitness_scatter()
+    
+    csv_files = [
+        {
+            'csv_file': os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], "baselines", "yolov8l_config_noaugment", "validation_results.csv"),
+            'title': 'Validation Results',
+            'label': 'Baseline',
+            'linestyle': '--',
+            'color': '#0C5DA5',
+            'alpha': 0.7,
+            'linewidth': 1.5,
+            'marker': True,
+            'markerstyle': 'v',
+            'markersize': 5
+        },
+        {
+            'csv_file': os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], "iteration1", "validation", "ateroesclerosis_training", "validation_results.csv"),
+            'title': 'Iteration 1',
+            'label': 'Results after firest iteration',
+            'linestyle': '-.',
+            'color': '#00B945',
+            'alpha': 0.7,
+            'linewidth': 1.5,
+            'marker': True,
+            'markerstyle': 's',
+            'markersize': 5
+        },
+        {
+            'csv_file': os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], "iteration2", "validation", "ateroesclerosis_training", "validation_results.csv"),
+            'title': 'Iteration 2',
+            'label': 'Results after second iteration',
+            'linestyle': '-',
+            'color': '#FF9500',
+            'alpha': 0.7,
+            'linewidth': 1.5,
+            'marker': True,
+            'markerstyle': 'o',
+            'markersize': 5
+        }
+    ]
+    plot_map_metrics(csv_files=csv_files)
+
+    path = '/home/mariopasc/Python/Results/Coronariografias/Results_Paper/iteration2/Hyperparameters'
+    hyperparameters = ['lr0', 'lrf', 'momentum', 'weight_decay', 'warmup_epochs', 'warmup_momentum', 'warmup_bias_lr', 'box', 'cls', 'dfl']
+
+    # Load the data
+    data = load_hyperparameter_data(path, hyperparameters)
+    plot_epoch_vs_map(data)
+    plot_hyperparameter_vs_map(data)
+
+
 if __name__ == "__main__":
     main()

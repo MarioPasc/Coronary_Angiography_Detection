@@ -32,3 +32,4 @@ YOLO_DATASET_FOLDER_NAME: "CADICA_Detection_YOLO"
 FIGURE_FORMATS: 
   - "png"
   - "svg"
+PAPER_RESULTS_FOLDER: "/home/mariopasc/Python/Results/Coronariografias/Results_Paper"

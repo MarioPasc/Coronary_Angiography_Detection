@@ -18,7 +18,8 @@ setup(
         "scikit-learn",
         "opencv-python-headless",
         "pyyaml",
-        "scienceplots"
+        "scienceplots",
+        "natsort"
     ],
     python_requires='>=3.9',
     package_data={
