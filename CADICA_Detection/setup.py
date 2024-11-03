@@ -17,7 +17,8 @@ setup(
         "tqdm",
         "scikit-learn",
         "opencv-python-headless",
-        "pyyaml"
+        "pyyaml",
+        "scienceplots"
     ],
     python_requires='>=3.9',
     package_data={

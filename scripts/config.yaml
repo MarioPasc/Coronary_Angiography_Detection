@@ -29,3 +29,6 @@ CLASS_MAPPINGS:
   p99: 0
   p100: 0
 YOLO_DATASET_FOLDER_NAME: "CADICA_Detection_YOLO"
+FIGURE_FORMATS: 
+  - "png"
+  - "svg"
