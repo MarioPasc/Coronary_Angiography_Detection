@@ -135,10 +135,10 @@ from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
 # Load ground truth
-coco_gt = COCO('ground_truth_annotations.json')
+coco_gt = COCO(gt_json_path)
 
 # Load detections
-coco_dt = coco_gt.loadRes('detection_results.json')
+coco_dt = coco_gt.loadRes(dt_json_path)
 
 # Initialize COCOeval object
 coco_eval = COCOeval(coco_gt, coco_dt, iouType='bbox')
@@ -149,3 +149,33 @@ coco_eval.accumulate()
 coco_eval.summarize()
 
 
+"""
+
+Ground truth annotations saved to /home/mariopasc/Python/Results/Coronariografias/Results_Paper/test/ground_truth_annotations.json
+Detection results saved to /home/mariopasc/Python/Results/Coronariografias/Results_Paper/test/detection_results.json
+loading annotations into memory...
+Done (t=0.00s)
+creating index...
+index created!
+Loading and preparing results...
+DONE (t=0.00s)
+creating index...
+index created!
+Running per image evaluation...
+Evaluate annotation type *bbox*
+DONE (t=0.13s).
+Accumulating evaluation results...
+DONE (t=0.03s).
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.014
+ Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.018
+ Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.015
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.003
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.018
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.000
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.050
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.057
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.057
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.035
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.061
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.000
+"""
