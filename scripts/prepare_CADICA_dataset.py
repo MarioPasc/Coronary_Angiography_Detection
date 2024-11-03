@@ -16,47 +16,43 @@
 
 # export PYTHONPATH="${PYTHONPATH}:/home/mariopasc/Python/Projects/Coronary_Angiography_Detection"
 
+CONFIG_PATH = "./scripts/config.yaml"
+
 import os
 import pandas as pd
 import numpy as np
 import logging
 from tqdm import tqdm
 from CADICA_Detection.dataset.DatasetTools import DatasetTools
+import yaml
 
 # Set up logging
 logging.basicConfig(filename='dataset_generation.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.info("Starting dataset generation process.")
 
-# Configuration parameters
-CONFIG = {
-    "DATASET_URL": "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/p9bpx9ctcv-2.zip", # Non-configurable 
-    "DESTINATION_FOLDER": "/home/mariopasc/Python/Datasets/try_coronario", # Change this to the desired destination
-    "OUTPUT_PATH": "/home/mariopasc/Python/Datasets/try_coronario", # Path where all the results will be saved
-    "DS_NAME": "CADICA", # Giving the downloaded dataset a custom name
-    "DATA_CSV_NAME": "information_dataset.csv", # This csv will contain pathLike information about the images of the dataset and the lesion's distrbution.
-    "LABELS": ["p0_20", "p20_50", "p50_70", "p70_90", "p90_98", "p99", "p100"],  # Lesion labels used to generate the dataset. In the paper, we used all of them.
-    "VAL_SIZE": 0.2,  # Percentaje of data that will be split for the validation dataset. In the paper, we used 20%
-    "TEST_SIZE": 0.2, # Percentaje of data that will be split for the test dataset. In the paper, we used 20%
-    "RANDOM_SEED": 42, # Random seed set for ensuring reproducibility. The paper's results are generated with 42, but we tested other partitions to ensure stability.
-    "CLASS_UNDERSAMPLING": {
-        "p0_20": [46, 17, 0], # 46% ignored in train, 12% ignored in val, 0% ignored in test 
-        "p20_50": [15, 0, 0]  # 10% ignored in train, 0% ignored in val, 0% ignored in test  
-    },
-    "AUGMENTATION_PATH": "/home/mariopasc/Python/Datasets/try_coronario/CADICA_Agumented_Images", # Path to save augmented images
-    "AUGMENTED_LESION_IMAGES": 900, # Number of augmented images with a lesion. This amount will be evenly split among all the lesion class, except the top_n 
-    "AUGMENTED_NONLESION_IMAGES": 550, # Number of augmneted images without a lesion.
-    "IGNORE_TOP_N": 2, # Ignore this amount of highest present lesion labels in the dataset: "p0_20", "p20_50" are overrepresented, therefore, IGNORE_TOP_N = 2
-    "CLASS_MAPPINGS": {
-        "p0_20": 0,
-        "p20_50": 0,
-        "p50_70": 0,
-        "p70_90": 0,
-        "p90_98": 0,
-        "p99": 0,
-        "p100": 0
-    }, # Mapping for YOLO class labels. If all set to 0, detection without classification will be performed on the dataset
-    "YOLO_DATASET_FOLDER_NAME": "CADICA_Detection_YOLO"
-    }
+def load_config(yaml_path: str) -> dict:
+    """
+    Loads configuration parameters from a YAML file into a dictionary.
+    
+    Args
+    -----
+    yaml_path : str
+        Path to the YAML configuration file.
+    
+    Returns
+    -----
+    dict
+        Configuration parameters loaded from YAML.
+    """
+    try:
+        with open(yaml_path, 'r') as file:
+            config = yaml.safe_load(file)
+        return config
+    except Exception as e:
+        logging.error("Error loading config.yaml file; Are you executing the script from the root folder? If so, check this .py and change CONFIG_PATH.")
+
+# Load the CONFIG variable
+CONFIG = load_config(CONFIG_PATH)
 
 # 1. Download and Prepare Dataset
 def download_and_prepare_dataset():
@@ -169,7 +165,7 @@ def split_holdout_sets():
         )
 
         # Save splits to CSV
-        holdout_folder = os.path.join(CONFIG["OUTPUT_PATH"], "holdout_information")
+        holdout_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Holdout_Info")
         os.makedirs(holdout_folder, exist_ok=True)
         DatasetTools.saveSplit(train_df, holdout_folder, 'train')
         DatasetTools.saveSplit(val_df, holdout_folder, 'val')
@@ -186,11 +182,11 @@ def apply_undersampling():
         logging.info("Step 4: Applying undersampling to overrepresented lesion classes.")
         
         # Define holdout folder path
-        holdout_folder = os.path.join(CONFIG["OUTPUT_PATH"], "holdout_information")
+        holdout_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Holdout_Info")
         
         # Load original data for comparison and apply undersampling
         pre_undersampling_df = DatasetTools.loadDataSplits(holdout_folder)
-        post_undersampling_df = DatasetTools.undersampling(holdout_folder, CONFIG["CLASS_UNDERSAMPLING"])
+        post_undersampling_df = DatasetTools.undersampling(holdout_folder, CONFIG["CLASS_UNDERSAMPLING"], CONFIG["OUTPUT_PATH"])
 
         logging.info(f"Step 4 complete: Undersampling applied. Modified content saved in {holdout_folder}.")
     except Exception as e:
@@ -202,11 +198,11 @@ def apply_data_augmentation():
         logging.info("Step 5: Applying data augmentation to balance classes.")
         
         # Define paths for augmentation
-        holdout_folder = os.path.join(CONFIG["OUTPUT_PATH"], "holdout_information")
-        augmentation_path = CONFIG["AUGMENTATION_PATH"]
+        holdout_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Undersampled_Images")
+        augmentation_path = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Augmented_Images")
         
-        train_path = os.path.join(holdout_folder, 'train.csv')
-        val_path = os.path.join(holdout_folder, 'val.csv')
+        train_path = os.path.join(holdout_folder, 'processed_train.csv')
+        val_path = os.path.join(holdout_folder, 'processed_val.csv')
         
         # Load data for augmentation
         train_df, val_df = DatasetTools.loadDataAugmentation(train_path, val_path)
@@ -228,12 +224,12 @@ def format_for_yolo():
         logging.info("Step 6: Formatting dataset for YOLO.")
         
         # Define paths for YOLO formatting
-        augmentation_path = CONFIG["AUGMENTATION_PATH"]
-        holdout_folder = os.path.join(CONFIG["OUTPUT_PATH"], "holdout_information")
+        augmentation_path = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Augmented_Images")
+        undersampling_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Undersampled_Images")
         
-        train_path = os.path.join(augmentation_path, 'full_augmented_train.csv')  # Augmented train data
-        val_path = os.path.join(augmentation_path, 'full_augmented_val.csv')      # Augmented val data
-        test_path = os.path.join(holdout_folder, 'test.csv')                      # Original test split
+        train_path = os.path.join(augmentation_path, 'processed_train.csv')  # Augmented train data
+        val_path = os.path.join(augmentation_path, 'processed_val.csv')      # Augmented val data
+        test_path = os.path.join(undersampling_folder, 'processed_test.csv') # Undersampled test split. This test.csv is the original since we did not remove any samples from it
         
         output_folder = os.path.join(CONFIG["DESTINATION_FOLDER"], CONFIG["YOLO_DATASET_FOLDER_NAME"])
         
@@ -247,15 +243,14 @@ def format_for_yolo():
 # Main execution
 def main():
     # Execute all steps in sequence
-    download_and_prepare_dataset()
+    #download_and_prepare_dataset()
     generate_dataset_analysis()
     split_holdout_sets()
     apply_undersampling()
     apply_data_augmentation()
     format_for_yolo()
     
-    logging.info("All steps of dataset generation completed successfully.")
-    print("Dataset generation process completed. Check logs for details.")
+    print("Dataset generation pipeline completed. Check log for details/errors.")
 
 if __name__ == "__main__":
     main()

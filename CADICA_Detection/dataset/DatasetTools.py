@@ -281,7 +281,7 @@ class DatasetTools:
         return run_loadDataSplits(holdout_path = holdout_path)
 
     @staticmethod
-    def undersampling(holdout_path: str, class_dict: Dict[str, list]) -> pd.DataFrame:
+    def undersampling(holdout_path: str, class_dict: Dict[str, list], deleted_images_path: str) -> pd.DataFrame:
         """
         Applies undersampling to the train, val, and test splits based on the specified class distribution.
 
@@ -298,7 +298,8 @@ class DatasetTools:
             Concatenated DataFrame of all splits after undersampling.
         """
         return run_undersampling(holdout_path = holdout_path, 
-                                 class_dict = class_dict)
+                                 class_dict = class_dict,
+                                 deleted_images_path=deleted_images_path)
     
     # augmentation.py tools
 

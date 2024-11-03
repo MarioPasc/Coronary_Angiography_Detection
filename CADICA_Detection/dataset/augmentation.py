@@ -66,7 +66,7 @@ def _augmentSubset(subset_df: pd.DataFrame, base_output_path: str, dataset_type:
     augmented_df.to_csv(os.path.join(base_output_path, f'augmented_{dataset_type}.csv'), index=False)
 
     full_df = pd.concat([subset_df, augmented_df], ignore_index=True)
-    full_df.to_csv(os.path.join(base_output_path, f'full_augmented_{dataset_type}.csv'), index=False)
+    full_df.to_csv(os.path.join(base_output_path, f'processed_{dataset_type}.csv'), index=False)
 
 def _applyAugmentation(row: pd.Series, dataset_type: str, base_output_path: str) -> pd.Series:
     """
