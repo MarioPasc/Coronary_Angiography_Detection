@@ -5,11 +5,11 @@
 # 2. Undersampling/Augmentation types used.
 #       I. 4 images from a specific patient that show each augmentation image generated ✅ 
 #       II. Augmented images per label: Comparison between original, undersampled, and augmented ✅ 
-# 3. Simulated Annealing visualization: One scatterplot per adjusted hyperparameter, mark the best result. X-Axis: hyperparameter values; Y-Axis: fitness
+# 3. Simulated Annealing visualization: One scatterplot per adjusted hyperparameter, mark the best result. X-Axis: hyperparameter values; Y-Axis: fitness ✅ 
 # 4. Goal-oriented sensibility study of hyperparameters. 
-#       I. lineplot for variation of mAP@50-95 per epoch for every hyperparameter value tried. X-axis: epoch, Y-axis: mAP@50-95, legend: Hyperparameter values
-#       II. lineplot for variation of mAP@50-95 per hyperparameter value. X-axis: hyperparameter value, Y-axis: mAP@50-95
-# 5. Results comparison: Lineplot of mAP@50-95 performance per model. X-axis: epoch, Y-axis: mAP@50-95, one data series per model (baseline, Simulated Annealing, iteration 1, iteration 2)
+#       I. lineplot for variation of mAP@50-95 per epoch for every hyperparameter value tried. X-axis: epoch, Y-axis: mAP@50-95, legend: Hyperparameter values ✅ 
+#       II. lineplot for variation of mAP@50-95 per hyperparameter value. X-axis: hyperparameter value, Y-axis: mAP@50-95 ✅ 
+# 5. Results comparison: Lineplot of mAP@50-95 performance per model. X-axis: epoch, Y-axis: mAP@50-95, one data series per model (baseline, Simulated Annealing, iteration 1, iteration 2) ✅ 
 
 from typing import List, Dict
 import pandas as pd
@@ -648,12 +648,17 @@ def load_hyperparameter_data(path: str, hyperparameters: List[str]) -> Dict[str,
         data[hyperparam] = hyperparam_data
     return data
 
-def plot_hyperparameter_vs_map(data: Dict[str, List[Dict]]) -> None:
+def plot_hyperparameter_vs_map(iteration: int) -> None:
     """
     Plot mAP@50-95 as a function of hyperparameter values, with separate lines for "Last map5095" and "Mean map5095".
 
     :param data: Dictionary containing preprocessed data for each hyperparameter.
     """
+
+    path = os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], f'iteration{iteration}/Hyperparameters')
+    hyperparameters = ['lr0', 'lrf', 'momentum', 'weight_decay', 'warmup_epochs', 'warmup_momentum', 'warmup_bias_lr', 'box', 'cls', 'dfl']
+    data = load_hyperparameter_data(path, hyperparameters)
+
     fig, axes = plt.subplots(2, 5, figsize=FIGSIZE)
     axes = axes.flatten()
 
@@ -667,8 +672,8 @@ def plot_hyperparameter_vs_map(data: Dict[str, List[Dict]]) -> None:
         map50_95_last = [run_info['data']['map50_95'].iloc[-1] for run_info in hyperparam_data_sorted]
 
         # Plot both mean and last mAP@50-95
-        ax.plot(values, map50_95_mean, '-o', label="Mean map50_95", color='#0C5DA5')
-        ax.plot(values, map50_95_last, '-o', label="Last map50_95", color='#00B945')
+        ax.plot(values, map50_95_mean, '-o', alpha=0.7, markersize=5, label="Mean map50_95", color='#0C5DA5')
+        ax.plot(values, map50_95_last, '-s', alpha=0.7, markersize=5, label="Last map50_95", color='#00B945')
 
         ax.set_title(hyperparam)
         if idx in [5,6,7,8,9]: ax.set_xlabel('Hyperparameter Value')
@@ -688,15 +693,20 @@ def plot_hyperparameter_vs_map(data: Dict[str, List[Dict]]) -> None:
     save_formats = CONFIG["FIGURE_FORMATS"]
     # Save figures in specified formats
     for fmt in save_formats:
-        fig.savefig(os.path.join(save_path, f'hyperparameter_vs_map.{fmt}'), format=fmt)
+        fig.savefig(os.path.join(save_path, f'iter{iteration}_hyperparameter_vs_map_.{fmt}'), format=fmt)
     if SHOW: plt.show()
 
-def plot_epoch_vs_map(data: Dict[str, List[Dict]]) -> None:
+def plot_epoch_vs_map(iteration: int) -> None:
     """
     Plot mAP@50-95 as a function of epochs, with the best hyperparameter value in the title for each hyperparameter.
 
     :param data: Dictionary containing preprocessed data for each hyperparameter.
     """
+    iter_path = f'iteration{iteration}/Hyperparameters'
+    path = os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], iter_path)
+    hyperparameters = ['lr0', 'lrf', 'momentum', 'weight_decay', 'warmup_epochs', 'warmup_momentum', 'warmup_bias_lr', 'box', 'cls', 'dfl']
+    data = load_hyperparameter_data(path, hyperparameters)
+
     fig, axes = plt.subplots(2, 5, figsize=FIGSIZE)
     axes = axes.flatten()
 
@@ -733,7 +743,7 @@ def plot_epoch_vs_map(data: Dict[str, List[Dict]]) -> None:
     save_formats = CONFIG["FIGURE_FORMATS"]
     # Save figures in specified formats
     for fmt in save_formats:
-        fig.savefig(os.path.join(save_path, f'epoch_vs_map.{fmt}'), format=fmt)
+        fig.savefig(os.path.join(save_path, f'iter{iteration}_epoch_vs_map.{fmt}'), format=fmt)
     if SHOW: plt.show()
 
 
@@ -785,14 +795,9 @@ def main():
         }
     ]
     plot_map_metrics(csv_files=csv_files)
-
-    path = '/home/mariopasc/Python/Results/Coronariografias/Results_Paper/iteration2/Hyperparameters'
-    hyperparameters = ['lr0', 'lrf', 'momentum', 'weight_decay', 'warmup_epochs', 'warmup_momentum', 'warmup_bias_lr', 'box', 'cls', 'dfl']
-
-    # Load the data
-    data = load_hyperparameter_data(path, hyperparameters)
-    plot_epoch_vs_map(data)
-    plot_hyperparameter_vs_map(data)
+    for iteration in [1,2]:
+        plot_epoch_vs_map(iteration)
+        plot_hyperparameter_vs_map(iteration)
 
 
 if __name__ == "__main__":
