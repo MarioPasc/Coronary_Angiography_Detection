@@ -204,6 +204,19 @@ def processed_dataset_visualization():
         # Define desired label order
         label_order = ["nolesion", "p0_20", "p20_50", "p50_70", "p70_90", "p90_98", "p99", "p100"]
 
+        # Define label mapping
+        label_mapping = {
+            "nolesion": "No Lesion",
+            "p0_20": r"$< 20\%$",
+            "p20_50": r"$[20, 50)\%$",
+            "p50_70": r"$[50, 70)\%$",
+            "p70_90": r"$[70, 90)\%$",
+            "p90_98": r"$[90, 98)\%$",
+            "p99": r"$99\%$",
+            "p100": r"$100\%$"
+        }
+
+
         # Calculate original and processed label-based counts
         def label_counts(df, label_order, label_name):
             return pd.DataFrame({label_name: df['LesionLabel'].value_counts()}).reindex(label_order).fillna(0).astype(int)
@@ -213,12 +226,16 @@ def processed_dataset_visualization():
             label_counts(original_val, label_order, 'Validation'),
             label_counts(original_test, label_order, 'Test')
         ], axis=1)
+        # Apply label mapping to index
+        original_labels.index = original_labels.index.map(label_mapping)
 
         processed_labels = pd.concat([
             label_counts(processed_train, label_order, 'Training'),
             label_counts(processed_val, label_order, 'Validation'),
             label_counts(processed_test, label_order, 'Test')
         ], axis=1)
+        # Apply label mapping to index
+        processed_labels.index = processed_labels.index.map(label_mapping)
 
         # Determine max y-axis limit
         max_y = max(processed_counts[['Lesion', 'No Lesion', 'Total']].values.max(), processed_labels.values.max())
@@ -230,7 +247,7 @@ def processed_dataset_visualization():
         offset = 0.165
         processed_counts.plot(kind='bar', x='Set', y=['Lesion', 'No Lesion', 'Total'], ax=axs[0])
         for i, row in original_counts.iterrows():
-            axs[0].plot([i - offset, i, i + offset], row[['Lesion', 'No Lesion', 'Total']], "^", color="red", markersize = 5, 
+            axs[0].plot([i - offset, i, i + offset], row[['Lesion', 'No Lesion', 'Total']], "^", color="red", markersize=5, 
                         label="Original Count" if i == 0 else "")
         axs[0].set_title("Processed Sample Counts per Set")
         axs[0].set_ylabel("Counts")
@@ -240,11 +257,12 @@ def processed_dataset_visualization():
 
         # Plot 2: Processed label-based visualization with markers for original values
         processed_labels.plot(kind='bar', ax=axs[1])
-        for i, label in enumerate(label_order):
+        for i, label in enumerate(processed_labels.index):
             axs[1].plot([i - offset, i, i + offset], original_labels.loc[label, ['Training', 'Validation', 'Test']], "x", color="red", markersize=5, 
                         label="Original Count" if i == 0 else "")
         axs[1].set_title("Processed Label-based Sample Counts")
         axs[1].set_ylim(0, max_y)
+        axs[1].set_xlabel("Diagnostic lesion label")
         axs[1].set_yticklabels([])  # Disable y-axis numbers
         axs[1].legend()
         axs[1].tick_params(axis='x', rotation=0)  # Rotate x-axis labels
@@ -389,7 +407,7 @@ def plot_augmented_bboxes(patient_video: str, frame_id: str):
         }
 
         # Create 1x4 subplot for the augmentations
-        fig, axes = plt.subplots(1, 4, figsize=FIGSIZE)
+        fig, axes = plt.subplots(1, 4, figsize=(15,4))
         
         for i, (aug, (aug_image_path, aug_bbox_path)) in enumerate(augmentation_data.items()):
             # Load the augmented image for this augmentation
@@ -398,7 +416,7 @@ def plot_augmented_bboxes(patient_video: str, frame_id: str):
             
             # Plot the augmented image
             axes[i].imshow(aug_image_rgb)
-            axes[i].set_title(f"{aug} Augmentation")
+            axes[i].set_title(f"{aug}")
             
             # Plot original bounding boxes on augmented image
             with open(original_bbox_path, 'r') as f:
@@ -479,8 +497,8 @@ def plot_hyperparameter_fitness_scatter():
         axes[idx].scatter(
             tuning_results[hyperparam],
             tuning_results[fitness_column],
-            c=colors,
-            cmap="viridis",
+            #c=colors,
+            #cmap="viridis",
             s=20,  # Increased marker size for fitness points
             alpha=0.7
         )
@@ -555,6 +573,7 @@ def plot_map_metrics(csv_files: List[Dict]):
         ax.spines[['right', 'top']].set_visible(False)
         ax.get_xaxis().tick_bottom()
         ax.get_yaxis().tick_left()
+
         i += 1
         
         # Iterate over each CSV file and plot according to its specifications
@@ -580,7 +599,8 @@ def plot_map_metrics(csv_files: List[Dict]):
                 marker=file_info['markerstyle'] if file_info['marker'] else None,
                 markersize=file_info['markersize'] if file_info['marker'] else 0
             )
-            
+            ax.set_yticks(np.arange(0, 0.65, 0.05))
+
             # Only add to unique_handles/labels once per label
             if file_info['label'] not in unique_labels:
                 unique_handles.append(line)
@@ -650,42 +670,78 @@ def load_hyperparameter_data(path: str, hyperparameters: List[str]) -> Dict[str,
 
 def plot_hyperparameter_vs_map(iteration: int) -> None:
     """
-    Plot mAP@50-95 as a function of hyperparameter values, with separate lines for "Last map5095" and "Mean map5095".
+    Plot mAP@50-95 as a function of hyperparameter values, with error bars representing standard deviation,
+    and lines indicating the best mean result per hyperparameter.
 
-    :param data: Dictionary containing preprocessed data for each hyperparameter.
+    :param iteration: Iteration number for loading data and saving plots.
     """
 
     path = os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], f'iteration{iteration}/Hyperparameters')
-    hyperparameters = ['lr0', 'lrf', 'momentum', 'weight_decay', 'warmup_epochs', 'warmup_momentum', 'warmup_bias_lr', 'box', 'cls', 'dfl']
+    hyperparameters = ['lr0', 'lrf', 'momentum', 'weight_decay', 'warmup_epochs',
+                       'warmup_momentum', 'warmup_bias_lr', 'box', 'cls', 'dfl']
     data = load_hyperparameter_data(path, hyperparameters)
 
-    fig, axes = plt.subplots(2, 5, figsize=FIGSIZE)
+    fig, axes = plt.subplots(2, 5, figsize=(15,9))
     axes = axes.flatten()
 
     for idx, (hyperparam, hyperparam_data) in enumerate(data.items()):
         ax = axes[idx]
-        hyperparam_data_sorted = sorted(hyperparam_data, key=lambda x: float(x['hyperparam_value']), reverse=True)
+        hyperparam_data_sorted = sorted(hyperparam_data, key=lambda x: float(x['hyperparam_value']))
 
         # Prepare lists for plotting
         values = [float(run_info['hyperparam_value']) for run_info in hyperparam_data_sorted]
         map50_95_mean = [run_info['data']['map50_95'].mean() for run_info in hyperparam_data_sorted]
+        map50_95_std = [run_info['data']['map50_95'].std() for run_info in hyperparam_data_sorted]
         map50_95_last = [run_info['data']['map50_95'].iloc[-1] for run_info in hyperparam_data_sorted]
 
-        # Plot both mean and last mAP@50-95
-        ax.plot(values, map50_95_mean, '-o', alpha=0.7, markersize=5, label="Mean map50_95", color='#0C5DA5')
-        ax.plot(values, map50_95_last, '-s', alpha=0.7, markersize=5, label="Last map50_95", color='#00B945')
+        # Plot mean mAP@50-95 with error bars (standard deviation)
+        ax.errorbar(values, map50_95_mean, yerr=map50_95_std, fmt='-o', alpha=0.7,
+                    markersize=5, label="Mean mAP@50-95", color='#0C5DA5', capsize=3)
+        # Plot last mAP@50-95
+        ax.plot(values, map50_95_last, '-s', alpha=0.7, markersize=5,
+                label="Last mAP@50-95", color='#00B945')
 
-        ax.set_title(hyperparam)
-        if idx in [5,6,7,8,9]: ax.set_xlabel('Hyperparameter Value')
-        if idx in [0, 5]: ax.set_ylabel('mAP@50-95')
-        ax.spines[['right', 'top']].set_visible(False)
-        ax.get_xaxis().tick_bottom()
-        ax.get_yaxis().tick_left()
+        # Find best mean mAP@50-95 for this hyperparameter
+        max_mean_map50_95 = max(map50_95_mean)
+        max_mean_index = map50_95_mean.index(max_mean_map50_95)
+        max_hyperparam_value = values[max_mean_index]
+
+        # Plot horizontal and vertical lines indicating best mean mAP@50-95
+        ax.hlines(y=max_mean_map50_95, xmin=min(values), xmax=max_hyperparam_value,
+                  colors='red', linestyles='dashed', label='Best Mean mAP@50-95')
+        ax.vlines(x=max_hyperparam_value, ymin=0, ymax=max_mean_map50_95,
+                  colors='red', linestyles='dashed')
+
+        # Highlight the best point
+        ax.plot(max_hyperparam_value, max_mean_map50_95, 'ro', markersize=7)
+
+        ax.set_title(hyperparam, fontsize=10)
+
+        # Set x and y labels with fontsize 8
+        if idx in [5, 6, 7, 8, 9]:
+            ax.set_xlabel('Hyperparameter Value', fontsize=8)
+        if idx in [0, 5]:
+            ax.set_ylabel('mAP@50-95', fontsize=8)
+
+        # Set x and y ticks
         ax.set_ylim(0, 0.38)
         ax.set_yticks(np.arange(0, 0.4, 0.05))
+        ax.tick_params(axis='both', which='major', labelsize=8)
 
-    # Add a single legend at the bottom center for the two series
-    fig.legend(['Mean mAP@50-95', 'Last mAP@50-95'], loc='lower center', ncol=2, fontsize=10, frameon=False)
+        # Set x-ticks based on min and max hyperparameter values
+        x_min, x_max = min(values), max(values)
+        x_ticks = np.linspace(x_min, x_max, num=5)
+        ax.set_xticks(x_ticks)
+        ax.get_xaxis().tick_bottom()
+        ax.get_yaxis().tick_left()
+        ax.spines[['right', 'top']].set_visible(False)
+
+    # Collect handles and labels for the legend, avoiding duplicates
+    handles_labels = [ax.get_legend_handles_labels() for ax in axes]
+    handles, labels = [sum(lol, []) for lol in zip(*handles_labels)]
+    by_label = dict(zip(labels, handles))
+    fig.legend(by_label.values(), by_label.keys(), loc='lower center',
+               ncol=3, fontsize=10, frameon=False)
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
     save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
@@ -694,7 +750,10 @@ def plot_hyperparameter_vs_map(iteration: int) -> None:
     # Save figures in specified formats
     for fmt in save_formats:
         fig.savefig(os.path.join(save_path, f'iter{iteration}_hyperparameter_vs_map_.{fmt}'), format=fmt)
-    if SHOW: plt.show()
+    if SHOW:
+        plt.show()
+
+
 
 def plot_epoch_vs_map(iteration: int) -> None:
     """
@@ -755,7 +814,7 @@ def main():
     find_complete_augmentations_with_labels_and_save()
     plot_augmented_bboxes("p34_v9", "00045")
     plot_hyperparameter_fitness_scatter()
-    
+    """
     csv_files = [
         {
             'csv_file': os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], "baselines", "yolov8l_config_noaugment", "validation_results.csv"),
@@ -765,8 +824,20 @@ def main():
             'color': '#0C5DA5',
             'alpha': 0.7,
             'linewidth': 1.5,
-            'marker': True,
+            'marker': False,
             'markerstyle': 'v',
+            'markersize': 5
+        },
+        {
+            'csv_file': os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], "simulated_annealing_validation", "ateroesclerosis_training", "validation_results.csv"),
+            'title': 'Ultralytics Simulated Annealing',
+            'label': 'Results of validating simulated annealing',
+            'linestyle': ':',
+            'color': '#FF2C00',
+            'alpha': 0.7,
+            'linewidth': 1.5,
+            'marker': False,
+            'markerstyle': 'o',
             'markersize': 5
         },
         {
@@ -777,7 +848,7 @@ def main():
             'color': '#00B945',
             'alpha': 0.7,
             'linewidth': 1.5,
-            'marker': True,
+            'marker': False,
             'markerstyle': 's',
             'markersize': 5
         },
@@ -789,16 +860,46 @@ def main():
             'color': '#FF9500',
             'alpha': 0.7,
             'linewidth': 1.5,
-            'marker': True,
+            'marker': False,
             'markerstyle': 'o',
             'markersize': 5
         }
     ]
+    """
+    csv_files = [
+        {
+            'csv_file':  "/home/mariopasc/Python/Results/Coronariografias/Results_Paper/iteration2/Hyperparameters/lr0_run_11/val.csv",
+            'title': 'Validation Results',
+            'label': 'Validation',
+            'linestyle': '--',
+            'color': '#0C5DA5',
+            'alpha': 0.7,
+            'linewidth': 1.5,
+            'marker': False,
+            'markerstyle': 'v',
+            'markersize': 5
+        },
+        {
+            'csv_file': "/home/mariopasc/Python/Results/Coronariografias/Results_Paper/iteration2/Hyperparameters/lr0_run_11/train.csv", 
+            'title': 'Training',
+            'label': 'Training',
+            'linestyle': ':',
+            'color': '#FF2C00',
+            'alpha': 0.7,
+            'linewidth': 1.5,
+            'marker': False,
+            'markerstyle': 'o',
+            'markersize': 5
+        }
+    ]
+
     plot_map_metrics(csv_files=csv_files)
+    
+    
     for iteration in [1,2]:
         plot_epoch_vs_map(iteration)
         plot_hyperparameter_vs_map(iteration)
-
+    
 
 if __name__ == "__main__":
     main()
