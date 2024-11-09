@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # This script contains all the functionality necessary to generate the input dataset used to train the YOLOv8 Ultralytic's model
 # used for generating the results of the paper
 # This script uses the tools provided by the class DatasetTools, which serves as an entry point to the dataset submodule from the CADICA_Detection package.

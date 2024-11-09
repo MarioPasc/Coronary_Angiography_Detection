@@ -18,7 +18,7 @@ if __name__ == "__main__":
     for split in ['train', 'test', 'val']:
         print(f"Inference on split {split}")
         model = YOLO(model=model_path_train_best, task="detect", verbose=True)
-        val = model.val(data="./config.yaml", imgsz=512, batch=8, iou=0.6, plots=True, split=split)
+        val = model.val(data="./config.yaml", imgsz=512, batch=-1, iou=0.6, plots=True, split=split)
         
         # Collect the split name and mAP50-95 value
         results.append({"Set": split, "mAP50-95": val.box.map})

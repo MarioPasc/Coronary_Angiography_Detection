@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Ideas for visualization in the dataset:
 # 1. Samples per set (training/validation/test). Include a subplot with 2 plots: 
 #       I. Set-based visualization: barplot; X-axis: "training" "validation" "test". Y-axis: counts; bars: "Lesion" "No Lesion" "Total" ✅ 
