@@ -76,6 +76,25 @@ DEFAULT_PARAMS: Dict[str, Any] = {
     'line_width': None,
 }
 
+VISUALIZATION_PARAMS: Dict[str, Any] = {
+    'conf': True,
+    'line_width': 1,
+    'font_size': 12,
+    'font': 'Helvetica.ttf',
+    'pil': False,
+    'img': None,
+    'im_gpu': None,
+    'kpt_radius': 3,
+    'kpt_line': True,
+    'labels': True,
+    'boxes': True,
+    'probs': False,
+    'show': False,
+    'save': True,
+    'filename': 'annotated_image.png',  
+    'color_mode': 'class',
+}
+
 MODEL_PATH: str = './weights/best.pt'  # Replace with your actual model path
 
 
@@ -201,7 +220,8 @@ def main() -> None:
             image_base_name: str = os.path.splitext(os.path.basename(image_path))[0]
             output_filename: str = f'predict_{image_base_name}.png'
             output_path: Union[str, os.PathLike] = os.path.join(output_dir, output_filename)
-            annotated_image = result.plot()
+            VISUALIZATION_PARAMS['filename'] = output_path
+            annotated_image = result.plot(**VISUALIZATION_PARAMS)
             cv2.imwrite(output_path, annotated_image)
             logging.debug(f"Result saved to {output_path}")
 
