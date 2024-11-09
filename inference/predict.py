@@ -2,7 +2,9 @@
 # 8/11/2024.
 # Make inference on a given image using a *.pt YOLO model.
 # Example of usage:
-#      python predict.py ./Inference_try_images/p11_v5_00033.png --output_dir ./Inference_try_images --imgsz 512
+#      python predict.py ./Inference_try_images/p11_v5_00033.png --output_dir ./Inference_try_images --imgsz 640
+# We recommend using an imgsz value of 640, since the model has been trained for this image resolution, regardless of the size of the input image
+# YOLO head has been coded to work with different image sizes, but the model performs good with this resolution.
 # The available parameters are included in the global variable DEFAULT_PARAMS.
 # If you encounter any issues, please contact pascualgonzalez.mario@uma.es
 
