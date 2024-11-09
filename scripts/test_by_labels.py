@@ -192,8 +192,8 @@ if __name__ == "__main__":
     CONFIG = load_config(CONFIG_PATH)
 
     # Define paths
-    output_base_dir = CONFIG['OUTPUT_PATH']  # Update this key based on your config
-    model_path = './inference/weights/best.pt'  # Update this path if necessary
+    output_base_dir = CONFIG['OUTPUT_PATH']  
+    model_path = '../models/iteration2.pt'  
 
     # Define path to YOLO dataset
     path_to_YOLO_dataset = os.path.join(CONFIG['OUTPUT_PATH'], CONFIG["YOLO_DATASET_FOLDER_NAME"])
@@ -215,6 +215,7 @@ if __name__ == "__main__":
     df_results = run_validation_on_labels(labels, output_base_dir, model_path)
 
     # Save results to CSV
-    results_csv_path = os.path.join(output_base_dir, 'validation_results_by_label.csv')
+    model_name = os.path.basename(model_path).strip('.pt')
+    results_csv_path = os.path.join(output_base_dir, f'test_label_model_{model_name}.csv')
     df_results.to_csv(results_csv_path, index=False)
     logging.info(f"Validation results saved to {results_csv_path}")

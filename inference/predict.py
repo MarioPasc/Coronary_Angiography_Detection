@@ -97,7 +97,7 @@ VISUALIZATION_PARAMS: Dict[str, Any] = {
     'color_mode': 'class',
 }
 
-MODEL_PATH: str = './weights/best.pt'  # Replace with your actual model path
+MODEL_PATH: str = '../models/iteration2.pt'  # Replace with your actual model path
 
 
 def parse_imgsz(value: str) -> Union[int, Tuple[int, int]]:
