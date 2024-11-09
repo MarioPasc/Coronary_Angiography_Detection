@@ -44,8 +44,8 @@ def run_filterByLabels(df: pd.DataFrame, labels: List[str]) -> pd.DataFrame:
 
 def run_splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, random_state: int = 39) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Splits the dataset into training, validation, and testing sets based on unique video samples.
-
+    Splits the dataset into training, validation, and testing sets based on unique patients.
+    
     Args
     -------------
     filtered_df : pd.DataFrame
@@ -56,23 +56,46 @@ def run_splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, 
         Proportion of the dataset used for testing.
     random_state : int, optional
         Random state for reproducibility. Defaults to 39.
-
+    
     Returns
     -------------
     Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
         DataFrames for training, validation, and testing sets, respectively.
     """
-    unique_videos = filtered_df['Video_Paciente'].unique()
+    # Get unique patients
+    patients = filtered_df['Patient'].unique()
     
-    # Split into test and train/val sets
-    train_videos, test_videos = train_test_split(unique_videos, test_size=test_size, random_state=random_state)
+    # For each patient, get the labels associated with them
+    patient_labels = {}
+    for patient in patients:
+        labels = filtered_df[filtered_df['Patient'] == patient]['LesionLabel']
+        # Get the most frequent label for the patient
+        primary_label = labels.value_counts().idxmax()
+        patient_labels[patient] = primary_label
     
-    # Split train set further into train and validation sets
-    train_videos, val_videos = train_test_split(train_videos, test_size=val_size / (1 - test_size), random_state=random_state)
+    # Create a DataFrame with patients and their primary label
+    patient_df = pd.DataFrame(list(patient_labels.items()), columns=['Patient', 'PrimaryLabel'])
     
-    train_df = filtered_df[filtered_df['Video_Paciente'].isin(train_videos)]
-    val_df = filtered_df[filtered_df['Video_Paciente'].isin(val_videos)]
-    test_df = filtered_df[filtered_df['Video_Paciente'].isin(test_videos)]
+    # Now, split patients into train, val, test sets, stratifying by primary label
+    from sklearn.model_selection import train_test_split
+    
+    # First split into train_val and test
+    train_val_patients, test_patients, train_val_labels, test_labels = train_test_split(
+        patient_df['Patient'], patient_df['PrimaryLabel'], test_size=test_size, 
+        random_state=random_state, stratify=patient_df['PrimaryLabel']
+    )
+    
+    # Then split train_val into train and val
+    val_size_adjusted = val_size / (1 - test_size)  # Adjust validation size
+    train_patients, val_patients, train_labels, val_labels = train_test_split(
+        train_val_patients, train_val_labels, test_size=val_size_adjusted,
+        random_state=random_state, stratify=train_val_labels
+    )
+    
+    # Now, select data for each set
+    train_df = filtered_df[filtered_df['Patient'].isin(train_patients)]
+    val_df = filtered_df[filtered_df['Patient'].isin(val_patients)]
+    test_df = filtered_df[filtered_df['Patient'].isin(test_patients)]
     
     return train_df, val_df, test_df
 

@@ -162,7 +162,7 @@ def split_holdout_sets():
         # Filter by labels
         filtered_df = DatasetTools.filterByLabels(df, CONFIG["LABELS"])
 
-        # Split the data
+        # Split the data using the updated function
         train_df, val_df, test_df = DatasetTools.splitData(
             filtered_df, CONFIG["VAL_SIZE"], CONFIG["TEST_SIZE"], CONFIG["RANDOM_SEED"]
         )
