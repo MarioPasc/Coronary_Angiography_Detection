@@ -1,27 +1,38 @@
-# Test the performance of an obtained model with the sets.
-
 from ultralytics import YOLO
 import pandas as pd
 
 if __name__ == "__main__":
-    config_path = './CADICA_Detection/model/config_labels.yaml'
-    model_path_train_best = './weights/best.pt'
-    model_path_train_last = './weights/last.pt'
-    model_path_baseline = '/home/mariopasc/Python/Results/Coronariografias/Baseline_train_val/train_and_validate_ateroesclerosis/weights/best.pt'
-
-    save_path = '/home/mariopasc/Python/Results/Coronariografias/Baseline_train_val/train_and_validate_ateroesclerosis/weights'    
-    split = "test"
-
+    # Define a dictionary with symbolic names as keys and model paths as values
+    model_paths = {
+        "Iteration 2": '/home/mariopasc/Python/Projects/Coronary_Angiography_Detection/models/iteration_2.pt',
+        "Iteration 1": '/home/mariopasc/Python/Projects/Coronary_Angiography_Detection/models/iteration_1.pt',
+        "Simulated Annealing": '/home/mariopasc/Python/Projects/Coronary_Angiography_Detection/models/simulated_annealing.pt',
+        "Baseline Model": '/home/mariopasc/Python/Results/Coronariografias/Baseline_train_val/train_and_validate_ateroesclerosis/weights/best.pt'
+    }
+    
+    save_path = '/home/mariopasc/Python/Results/Coronariografias/Baseline_train_val/train_and_validate_ateroesclerosis/weights'
+    
     # Initialize a list to store results
     results = []
 
-    for split in ['train', 'test', 'val']:
-        print(f"Inference on split {split}")
-        model = YOLO(model=model_path_train_best, task="detect", verbose=True)
-        val = model.val(data="./config.yaml", imgsz=512, batch=-1, iou=0.6, plots=True, split=split)
-        
-        # Collect the split name and mAP50-95 value
-        results.append({"Set": split, "mAP50-95": val.box.map})
+    # Loop through each model name and path in the dictionary
+    for model_name, model_path in model_paths.items():
+        # Loop through each split
+        for split in ['train', 'val', 'test']:
+            print(f"Inference on split {split} with model {model_name}")
+            
+            # Initialize the YOLO model
+            model = YOLO(model=model_path, task="detect", verbose=True)
+            
+            # Perform validation and get results
+            val = model.val(data="./CADICA_Detection/model/config.yaml", imgsz=640, batch=8, iou=0.6, plots=True, split=split, workers=0)
+            
+            # Collect the model name, split name, and mAP50-95 value
+            results.append({
+                "Model": model_name,
+                "Set": split,
+                "mAP50-95": val.box.map
+            })
 
     # Convert the results into a DataFrame and save as CSV
     df = pd.DataFrame(results)

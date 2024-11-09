@@ -33,12 +33,13 @@ plt.rcParams.update({'figure.dpi': '300'})
 plt.rcParams['axes.spines.top'] = False
 plt.rcParams['axes.spines.right'] = False
 
-CONFIG_PATH = "./scripts/config.yaml"
+CONFIG_PATH = "./config.yaml"
 FIGSIZE = (15,7.5)
 SHOW = False
 
 # Set up logging
-logging.basicConfig(filename='visualization.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+os.makedirs('./logs', exist_ok=True)
+logging.basicConfig(filename='./logs/visualization.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.info("Starting plots generation process.")
 
 def load_config(yaml_path: str) -> dict:
@@ -808,14 +809,85 @@ def plot_epoch_vs_map(iteration: int) -> None:
     if SHOW: plt.show()
 
 
+def compare_test_label_performance() -> None:
+    """
+    Plot mAP@50 and mAP@50-95 for different models as a function of labels,
+    with one legend for model colors and another for dataset line styles,
+    using formatted labels for the x-axis.
+    """
+    paths = ['test_label_model_iteration_1.csv',
+             'test_label_model_iteration_2.csv',
+             'test_label_model_simulated_annealing.csv']
+    models = [pd.read_csv(os.path.join(CONFIG["OUTPUT_PATH"], model_path)) for model_path in paths]
+    model_names = ["Iteration 1", "Iteration 2", "Simulated Annealing"]
+    
+    # Define label order and mapping
+    label_order = ["p0_20", "p20_50", "p50_70", "p70_90", "p90_98", "p99", "p100"]
+    label_mapping = {
+        "p0_20": r"$< 20\%$",
+        "p20_50": r"$[20, 50)\%$",
+        "p50_70": r"$[50, 70)\%$",
+        "p70_90": r"$[70, 90)\%$",
+        "p90_98": r"$[90, 98)\%$",
+        "p99": r"$99\%$",
+        "p100": r"$100\%$"
+    }
+    colors = ['#0C5DA5', '#00B945', '#FF2C00']
+    linestyles = ['dashed', 'dotted', 'solid']
+    set_names = ['train', 'val', 'test']
+    set_names_mapping = {'train': "Training", 'val': 'Validation', 'test': "Test"}
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    axes[0].set_title("Comparison of mAP@50")
+    axes[1].set_title("Comparison of mAP@50-95")
+
+    # Plot mAP@50 and mAP@50-95 for each model and set
+    for i, model in enumerate(models):
+        # Filter out the "nolesion" label from the model data
+        model = model[model['Label'].isin(label_order)]
+
+        for j, (set_name, linestyle) in enumerate(zip(set_names, linestyles)):
+            alpha = 0.5 if set_name in ['train', 'val'] else 1.0  # Set alpha for train and val
+            linewidth = 1.5 if set_name in ['test'] else 1.0  # Set alpha for train and val
+
+            axes[0].plot(label_order, model[f'{set_name.lower()}/mAP50'], marker='o', color=colors[i], linestyle=linestyle, alpha=alpha, linewidth=linewidth)
+            axes[1].plot(label_order, model[f'{set_name.lower()}/mAP50-95'], marker='o', color=colors[i], linestyle=linestyle, alpha=alpha, linewidth=linewidth)
+
+    # Update x-axis labels with formatted versions
+    formatted_labels = [label_mapping[label] for label in label_order]
+    for ax in axes:
+        ax.set_xticks(range(len(label_order)))
+        ax.set_xticklabels(formatted_labels, ha='center', fontsize=11)
+        ax.spines[['right', 'top']].set_visible(False)
+        ax.get_xaxis().tick_bottom()
+        ax.get_yaxis().tick_left()
+        ax.set_ylim(0.0, 1.1)
+
+    # Create a custom legend for line styles
+    from matplotlib.lines import Line2D
+    labels_for_sets = [set_names_mapping[set] for set in set_names]
+    style_legend = [Line2D([0], [0], color='black', linestyle=linestyle, label=name) for linestyle, name in zip(linestyles, labels_for_sets)]
+    color_legend = [Line2D([0], [0], color=color, linestyle='solid', label=name) for color, name in zip(colors, model_names)]
+    
+    # Adjust legend placement
+    fig.legend(handles=color_legend + style_legend, loc='lower center', ncol=3 + 3)
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
+
+    save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
+    os.makedirs(save_path, exist_ok=True)
+    save_formats = CONFIG["FIGURE_FORMATS"]
+    # Save figures in specified formats
+    for fmt in save_formats:
+        fig.savefig(os.path.join(save_path, f'test_label_vs_map.{fmt}'), format=fmt)
+    if SHOW: plt.show()
 
 
 def main():
-    original_dataset_visualization()
-    processed_dataset_visualization()
-    find_complete_augmentations_with_labels_and_save()
-    plot_augmented_bboxes("p34_v9", "00045")
-    plot_hyperparameter_fitness_scatter()
+    #original_dataset_visualization()
+    #processed_dataset_visualization()
+    #find_complete_augmentations_with_labels_and_save()
+    #plot_augmented_bboxes("p34_v9", "00045")
+    #plot_hyperparameter_fitness_scatter()
     """
     csv_files = [
         {
@@ -868,40 +940,13 @@ def main():
         }
     ]
     """
-    csv_files = [
-        {
-            'csv_file':  "/home/mariopasc/Python/Results/Coronariografias/Results_Paper/iteration2/Hyperparameters/lr0_run_11/val.csv",
-            'title': 'Validation Results',
-            'label': 'Validation',
-            'linestyle': '--',
-            'color': '#0C5DA5',
-            'alpha': 0.7,
-            'linewidth': 1.5,
-            'marker': False,
-            'markerstyle': 'v',
-            'markersize': 5
-        },
-        {
-            'csv_file': "/home/mariopasc/Python/Results/Coronariografias/Results_Paper/iteration2/Hyperparameters/lr0_run_11/train.csv", 
-            'title': 'Training',
-            'label': 'Training',
-            'linestyle': ':',
-            'color': '#FF2C00',
-            'alpha': 0.7,
-            'linewidth': 1.5,
-            'marker': False,
-            'markerstyle': 'o',
-            'markersize': 5
-        }
-    ]
-
-    plot_map_metrics(csv_files=csv_files)
+    #plot_map_metrics(csv_files=csv_files)
     
     
-    for iteration in [1,2]:
-        plot_epoch_vs_map(iteration)
-        plot_hyperparameter_vs_map(iteration)
-    
+    #for iteration in [1,2]:
+    #    plot_epoch_vs_map(iteration)
+    #    plot_hyperparameter_vs_map(iteration)
+    compare_test_label_performance()
 
 if __name__ == "__main__":
     main()

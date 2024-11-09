@@ -108,8 +108,6 @@ def create_label_datasets(data_frames: Dict[str, pd.DataFrame], output_base_dir:
                             os.symlink(image_src, image_dst)
                         except Exception as e:
                             logging.error(f"Failed to create symlink for image {image_src} to {image_dst}: {e}")
-                else:
-                    logging.warning(f"Image file not found at {image_src}")
 
                 if label.lower() == 'nolesion':
                     # For 'nolesion', create an empty label file if it doesn't exist
@@ -128,8 +126,6 @@ def create_label_datasets(data_frames: Dict[str, pd.DataFrame], output_base_dir:
                                 os.symlink(label_src, label_dst)
                             except Exception as e:
                                 logging.error(f"Failed to create symlink for label {label_src} to {label_dst}: {e}")
-                    else:
-                        logging.warning(f"Label file not found at {label_src}")
 
     return labels
 
@@ -188,12 +184,14 @@ def run_validation_on_labels(labels: List[str], output_base_dir: str, model_path
 
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn')
-    CONFIG_PATH = "./scripts/config.yaml"
+    CONFIG_PATH = "./config.yaml"
     CONFIG = load_config(CONFIG_PATH)
 
     # Define paths
     output_base_dir = CONFIG['OUTPUT_PATH']  
-    model_path = '../models/iteration2.pt'  
+    models = ['../models/simulated_annealing.pt',
+              '../models/iteration1.pt',
+              '../models/iteration2.pt']  
 
     # Define path to YOLO dataset
     path_to_YOLO_dataset = os.path.join(CONFIG['OUTPUT_PATH'], CONFIG["YOLO_DATASET_FOLDER_NAME"])
@@ -211,11 +209,12 @@ if __name__ == "__main__":
     # Create config files for each label
     create_config_files(labels, output_base_dir)
 
-    # Run validation on each label-specific dataset
-    df_results = run_validation_on_labels(labels, output_base_dir, model_path)
+    for model in models:
+        # Run validation on each label-specific dataset
+        df_results = run_validation_on_labels(labels, output_base_dir, model)
 
-    # Save results to CSV
-    model_name = os.path.basename(model_path).strip('.pt')
-    results_csv_path = os.path.join(output_base_dir, f'test_label_model_{model_name}.csv')
-    df_results.to_csv(results_csv_path, index=False)
-    logging.info(f"Validation results saved to {results_csv_path}")
+        # Save results to CSV
+        model_name = os.path.basename(model).strip('.pt')
+        results_csv_path = os.path.join(output_base_dir, f'test_label_model_{model_name}.csv')
+        df_results.to_csv(results_csv_path, index=False)
+        logging.info(f"Validation results saved to {results_csv_path}")

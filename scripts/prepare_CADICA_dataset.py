@@ -29,7 +29,8 @@ from CADICA_Detection.dataset.DatasetTools import DatasetTools
 import yaml
 
 # Set up logging
-logging.basicConfig(filename='dataset_generation.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+os.makedirs('./logs', exist_ok=True)
+logging.basicConfig(filename='./logs/dataset_generation.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.info("Starting dataset generation process.")
 
 def load_config(yaml_path: str) -> dict:
