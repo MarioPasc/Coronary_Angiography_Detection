@@ -46,21 +46,7 @@ def run_splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, 
     """
     Splits the dataset into training, validation, and testing sets based on unique patients.
     
-    Args
-    -------------
-    filtered_df : pd.DataFrame
-        The filtered DataFrame to split into train, validation, and test sets.
-    val_size : float
-        Proportion of the dataset used for validation in relation to training set.
-    test_size : float
-        Proportion of the dataset used for testing.
-    random_state : int, optional
-        Random state for reproducibility. Defaults to 39.
-    
-    Returns
-    -------------
-    Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
-        DataFrames for training, validation, and testing sets, respectively.
+    Ensures that labels with small counts are included in validation and test sets.
     """
     # Get unique patients
     patients = filtered_df['Patient'].unique()
@@ -76,21 +62,59 @@ def run_splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, 
     # Create a DataFrame with patients and their primary label
     patient_df = pd.DataFrame(list(patient_labels.items()), columns=['Patient', 'PrimaryLabel'])
     
-    # Now, split patients into train, val, test sets, stratifying by primary label
+    # Get counts of patients per label
+    patient_label_counts = patient_df.groupby('PrimaryLabel').size()
+    
+    # Identify labels with small counts (less than 3 patients)
+    small_labels = patient_label_counts[patient_label_counts < 3].index.tolist()
+    
+    # Get patients with small labels
+    small_label_patients_df = patient_df[patient_df['PrimaryLabel'].isin(small_labels)]
+    small_patients = small_label_patients_df['Patient'].tolist()
+    
+    # Assign patients with small labels to validation and test sets
+    val_patients_small = []
+    test_patients_small = []
+    train_patients_small = []
+    
+    for label in small_labels:
+        patients_with_label = small_label_patients_df[small_label_patients_df['PrimaryLabel'] == label]['Patient'].tolist()
+        num_patients = len(patients_with_label)
+        if num_patients >= 3:
+            # Assign one patient to each set
+            val_patients_small.append(patients_with_label[0])
+            test_patients_small.append(patients_with_label[1])
+            train_patients_small.extend(patients_with_label[2:])
+        elif num_patients == 2:
+            # Assign one patient to val, one to test
+            val_patients_small.append(patients_with_label[0])
+            test_patients_small.append(patients_with_label[1])
+        elif num_patients ==1:
+            # Assign patient to validation
+            val_patients_small.append(patients_with_label[0])
+    
+    # Remove small label patients from patient_df
+    remaining_patient_df = patient_df[~patient_df['Patient'].isin(small_patients)]
+    
+    # Now, split remaining patients into train_val and test
     from sklearn.model_selection import train_test_split
     
-    # First split into train_val and test
-    train_val_patients, test_patients, train_val_labels, test_labels = train_test_split(
-        patient_df['Patient'], patient_df['PrimaryLabel'], test_size=test_size, 
-        random_state=random_state, stratify=patient_df['PrimaryLabel']
+    train_val_patients, test_patients_remaining, train_val_labels, test_labels = train_test_split(
+        remaining_patient_df['Patient'], remaining_patient_df['PrimaryLabel'], test_size=test_size, 
+        random_state=random_state, stratify=remaining_patient_df['PrimaryLabel']
     )
     
     # Then split train_val into train and val
     val_size_adjusted = val_size / (1 - test_size)  # Adjust validation size
-    train_patients, val_patients, train_labels, val_labels = train_test_split(
+    train_patients_remaining, val_patients_remaining, train_labels, val_labels = train_test_split(
         train_val_patients, train_val_labels, test_size=val_size_adjusted,
         random_state=random_state, stratify=train_val_labels
     )
+    
+    # Combine patients
+    train_patients = train_patients_remaining.tolist() + train_patients_small
+    val_patients = val_patients_remaining.tolist() + val_patients_small
+    test_patients = test_patients_remaining.tolist() + test_patients_small
     
     # Now, select data for each set
     train_df = filtered_df[filtered_df['Patient'].isin(train_patients)]

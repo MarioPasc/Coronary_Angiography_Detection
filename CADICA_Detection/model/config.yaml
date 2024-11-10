@@ -1,4 +1,4 @@
-path: /home/mariopasc/x2go_shared/Datasets/CADICA_Augmented_Labels_Deteccion/CADICA_Detection_Full
+path: /home/mariopasc/Python/Datasets/Coronario_Patient/CADICA_Detection_YOLO
 train: images/train  
 val: images/val  
 test:  images/test

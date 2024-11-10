@@ -33,7 +33,7 @@ plt.rcParams.update({'figure.dpi': '300'})
 plt.rcParams['axes.spines.top'] = False
 plt.rcParams['axes.spines.right'] = False
 
-CONFIG_PATH = "./config.yaml"
+CONFIG_PATH = "./scripts/config.yaml"
 FIGSIZE = (15,7.5)
 SHOW = False
 
@@ -563,7 +563,7 @@ def plot_map_metrics(csv_files: List[Dict]):
     
     # Set up two subplots for 'map_50' and 'map_50_95'
     fig, axes = plt.subplots(1, 2, figsize=FIGSIZE)
-    metrics = ['map50', 'map50_95']
+    metrics = ['metrics/mAP50(B)', 'metrics/mAP50-95(B)']
     metrics_plots = ['mAP@50', 'mAP@50-95']
     i = 0
     unique_handles, unique_labels = [], []
@@ -585,7 +585,7 @@ def plot_map_metrics(csv_files: List[Dict]):
             data = pd.read_csv(file_info['csv_file'])
             
             # Filter out rows with epoch=0 and weight='best.pt' as required
-            data = data[~((data['epoch'] == 0) & (data['weight'] == 'best.pt'))]
+            #data = data[~((data['epoch'] == 0) & (data['weight'] == 'best.pt'))]
             
             # Sort data by 'epoch' column
             data = data.sort_values(by='epoch')
@@ -883,8 +883,8 @@ def compare_test_label_performance() -> None:
 
 
 def main():
-    #original_dataset_visualization()
-    #processed_dataset_visualization()
+    original_dataset_visualization()
+    processed_dataset_visualization()
     #find_complete_augmentations_with_labels_and_save()
     #plot_augmented_bboxes("p34_v9", "00045")
     #plot_hyperparameter_fitness_scatter()
@@ -940,13 +940,39 @@ def main():
         }
     ]
     """
+    csv_files = [
+        {
+            'csv_file': os.path.join('/home/mariopasc/Python/Results/Coronariografias/Difference_performance/detect', 'holdout_patients', 'results.csv'),
+            'title': 'Patient-based holdout',
+            'label': 'Patient based holdout',
+            'linestyle': '--',
+            'color': '#0C5DA5',
+            'alpha': 0.7,
+            'linewidth': 1.5,
+            'marker': False,
+            'markerstyle': 'v',
+            'markersize': 5
+        },
+        {
+            'csv_file': os.path.join('/home/mariopasc/Python/Results/Coronariografias/Difference_performance/detect', 'holdout_pVideo', 'results.csv'),
+            'title': 'Patient_Video based holdout',
+            'label': 'Patient_Video based holdout',
+            'linestyle': ':',
+            'color': '#FF2C00',
+            'alpha': 0.7,
+            'linewidth': 1.5,
+            'marker': False,
+            'markerstyle': 'o',
+            'markersize': 5
+        }
+    ]
     #plot_map_metrics(csv_files=csv_files)
     
     
     #for iteration in [1,2]:
     #    plot_epoch_vs_map(iteration)
     #    plot_hyperparameter_vs_map(iteration)
-    compare_test_label_performance()
+    #compare_test_label_performance()
 
 if __name__ == "__main__":
     main()

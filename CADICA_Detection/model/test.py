@@ -4,13 +4,11 @@ import pandas as pd
 if __name__ == "__main__":
     # Define a dictionary with symbolic names as keys and model paths as values
     model_paths = {
-        "Iteration 2": '/home/mariopasc/Python/Projects/Coronary_Angiography_Detection/models/iteration_2.pt',
-        "Iteration 1": '/home/mariopasc/Python/Projects/Coronary_Angiography_Detection/models/iteration_1.pt',
-        "Simulated Annealing": '/home/mariopasc/Python/Projects/Coronary_Angiography_Detection/models/simulated_annealing.pt',
-        "Baseline Model": '/home/mariopasc/Python/Results/Coronariografias/Baseline_train_val/train_and_validate_ateroesclerosis/weights/best.pt'
+        "Patient_Video-based": '/home/mariopasc/Python/Projects/Coronary_Angiography_Detection/models/iteration_2.pt',
+        "Patient-based": "/home/mariopasc/Python/Results/Coronariografias/Difference_performance/detect/holdout_patients/weights/best.pt"
     }
     
-    save_path = '/home/mariopasc/Python/Results/Coronariografias/Baseline_train_val/train_and_validate_ateroesclerosis/weights'
+    save_path = "/home/mariopasc/Python/Results/Coronariografias/Difference_performance"
     
     # Initialize a list to store results
     results = []

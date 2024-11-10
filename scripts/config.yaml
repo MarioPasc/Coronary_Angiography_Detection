@@ -1,6 +1,6 @@
 DATASET_URL: "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/p9bpx9ctcv-2.zip"
-DESTINATION_FOLDER: "/home/mariopasc/Python/Datasets/try_coronario"
-OUTPUT_PATH: "/home/mariopasc/Python/Datasets/try_coronario"
+DESTINATION_FOLDER: "/home/mariopasc/Python/Datasets/Coronario_Patient"
+OUTPUT_PATH: "/home/mariopasc/Python/Datasets/Coronario_Patient"
 DS_NAME: "CADICA"
 DATA_CSV_NAME: "information_dataset.csv"
 LABELS:
