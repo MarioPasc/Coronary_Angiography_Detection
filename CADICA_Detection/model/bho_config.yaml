@@ -1,0 +1,44 @@
+model: /home/mariopasc/x2go_shared/YOLO/yolov8l.pt
+data: config.yaml  # Update this path to point to your dataset configuration
+epochs: 100
+img_size: 640
+n_trials: 100
+save_plots: true
+
+hyperparameters:
+  lr0:
+    type: loguniform
+    low: 0.000001
+    high: 0.01
+  lrf:
+    type: loguniform
+    low: 0.000001
+    high: 0.01
+  momentum:
+    type: uniform
+    low: 0.55
+    high: 0.99
+  weight_decay:
+    type: loguniform
+    low: 0.0000001
+    high: 0.01
+  warmup_epochs:
+    type: int
+    low: 0
+    high: 5
+  warmup_momentum:
+    type: uniform
+    low: 0.7
+    high: 0.99
+  box:
+    type: uniform
+    low: 6.0
+    high: 9.0
+  cls:
+    type: uniform
+    low: 0.4
+    high: 0.8
+  dfl:
+    type: uniform
+    low: 0.9
+    high: 2.0

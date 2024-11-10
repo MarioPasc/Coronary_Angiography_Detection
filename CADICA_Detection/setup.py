@@ -19,7 +19,8 @@ setup(
         "opencv-python-headless",
         "pyyaml",
         "scienceplots",
-        "natsort"
+        "natsort",
+        "optuna"
     ],
     python_requires='>=3.9',
     package_data={

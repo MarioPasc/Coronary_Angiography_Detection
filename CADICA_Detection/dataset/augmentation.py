@@ -1,5 +1,7 @@
 # CADICA_Detection/dataset/augmentation.py
 
+# Most references and implemented methods taken from https://www.sciencedirect.com/science/article/pii/S277244252400042X#b141
+
 import os
 import pandas as pd
 import numpy as np
@@ -44,11 +46,11 @@ class Augmentor:
             'contrast': (self._random_contrast, False),
             'translation': (self._random_translation, True),
             'xray_noise': (self._xray_noise, False),
-            'elastic_deformation': (self._elastic_deformation, True),  # Updated
+            'elastic_deformation': (self._elastic_deformation, True),  
         }
 
         # Probabilities for each augmentation type
-        self.augmentation_weights = [0.25, 0.2, 0.2, 0.1, 0.15]  # Including elastic deformation
+        self.augmentation_weights = [0.25, 0.2, 0.2, 0.05, 0.2]  
 
     def augment_data(self, train_df: pd.DataFrame, val_df: pd.DataFrame) -> None:
         """
@@ -262,9 +264,24 @@ class Augmentor:
         --------
         Union[np.ndarray, Tuple[np.ndarray, List[int]]]
             The deformed image and the new bounding box coordinates if applicable.
+
+        References:
+        --------
+            SIMARD, Patrice Y., et al. Best practices for convolutional neural networks applied to visual document analysis. 
+            En Icdar. 2003.
+
+            Function partially inspired in https://www.kaggle.com/code/bguberfain/elastic-transform-for-data-augmentation 
         """
-        alpha = img.shape[1] * 2  # Scaling factors for deformation
-        sigma = img.shape[1] * 0.08
+        image_width = img.shape[1]
+
+        # Controls the intensity of the deformation. Higher alpha values lead to more significant warping. 
+        # Typically, alpha is a multiple of the image dimensions to scale the intensity appropriately.
+        alpha = np.random.uniform(0.5 * image_width, 3 * image_width)
+
+        # Defines the smoothness of the deformation. Higher sigma values produce smoother and more gradual 
+        # deformations, while lower sigma values lead to sharper and more abrupt deformations.
+        sigma = np.random.uniform(0.05 * image_width, 0.2 * image_width)
+
         alpha_affine = img.shape[1] * 0.08
 
         random_state = np.random.RandomState(None)
