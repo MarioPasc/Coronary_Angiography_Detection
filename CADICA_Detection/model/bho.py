@@ -9,41 +9,99 @@ import random
 import numpy as np
 import torch
 import gc
-from threading import Lock
+import multiprocessing
+import time
+import traceback
 
-# Global lock for GPU assignment
-gpu_lock = Lock()
-available_gpus = []
+class TrialNumberFilter(logging.Filter):
+    """
+    A custom logging filter that adds a 'trial_number' attribute to logging records.
 
-# Function to set up logging for each trial
-def setup_trial_logging(trial_number):
-    logger = logging.getLogger(f"Trial_{trial_number}")
-    logger.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(threadName)s - %(levelname)s - %(message)s')
+    This filter checks if the 'trial_number' attribute is present in a logging record. 
+    If the attribute is not present, it assigns a default value of 'N/A'. This ensures 
+    that log messages can include the trial number, even if it hasn't been explicitly set.
 
-    # Create logs directory if it doesn't exist
-    log_dir = 'logs'
-    os.makedirs(log_dir, exist_ok=True)
-    log_filename = os.path.join(log_dir, f"trial_{trial_number}.log")
+    Methods
+    -------
+    filter(record)
+        Checks if the 'trial_number' attribute is in the logging record. 
+        If not, sets 'trial_number' to 'N/A' and returns True.
+    """
 
-    # Remove existing handlers to prevent duplicate logs
-    if logger.hasHandlers():
-        logger.handlers.clear()
+    def filter(self, record):
+        """
+        Checks if the 'trial_number' attribute is present in the logging record. 
+        If it is not present, sets 'trial_number' to 'N/A'.
 
-    # Create file handler for the trial
-    fh = logging.FileHandler(log_filename)
-    fh.setLevel(logging.INFO)
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
+        Parameters
+        ----------
+        record : logging.LogRecord
+            The logging record to be filtered and modified.
 
-    return logger
+        Returns
+        -------
+        bool
+            Always returns True, indicating that the record should be logged.
+        """
+        if not hasattr(record, 'trial_number'):
+            record.trial_number = 'N/A'
+        return True
+
+# Set up logging
+logger = logging.getLogger("BHOYOLO")
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(processName)s - %(levelname)s - Trial %(trial_number)s - %(message)s')
+
+# Create file handler
+fh = logging.FileHandler('log_bho_process.log')
+fh.setFormatter(formatter)
+fh.addFilter(TrialNumberFilter())
+logger.addHandler(fh)
+
+def create_pruning_callback(trial, logger):
+    """
+    Description
+    --------------------------
+    Creates a callback function for Optuna to prune unpromising trials during YOLO model training.
+    Args
+    --------------------------
+    trial: optuna.trial.Trial
+        The current Optuna trial object.
+    logger: logging.Logger
+        The logger object to log training information.
+    Returns
+    --------------------------
+    callable
+        A callback function to be called at the end of each training epoch.
+    """
+    def optuna_pruning_callback(trainer):
+        # Get the current epoch
+        epoch = trainer.epoch + 1
+        
+        # Access the validation metrics
+        metrics = trainer.metrics
+        map50_95 = metrics.get('metrics/mAP50-95(B)', None)
+        
+        # Log the device of the model being trained
+        model_device = next(trainer.model.parameters()).device
+        logger.info(f"Epoch {epoch}, Trial {trial.number}, mAP50-95: {map50_95}, Model device: {model_device}")
+        
+        if map50_95 is not None:
+            # Report the metric to Optuna
+            trial.report(map50_95, step=epoch)
+            # Check if the trial should be pruned
+            if trial.should_prune():
+                logger.info(f"Trial {trial.number} pruned at epoch {epoch}.")
+                raise optuna.exceptions.TrialPruned()
+    
+    return optuna_pruning_callback
 
 # Global default parameters for YOLO training
 DEFAULT_PARAMS = {
     'data': None,  # This will be set dynamically in the class
     'epochs': 100,
     'batch': -1,  # Automatic batch size determination
-    'imgsz': 512,
+    'imgsz': 640,
     'save': True,
     'cache': False,
     'device': None,
@@ -99,29 +157,111 @@ DEFAULT_PARAMS = {
     'bgr': 0.0,
 }
 
-def set_seed(seed: int = None):
+def set_seed(seed: int = None) -> None:
     """
+    Description
+    --------------------------
     Sets the seed for generating random numbers to ensure reproducibility across various libraries.
+    Args
+    --------------------------
+    seed: int
+        The seed value to use for random number generators.
     """
+
     if seed is None:
         seed = random.randint(0, 2**32 - 1)
+
     # Set seeds for reproducibility
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
     # Ensure deterministic behavior for CUDNN backend
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
 class BHOYOLO:
+    """
+    A class for performing Bayesian Hyperparameter Optimization (BHO) on YOLO models.
+
+    This class uses Optuna to optimize hyperparameters for YOLO model training. It includes 
+    methods for setting up the YOLO training environment, extracting hyperparameters, and 
+    preparing for the optimization process. It also manages GPU resources efficiently and 
+    provides an interface for saving results and generating visualizations.
+
+    Attributes
+    ----------
+    storage : str
+        The database storage URL used by Optuna for saving study results.
+    model : str
+        The path to the YOLO model to be used for training.
+    hyperparameters_config : Dict[str, Any]
+        The configuration dictionary containing hyperparameters to be optimized.
+    hyperparameters : Dict[Tuple[str, str], Any]
+        The prepared hyperparameters for Optuna optimization.
+    yaml_path : str
+        The path to the YOLO data configuration file.
+    epochs : int
+        The number of training epochs.
+    img_size : int
+        The size of the images used for training.
+    results : List[Dict[str, Any]]
+        A list to store results from each trial.
+    n_trials : int
+        The number of optimization trials to run.
+    save_plots : bool
+        Whether to save visualizations of the optimization process.
+    num_cpus : int
+        The number of CPU cores available for training.
+    num_gpus : int
+        The number of GPUs available for training.
+    available_gpus : List[int]
+        A list of available GPU indices for training.
+    gpu_lock : multiprocessing.Lock
+        A lock for managing GPU resource allocation among parallel trials.
+    device : str
+        The computational device ('cuda' or 'cpu') used for training.
+    default_params : Dict[str, Any]
+        The default YOLO training parameters.
+
+    Methods
+    -------
+    __init__(config: Dict[str, Any], storage: str = 'sqlite:///optuna_study.db', gpu_lock=None, available_gpus=None)
+        Initializes the BHOYOLO class with configuration settings and resource management.
+
+    _prepare_hyperparameters() -> Dict[Tuple[str, str], Any]
+        Prepares the hyperparameters for optimization from the configuration dictionary.
+
+    _extract_hyperparameters(trial: optuna.Trial, logger) -> Dict[str, Any]
+        Extracts hyperparameters from the search space using the Optuna trial object.
+    """
+
     def __init__(
         self,
         config: Dict[str, Any],
-        storage: str = 'sqlite:///optuna_study.db'
+        storage: str = 'sqlite:///optuna_study.db',
+        gpu_lock=None,
+        available_gpus=None
     ) -> None:
         """
         Initializes the Bayesian Hyperparameter Optimization for YOLO model training.
+
+        Parameters
+        ----------
+        config : Dict[str, Any]
+            The configuration dictionary containing settings for YOLO training and hyperparameter optimization.
+        storage : str, optional
+            The database storage URL used by Optuna for saving study results (default is 'sqlite:///optuna_study.db').
+        gpu_lock : multiprocessing.Lock, optional
+            A lock for managing GPU resource allocation among parallel trials (default is None).
+        available_gpus : List[int], optional
+            A list of available GPU indices for training (default is None).
+
+        Notes
+        -----
+        Initializes default parameters, sets up GPU resource management, and prepares the
+        YOLO model for hyperparameter optimization.
         """
         self.storage = storage
         self.model: str = config.get('model', './yolov8lt.pt')
@@ -137,7 +277,8 @@ class BHOYOLO:
         # Resource configuration
         self.num_cpus: int = int(os.environ.get('SLURM_CPUS_PER_TASK', 1))
         self.num_gpus: int = torch.cuda.device_count()
-        self.available_gpus = list(range(self.num_gpus))
+        self.available_gpus = available_gpus if available_gpus is not None else list(range(self.num_gpus))
+        self.gpu_lock = gpu_lock if gpu_lock is not None else multiprocessing.Lock()
 
         # Set the device parameter based on GPU availability
         if torch.cuda.is_available() and self.num_gpus > 0:
@@ -150,9 +291,25 @@ class BHOYOLO:
         self.default_params['device'] = self.device
         self.default_params['workers'] = min(4 * self.num_gpus, self.num_cpus)
 
+
     def _prepare_hyperparameters(self) -> Dict[Tuple[str, str], Any]:
         """
         Prepares the hyperparameters for optimization from the configuration dictionary.
+
+        Returns
+        -------
+        Dict[Tuple[str, str], Any]
+            A dictionary of hyperparameters with their respective types and configurations.
+
+        Raises
+        ------
+        ValueError
+            If an unknown hyperparameter type is encountered in the configuration.
+
+        Notes
+        -----
+        This method iterates over the hyperparameters provided in the configuration and
+        organizes them for Optuna's optimization process.
         """
         hyperparameters: Dict[Tuple[str, str], Any] = {}
         # Iterate over the hyperparameters defined in the configuration
@@ -169,13 +326,36 @@ class BHOYOLO:
     def _extract_hyperparameters(self, trial: optuna.Trial, logger) -> Dict[str, Any]:
         """
         Extracts hyperparameters from the search space using the Optuna trial object.
+
+        Parameters
+        ----------
+        trial : optuna.Trial
+            The current Optuna trial object used for suggesting hyperparameters.
+        logger : logging.Logger
+            The logger object for logging messages related to hyperparameter extraction.
+
+        Returns
+        -------
+        Dict[str, Any]
+            A dictionary of hyperparameters suggested by the Optuna trial.
+
+        Raises
+        ------
+        ValueError
+            If an unknown function type is encountered while suggesting hyperparameters.
+
+        Notes
+        -----
+        This method uses the Optuna trial object to suggest hyperparameter values based
+        on the configured search space. It supports different types of distributions
+        (e.g., 'loguniform', 'uniform', 'int', 'categorical') and logs the extraction process.
         """
         final_hyperparam: Dict[str, Any] = {}
         logger.debug(f"Extracting hyperparameters for trial {trial.number}.")
 
         for (hyperparam, func_type), param_config in self.hyperparameters.items():
-            low = param_config['low']
-            high = param_config['high']
+            low = param_config.get('low')
+            high = param_config.get('high')
             if func_type == "loguniform":
                 final_hyperparam[hyperparam] = trial.suggest_float(hyperparam, low, high, log=True)
             elif func_type == "uniform":
@@ -193,11 +373,49 @@ class BHOYOLO:
     def _train_model(self, trial: optuna.Trial) -> float:
         """
         Trains the YOLO model using hyperparameters suggested by the Optuna trial.
-        """
-        # Set up a separate logger for this trial
-        logger = setup_trial_logging(trial.number)
 
-        # Start training
+        Parameters
+        ----------
+        trial : optuna.Trial
+            The current Optuna trial object, used for suggesting hyperparameters and reporting results.
+
+        Returns
+        -------
+        float
+            The mAP@50-95 metric, which is used as the objective value for hyperparameter optimization.
+
+        Description
+        -----------
+        This method sets up the YOLO model training environment using the provided trial object from
+        Optuna. It assigns a GPU or falls back to CPU if no GPU is available, extracts the
+        hyperparameters for the trial, and initializes the YOLO model. Training is conducted using
+        these parameters, and a custom pruning callback is used to prune unpromising trials based
+        on validation performance.
+
+        Throughout the training process, various metrics and memory usage details are logged. After
+        training, the results are saved and the GPU is returned to the pool for use by other trials.
+        The method also handles resource cleanup and raises any exceptions encountered during
+        training for Optuna to handle.
+
+        Raises
+        ------
+        Exception
+            If any error occurs during the training process, it is logged and re-raised.
+
+        Notes
+        -----
+        - The method ensures reproducibility by setting a unique seed for each trial.
+        - The YOLO model is explicitly moved to the assigned GPU, and memory usage is recorded before
+        and after training.
+        - The method supports GPU-based training if CUDA is available and manages GPU resources
+        using a lock to prevent conflicts in a multi-GPU setting.
+        """
+        # Get the logger
+        logger = logging.getLogger("BHOYOLO")
+
+        # Create a LoggerAdapter to inject 'trial_number' into log messages
+        logger = logging.LoggerAdapter(logger, {'trial_number': trial.number})
+
         logger.info(f"Starting training for trial {trial.number}.")
 
         # Generate a unique seed
@@ -205,50 +423,118 @@ class BHOYOLO:
         set_seed(seed)
         logger.info(f"Seed for trial {trial.number}: {seed}")
 
+        # Extract hyperparameters for the trial
+        hyperparams = self._extract_hyperparameters(trial, logger)
+        logger.info(f"Hyperparameters for trial {trial.number}: {hyperparams}")
+
+        # Merge with default_params
+        params = {**self.default_params, **hyperparams}
+
+        # Record the start time
+        start_time = time.time()
+
         # Assign a GPU
-        with gpu_lock:
+        with self.gpu_lock:
             if self.available_gpus:
                 gpu_id = self.available_gpus.pop(0)
                 assigned_device = f'cuda:{gpu_id}'
                 trial.set_user_attr('gpu_id', gpu_id)
                 logger.info(f"Assigned GPU {gpu_id} to trial {trial.number}")
+                params['device'] = gpu_id
             else:
                 assigned_device = 'cpu'
+                gpu_id = None
+                params['device'] = 'cpu'
                 logger.info(f"No GPUs available, trial {trial.number} will run on CPU")
 
-        try:
-            # Extract hyperparameters for the trial
-            hyperparams = self._extract_hyperparameters(trial, logger)
-            logger.info(f"Hyperparameters for trial {trial.number}: {hyperparams}")
+        # Log the assigned device
+        logger.info(f"Assigned device for trial {trial.number}: {assigned_device}")
 
-            # Merge with default_params
-            params = {**self.default_params, **hyperparams}
+        # Verify the device availability
+        if assigned_device != 'cpu' and not torch.cuda.is_available():
+            logger.error(f"CUDA is not available. Trial {trial.number} will run on CPU instead.")
+            assigned_device = 'cpu'
+            gpu_id = None
+
+        try:
             # Update parameters with configuration settings
             params['data'] = self.yaml_path
             params['epochs'] = self.epochs
             params['imgsz'] = self.img_size
             params['val'] = True  # Ensure validation is performed
             params['verbose'] = False  # Reduce verbosity if needed
-            params['device'] = assigned_device
 
             # Set unique name for each trial
             params['name'] = f"trial_{trial.number}_training"
 
             # Initialize the YOLO model
             model = YOLO(self.model)
+            model.model.to(assigned_device)  # Explicitly move model to the assigned GPU
+
+            # Create the pruning callback with access to the trial object
+            pruning_callback = create_pruning_callback(trial, logger)
+            
+            # Add the custom pruning callback
+            model.add_callback("on_fit_epoch_end", pruning_callback)
+
+            # Verify that model parameters are on the correct device
+            model_device = next(model.model.parameters()).device
+            logger.info(f"Model parameters are on device: {model_device}")
+
+            # Record memory before training
+            if assigned_device != 'cpu':
+                memory_allocated_before = torch.cuda.memory_allocated(device=assigned_device)
+                memory_reserved_before = torch.cuda.memory_reserved(device=assigned_device)
+            else:
+                logging.info("Model assigned to cpu")
+                memory_allocated_before = 0
+                memory_reserved_before = 0
+            logger.info(f"Memory allocated before training for trial {trial.number}: {memory_allocated_before/ 1e6} MB")
+            logger.info(f"Memory reserved before training for trial {trial.number}: {memory_reserved_before/ 1e6} MB")
+
+            # Log the device used by the model
+            logger.info(f"Model device for trial {trial.number}: {model.device}")
+
+            # Verify that model parameters are on the correct device
+            model_device = next(model.model.parameters()).device
+            logger.info(f"Model parameters are on device (before training): {model_device}")
 
             # Train the model using the merged hyperparameters
-            results = model.train(**params)
+            model.train(**params)
+
+            # Check if the model's device has changed after training
+            post_train_device = next(model.model.parameters()).device
+            logger.info(f"Model parameters are on device (after training): {post_train_device}")
+
 
             # Access the actual batch size used
             actual_batch_size = model.trainer.batch_size
             logger.info(f"Actual batch size used for trial {trial.number}: {actual_batch_size}")
 
             # Retrieve relevant metrics after training completes
-            precision_b = results.box.mp
-            recall_b = results.box.mr
-            map_50_b = results.box.map50
-            map_50_95 = results.box.map
+            metrics = model.metrics
+
+            # Access metrics directly from attributes
+            precision_b = metrics.box.mp     # Mean Precision
+            recall_b = metrics.box.mr        # Mean Recall
+            map_50_b = metrics.box.map50     # mAP@50
+            map_50_95 = metrics.box.map      # mAP@50-95
+
+            # Record memory after training
+            if assigned_device != 'cpu':
+                memory_allocated_after = torch.cuda.memory_allocated(device=assigned_device)
+                memory_reserved_after = torch.cuda.memory_reserved(device=assigned_device)
+            else:
+                logging.info("Model assigned to cpu")
+                memory_allocated_after = 0
+                memory_reserved_after = 0
+            logger.info(f"Memory allocated after training for trial {trial.number}: {memory_allocated_after / 1e6} MB")
+            logger.info(f"Memory reserved after training for trial {trial.number}: {memory_reserved_after/ 1e6} MB")
+
+            # Calculate execution time
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            logger.info(f"Trial {trial.number} completed in {elapsed_time:.2f} seconds")
 
             # Save metrics to the trial object
             trial.set_user_attr('precision', precision_b)
@@ -256,6 +542,12 @@ class BHOYOLO:
             trial.set_user_attr('mAP50', map_50_b)
             trial.set_user_attr('mAP50-95', map_50_95)
             trial.set_user_attr('batch_size', actual_batch_size)
+            trial.set_user_attr('seed', seed)
+            trial.set_user_attr('execution_time', elapsed_time)
+            trial.set_user_attr('memory_allocated_before', memory_allocated_before)
+            trial.set_user_attr('memory_reserved_before', memory_reserved_before)
+            trial.set_user_attr('memory_allocated_after', memory_allocated_after)
+            trial.set_user_attr('memory_reserved_after', memory_reserved_after)
 
             # Save the current hyperparameters and metrics in the results list
             trial_results = {
@@ -268,6 +560,11 @@ class BHOYOLO:
                 'seed': seed,
                 'gpu_id': gpu_id if assigned_device != 'cpu' else 'cpu',
                 'batch_size': actual_batch_size,
+                'execution_time': elapsed_time,
+                'memory_allocated_before': memory_allocated_before,
+                'memory_reserved_before': memory_reserved_before,
+                'memory_allocated_after': memory_allocated_after,
+                'memory_reserved_after': memory_reserved_after
             }
             self.results.append(trial_results)
 
@@ -277,46 +574,118 @@ class BHOYOLO:
         except Exception as e:
             # Log any other exceptions that occurred during training
             logger.error(f"An error occurred during training of trial {trial.number}: {e}")
+            logger.error(traceback.format_exc())
             raise e  # Re-raise exception to be caught by Optuna
 
         finally:
             # Return the GPU to the pool
-            with gpu_lock:
-                if assigned_device != 'cpu':
+            with self.gpu_lock:
+                if gpu_id is not None:
                     self.available_gpus.append(gpu_id)
                     logger.info(f"Returned GPU {gpu_id} to the pool")
             # Resource cleanup
             del model
             torch.cuda.empty_cache()
             gc.collect()
-            
-    def optimize(self, n_trials: int = None) -> None:
+
+
+    def optimize(self) -> None:
         """
+        Description
+        --------------------------
         Starts the hyperparameter optimization process using Optuna.
+        References
+        --------------------------
+        SuccessiveHalvingPruner: 
+            LI, Liam, et al. A system for massively parallel hyperparameter tuning. 
+            Proceedings of Machine Learning and Systems, 2020, vol. 2, p. 230-246.
+            https://arxiv.org/abs/1810.05934
+        
+        TPESampler:
+            BERGSTRA, James, et al. Algorithms for hyper-parameter optimization. 
+            Advances in neural information processing systems, 2011, vol. 24.
+            https://proceedings.neurips.cc/paper_files/paper/2011/file/86e8f7ab32cfd12577bc2619bc635690-Paper.pdf
+
+            BERGSTRA, James; YAMINS, Dan; COX, David D. Making a science of model search. 
+            arXiv preprint arXiv:1209.5111, 2012.
+            https://arxiv.org/abs/1209.5111
         """
-        # Set up a logger for the optimization process
+        # Get the logger
         logger = logging.getLogger("BHOYOLO")
         logger.info("Starting hyperparameter optimization.")
 
-        # Create or load an Optuna study
+        logger.info(f"CUDA available?: {torch.cuda.is_available()}")
+        logger.info(f"Available GPUs: {self.available_gpus}")
+        # Get the name of each GPU
+        for i in range(torch.cuda.device_count()):
+            logger.info(f"GPU {i}: {torch.cuda.get_device_name(i)}")
+        logger.info("Current device (no optimization executed): %s", torch.cuda.current_device())
+
+        # Set up Optuna SQLite storage
+        storage = optuna.storages.RDBStorage(
+            url=self.storage,
+            engine_kwargs={"connect_args": {"timeout": 10}}
+        )
+
+        # Define the pruner
+        pruner = optuna.pruners.SuccessiveHalvingPruner(
+            min_resource=2,
+            reduction_factor=3,
+            min_early_stopping_rate=0
+        )
+
+        # Define the sampler
+        sampler = optuna.samplers.TPESampler(
+            consider_prior=True,
+            prior_weight=1.0,
+            consider_magic_clip=True,
+            consider_endpoints=True,
+            n_startup_trials=3,
+            n_ei_candidates=24,
+            multivariate=True,
+            group=True,
+            warn_independent_sampling=True,
+            constant_liar=True,
+            seed=42
+        )
+
         study = optuna.create_study(
-            study_name='shared-study',
             direction="maximize",
-            storage=self.storage,
+            storage=storage,
             load_if_exists=True,
+            pruner=pruner,
+            sampler=sampler
         )
 
-        # Run trials with threading
-        if n_trials is None:
-            n_trials = self.n_trials
+        n_initial_trials: int = 1
+        self.n_initial_trials = n_initial_trials
+        n_parallel_trials: int = self.n_trials - n_initial_trials
 
-        logger.info(f"Running {n_trials} trials with threading.")
+        logger.info(f"Running {n_initial_trials} initial trials sequentially.")
+        try:
+            study.optimize(self._train_model,
+                           n_trials=n_initial_trials,
+                           n_jobs=1,
+                           gc_after_trial=True)
+        except Exception as e:
+            logger.error(f"An error occurred during the initial sequential trials: {e}")
+            logger.error(traceback.format_exc())
+            raise e
 
-        study.optimize(
-            self._train_model,
-            n_trials=n_trials,
-            n_jobs=min(n_trials, self.num_gpus if self.num_gpus > 0 else 1),
-        )
+        if n_parallel_trials > 0:
+            n_jobs: int = min(self.num_gpus, n_parallel_trials)
+            logger.info(f"Running {n_parallel_trials} trials in parallel with {n_jobs} jobs.")
+            try:
+                study.optimize(self._train_model,
+                               n_trials=n_parallel_trials,
+                               n_jobs=n_jobs,
+                               gc_after_trial=True)
+            except Exception as e:
+                logger.error(f"An error occurred during the parallel trials: {e}")
+                logger.error(traceback.format_exc())
+                raise e
+        else:
+            logger.info("No parallel trials to run.")
 
         # Save results
         self._save_results_to_csv(study)
@@ -326,7 +695,25 @@ class BHOYOLO:
 
     def _save_results_to_csv(self, study: optuna.Study) -> None:
         """
-        Saves the results of each trial (hyperparameters and metrics) to a CSV file.
+        Saves the results of each trial, including hyperparameters and performance metrics, to a CSV file.
+
+        Parameters
+        ----------
+        study : optuna.Study
+            The Optuna study object that contains all the completed trial information.
+
+        Description
+        -----------
+        This method uses the Optuna `trials_dataframe` method to convert the results of each trial
+        into a pandas DataFrame. The DataFrame includes details such as the trial number, objective
+        value, hyperparameters, trial state, and user-defined attributes. The results are then saved
+        to a CSV file named 'hyperparameter_optimization_results.csv' for easy analysis and
+        record-keeping.
+
+        Notes
+        -----
+        - The CSV file is created in the current working directory.
+        - The method logs a message indicating that the results have been saved successfully.
         """
         df: pd.DataFrame = study.trials_dataframe(attrs=('number', 'value', 'params', 'state', 'user_attrs'))
         df.to_csv('hyperparameter_optimization_results.csv', index=False)
@@ -335,7 +722,33 @@ class BHOYOLO:
 
     def _generate_visualizations(self, study: optuna.Study) -> None:
         """
-        Generates and saves visualizations for the optimization process.
+        Generates and saves visualization plots for the hyperparameter optimization process.
+
+        Parameters
+        ----------
+        study : optuna.Study
+            The Optuna study object containing the trial history and performance data.
+
+        Description
+        -----------
+        This method creates several visualization plots using Optuna's visualization module to help
+        analyze the hyperparameter optimization process. The following plots are generated and saved:
+        
+        - **Contour Plot**: Visualizes the objective value as a function of two hyperparameters.
+        - **Parallel Coordinates Plot**: Shows the relationship between hyperparameters and the
+        objective value.
+        - **Hyperparameter Importance Plot**: Ranks hyperparameters by their influence on the
+        objective value.
+        - **Optimization History Plot**: Tracks the objective values over the course of the study.
+
+        The plots are saved as both PNG and SVG files in the current working directory. If an error
+        occurs during plot generation, it is logged, and the stack trace is recorded for debugging.
+
+        Notes
+        -----
+        - The plots provide a visual understanding of how hyperparameters affect the model's performance.
+        - This method uses Optuna's `visualization` module, which requires `plotly` as a dependency.
+        - The method handles exceptions gracefully and logs any errors encountered.
         """
         logger = logging.getLogger("BHOYOLO")
         logger.info("Generating visualization plots.")
@@ -364,10 +777,33 @@ class BHOYOLO:
             logger.info("Visualization plots saved successfully.")
         except Exception as e:
             logger.error(f"An error occurred while generating visualizations: {e}")
+            logger.error(traceback.format_exc())
 
 def main():
     """
-    Main function to run the hyperparameter optimization process.
+    The main entry point for running the Bayesian Hyperparameter Optimization for the YOLO model.
+
+    Description
+    -----------
+    This function sets up and runs the hyperparameter optimization process using Optuna. It:
+    1. Loads the configuration from a YAML file.
+    2. Initializes a multiprocessing manager to handle shared GPU resources.
+    3. Creates an instance of the `BHOYOLO` class with the configuration and GPU resource manager.
+    4. Calls the `optimize` method of the `BHOYOLO` class to start the optimization process.
+
+    The function also sets up logging to capture detailed information about the execution and
+    handles any exceptions that occur during the process, logging them for debugging purposes.
+
+    Raises
+    ------
+    Exception
+        If an error occurs during the execution, it is logged and re-raised.
+    
+    Notes
+    -----
+    - The configuration file should be in YAML format and include all necessary parameters.
+    - The function assumes that the script is being run in a Python environment with the required
+      libraries installed.
     """
     try:
         # Read configuration from YAML file
@@ -376,8 +812,13 @@ def main():
         logger = logging.getLogger("BHOYOLO")
         logger.info("Configuration file loaded successfully.")
 
-        # Instantiate the BHOYOLO class
-        bho_yolo = BHOYOLO(config)
+        # Create a manager for shared variables
+        manager = multiprocessing.Manager()
+        gpu_lock = manager.Lock()
+        available_gpus = manager.list(range(torch.cuda.device_count()))
+
+        # Instantiate the BHOYOLO class, passing shared variables
+        bho_yolo = BHOYOLO(config, gpu_lock=gpu_lock, available_gpus=available_gpus)
 
         # Run optimization
         bho_yolo.optimize()
@@ -385,6 +826,7 @@ def main():
     except Exception as e:
         logger = logging.getLogger("BHOYOLO")
         logger.error(f"An error occurred during execution: {e}")
+        logger.error(traceback.format_exc())
         raise e
 
 if __name__ == "__main__":
