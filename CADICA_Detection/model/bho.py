@@ -440,7 +440,7 @@ class BHOYOLO:
                 assigned_device = f'cuda:{gpu_id}'
                 trial.set_user_attr('gpu_id', gpu_id)
                 logger.info(f"Assigned GPU {gpu_id} to trial {trial.number}")
-                params['device'] = gpu_id
+                params['device'] = assigned_device
             else:
                 assigned_device = 'cpu'
                 gpu_id = None
@@ -686,6 +686,7 @@ class BHOYOLO:
                 raise e
         else:
             logger.info("No parallel trials to run.")
+
 
         # Save results
         self._save_results_to_csv(study)
