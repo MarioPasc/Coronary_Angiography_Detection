@@ -12,6 +12,12 @@ import gc
 import multiprocessing
 import time
 import traceback
+import nvidia_smi
+from datetime import datetime
+
+###############################################################################
+#                             LOGGING CONFIG                                  #
+###############################################################################
 
 class TrialNumberFilter(logging.Filter):
     """
@@ -58,6 +64,96 @@ fh.setFormatter(formatter)
 fh.addFilter(TrialNumberFilter())
 logger.addHandler(fh)
 
+###############################################################################
+#                           GPU USAGE LOGGING                                 #
+###############################################################################
+class NvidiaGPUUsageLogger:
+    """Class to manage logging GPU usage, including time and device, using pandas."""
+
+    def __init__(self, trial_number):
+        self.trial_number = trial_number
+        self.csv_file = "gpu_usage_log.csv"  # Single CSV file for all trials
+        self.data = []  # List to accumulate log data
+
+    def log_metrics(self, epoch, trainer):
+        """Logs GPU metrics, including device, to the accumulated data."""
+        model_device = next(trainer.model.parameters()).device  # Get the device dynamically
+        device_index = model_device.index if model_device != 'cpu' else None
+        
+        # Fetch GPU metrics only if the device is a GPU
+        if device_index is not None:
+            nvidia_smi.nvmlInit()
+            handle = nvidia_smi.nvmlDeviceGetHandleByIndex(device_index)
+            util = nvidia_smi.nvmlDeviceGetUtilizationRates(handle)
+            mem = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+            temperature = nvidia_smi.nvmlDeviceGetTemperature(handle, nvidia_smi.NVML_TEMPERATURE_GPU)
+            nvidia_smi.nvmlShutdown()
+
+            metrics = {
+                "trial": self.trial_number,
+                "device": f"cuda:{device_index}",
+                "epoch": epoch,
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Current time
+                "memory_free": mem.free / 1024 ** 2,  # Memory in MB
+                "memory_total": mem.total / 1024 ** 2,  # Memory in MB
+                "gpu_utilization": util.gpu / 100.0,  # Utilization percentage
+                "memory_utilization": util.memory / 100.0,  # Utilization percentage
+                "temperature": temperature  # Temperature in Celsius
+            }
+        else:
+            # If using CPU, log minimal metrics
+            metrics = {
+                "trial": self.trial_number,
+                "device": "cpu",
+                "epoch": epoch,
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Current time
+                "memory_free": None,
+                "memory_total": None,
+                "gpu_utilization": None,
+                "memory_utilization": None,
+                "temperature": None
+            }
+
+        self.data.append(metrics)  # Append the metrics to the list
+
+    def save_to_csv(self):
+        """Writes the accumulated metrics to a single CSV file using pandas."""
+        df = pd.DataFrame(self.data)
+        # Append to the CSV file or create it if it doesn't exist
+        if not os.path.exists(self.csv_file):
+            df.to_csv(self.csv_file, index=False)
+        else:
+            df.to_csv(self.csv_file, mode='a', header=False, index=False)
+
+
+###############################################################################
+#                             YOLO CALLBACKS                                  #
+###############################################################################
+
+def create_gpu_monitoring_callbacks(trial, logger):
+    """
+    Creates callbacks for monitoring and logging GPU usage, including device info.
+    """
+    gpu_logger = NvidiaGPUUsageLogger(trial.number)
+
+    def on_train_epoch_start(trainer):
+        """Called at the start of each training epoch."""
+        gpu_logger.log_metrics(trainer.epoch + 1, trainer)
+        logger.info(f"GPU metrics logged at epoch start for trial {trial.number}")
+
+    def on_train_epoch_end(trainer):
+        """Called at the end of each training epoch."""
+        gpu_logger.log_metrics(trainer.epoch + 1, trainer)
+        logger.info(f"GPU metrics logged at epoch end for trial {trial.number}")
+
+    def on_train_end(trainer):
+        """Called when the training ends."""
+        gpu_logger.save_to_csv()
+        logger.info(f"GPU metrics saved to CSV for trial {trial.number}")
+
+    return on_train_epoch_start, on_train_epoch_end, on_train_end
+
+
 def create_pruning_callback(trial, logger):
     """
     Description
@@ -96,7 +192,11 @@ def create_pruning_callback(trial, logger):
     
     return optuna_pruning_callback
 
-# Global default parameters for YOLO training
+
+###############################################################################
+#                          DEFAULT YOLO PARAMS                                #
+###############################################################################
+
 DEFAULT_PARAMS = {
     'data': None,  # This will be set dynamically in the class
     'epochs': 100,
@@ -156,6 +256,10 @@ DEFAULT_PARAMS = {
     'auto_augment': "",
     'bgr': 0.0,
 }
+
+###############################################################################
+#                          OPTUNA OPTIMIZATOR                                 #
+###############################################################################
 
 def set_seed(seed: int = None) -> None:
     """
@@ -476,6 +580,15 @@ class BHOYOLO:
             
             # Add the custom pruning callback
             model.add_callback("on_fit_epoch_end", pruning_callback)
+            
+            # GPU usage callbacks
+            on_train_epoch_start, on_train_epoch_end, on_train_end = create_gpu_monitoring_callbacks(trial, logger)
+
+            # Add the callbacks to the YOLO model
+            model.add_callback("on_train_epoch_start", on_train_epoch_start)
+            model.add_callback("on_train_epoch_end", on_train_epoch_end)
+            model.add_callback("on_train_end", on_train_end)
+
 
             # Verify that model parameters are on the correct device
             model_device = next(model.model.parameters()).device
