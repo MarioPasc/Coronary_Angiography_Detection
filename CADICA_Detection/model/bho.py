@@ -344,7 +344,6 @@ class BHOYOLO:
     def __init__(
         self,
         config: Dict[str, Any],
-        storage: str = 'sqlite:///optuna_study.db',
         gpu_lock=None,
         available_gpus=None
     ) -> None:
@@ -367,7 +366,13 @@ class BHOYOLO:
         Initializes default parameters, sets up GPU resource management, and prepares the
         YOLO model for hyperparameter optimization.
         """
-        self.storage = storage
+        # Get storage from config
+        storage_path = config.get('storage', 'optuna_study.db')
+        # Ensure the storage URL is correctly formatted
+        if not storage_path.startswith('sqlite:///'):
+            self.storage = f'sqlite:///{storage_path}'
+        else:
+            self.storage = storage_path
         self.model: str = config.get('model', './yolov8lt.pt')
         self.hyperparameters_config: Dict[str, Any] = config.get('hyperparameters', {})
         self.hyperparameters = self._prepare_hyperparameters()

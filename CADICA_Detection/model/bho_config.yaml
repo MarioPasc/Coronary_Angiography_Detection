@@ -4,6 +4,7 @@ epochs: 100
 img_size: 640
 n_trials: 100
 save_plots: true
+storage: optuna_study.db
 
 hyperparameters:
   lr0:
