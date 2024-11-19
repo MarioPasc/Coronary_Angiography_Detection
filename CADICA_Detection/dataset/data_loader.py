@@ -164,9 +164,9 @@ def run_getGroundtruthFiles(videoPath: str, lesionVideos: List[str]) -> Dict[str
             groundtruthMap = {os.path.basename(gtFile).split('.')[0]: gtFile for gtFile in groundtruthFiles}
     return groundtruthMap
 
-def run_extractLesionLabel(groundtruthFile: str) -> Optional[str]:
+def run_extractLesionLabels(groundtruthFile: str) -> List[str]:
     """
-    Extracts the lesion label from a ground truth file if available.
+    Extracts all lesion labels from a ground truth file.
 
     Args
     -------------
@@ -175,16 +175,18 @@ def run_extractLesionLabel(groundtruthFile: str) -> Optional[str]:
 
     Returns
     -------------
-    Optional[str]
-        The lesion label extracted from the file, or None if no label is found.
+    List[str]
+        A list of lesion labels extracted from the file.
     """
+    labels = []
     if os.path.isfile(groundtruthFile):
         with open(groundtruthFile, 'r') as file:
             for line in file:
                 parts = line.strip().split()
-                if len(parts) == 5:
-                    return parts[4]
-    return None
+                if len(parts) >= 5:
+                    labels.append(parts[4])
+    return labels
+
 
 def run_saveToCsv(df: pd.DataFrame, outputCsvPath: str) -> None:
     """
