@@ -5,24 +5,22 @@ import os
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from typing import Tuple, List
+from collections import Counter
+import ast
 
 def run_cleanGroundTruthFileDatasetField(csv_path: str) -> pd.DataFrame:
     """
     Loads the dataset CSV and fills missing 'GroundTruthFile' values with 'nolesion'.
-    
-    Args
-    -------------
-    csv_path : str
-        Path to the CSV file containing the dataset.
-        
-    Returns
-    -------------
-    pd.DataFrame
-        A DataFrame loaded from the CSV with missing 'GroundTruthFile' values filled.
     """
     df = pd.read_csv(csv_path)
     df['GroundTruthFile'] = df['GroundTruthFile'].fillna('nolesion')
+    
+    # Parse 'LesionLabel' strings into lists
+    df['LesionLabel'] = df['LesionLabel'].apply(
+        lambda x: ast.literal_eval(x) if pd.notnull(x) and x != 'nan' else []
+    )
     return df
+
 
 def run_filterByLabels(df: pd.DataFrame, labels: List[str]) -> pd.DataFrame:
     """
@@ -40,7 +38,9 @@ def run_filterByLabels(df: pd.DataFrame, labels: List[str]) -> pd.DataFrame:
     pd.DataFrame
         A filtered DataFrame containing only the specified lesion labels and non-lesion samples.
     """
-    return df[(df['Lesion'] == False) | (df['LesionLabel'].isin(labels))]
+    labels_set = set(labels)
+    df_filtered = df[(df['Lesion'] == False) | (df['LesionLabel'].apply(lambda x: bool(set(x) & labels_set)))]
+    return df_filtered
 
 def run_splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, random_state: int = 39) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
@@ -51,12 +51,20 @@ def run_splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, 
     # Get unique patients
     patients = filtered_df['Patient'].unique()
     
-    # For each patient, get the labels associated with them
+    # For each patient, get all labels associated with them
     patient_labels = {}
     for patient in patients:
-        labels = filtered_df[filtered_df['Patient'] == patient]['LesionLabel']
-        # Get the most frequent label for the patient
-        primary_label = labels.value_counts().idxmax()
+        patient_df = filtered_df[filtered_df['Patient'] == patient]
+        labels_list = []
+        for labels in patient_df['LesionLabel']:
+            labels_list.extend(labels)
+        # Count labels
+        label_counts = Counter(labels_list)
+        # Get the most frequent label for the patient, or 'nolesion' if empty
+        if label_counts:
+            primary_label = label_counts.most_common(1)[0][0]
+        else:
+            primary_label = 'nolesion'
         patient_labels[patient] = primary_label
     
     # Create a DataFrame with patients and their primary label
@@ -150,13 +158,16 @@ def run_saveSplit(df: pd.DataFrame, output_path: str, split_name: str) -> None:
         lambda row: row['SelectedFramesLesionVideo'] if row['Lesion'] else row['SelectedFramesNonLesionVideo'], axis=1
     )
     
-    # Determine ground truth path based on existence of ground truth file
+    # Determine ground truth path
     split_df['Groundtruth_path'] = split_df['GroundTruthFile'].apply(
-        lambda x: x if isinstance(x, str) and x.startswith('/home/') else 'nolesion'
+        lambda x: x if x != 'nolesion' else 'nolesion'
     )
     
-    # Fill missing lesion labels
-    split_df['LesionLabel'] = split_df['LesionLabel'].fillna('nolesion')
+    # Fill missing lesion labels with ['nolesion']
+    split_df['LesionLabel'] = split_df['LesionLabel'].apply(lambda x: x if x else ['nolesion'])
+    
+    # Convert lesion labels to strings for saving in CSV
+    split_df['LesionLabel'] = split_df['LesionLabel'].apply(lambda x: ','.join(x))
     
     # Select final columns for output
     split_df = split_df[['LesionLabel', 'Frame_path', 'Groundtruth_path']]
