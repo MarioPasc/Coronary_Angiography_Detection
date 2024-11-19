@@ -188,10 +188,8 @@ if __name__ == "__main__":
     CONFIG = load_config(CONFIG_PATH)
 
     # Define paths
-    output_base_dir = CONFIG['OUTPUT_PATH']  
-    models = ['../models/simulated_annealing.pt',
-              '../models/iteration1.pt',
-              '../models/iteration2.pt']  
+    output_base_dir = "/home/mariopasc/Python/Results/Coronariografias/patient-based/TPE_Sampler/First_200_trials_YOLOv8/test"  
+    models = [os.path.join("/home/mariopasc/Python/Results/Coronariografias/patient-based/TPE_Sampler/First_200_trials_YOLOv8/runs/trial_144_training/weights",  "best.pt")]  
 
     # Define path to YOLO dataset
     path_to_YOLO_dataset = os.path.join(CONFIG['OUTPUT_PATH'], CONFIG["YOLO_DATASET_FOLDER_NAME"])

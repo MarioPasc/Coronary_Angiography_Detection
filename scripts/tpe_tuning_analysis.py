@@ -199,9 +199,11 @@ def plot_trial_data(trials_data: Dict[int, pd.DataFrame],
                     best_trial_number: int,
                     trial_max_map: Dict[int, float],
                     completed_percentage: float,
-                    pruned_percentage: float) -> None:
+                    pruned_percentage: float,
+                    baseline_results_path: str) -> None:
     """
-    Plots mAP@50-95 over epochs for all trials, with the best trial plotted last.
+    Plots mAP@50-95 over epochs for all trials, with the best trial plotted last and
+    the baseline mAP@50-95 evolution.
 
     Args:
         trials_data (Dict[int, pd.DataFrame]): Mapping of trial number to results DataFrame.
@@ -210,6 +212,7 @@ def plot_trial_data(trials_data: Dict[int, pd.DataFrame],
         trial_max_map (Dict[int, float]): Mapping of trial number to max mAP@50-95.
         completed_percentage (float): Percentage of completed trials.
         pruned_percentage (float): Percentage of pruned trials.
+        baseline_results_path (str): Path to the baseline results CSV file.
 
     Returns:
         None
@@ -219,6 +222,8 @@ def plot_trial_data(trials_data: Dict[int, pd.DataFrame],
     """
     try:
         import os
+        import logging
+        import pandas as pd
         import matplotlib.pyplot as plt
         from typing import Any, Dict, List
 
@@ -264,33 +269,47 @@ def plot_trial_data(trials_data: Dict[int, pd.DataFrame],
         handles_dict[label_best] = line_best
         labels_dict[label_best] = label_best
 
+        # Read the baseline results and extract the maximum mAP@50-95
+        try:
+            baseline_df: pd.DataFrame = pd.read_csv(baseline_results_path)
+            if 'metrics/mAP50-95(B)' in baseline_df.columns:
+                baseline_max_map: float = baseline_df['metrics/mAP50-95(B)'].max()
+            else:
+                raise ValueError("Required column 'metrics/mAP50-95(B)' not found in baseline results CSV.")
+        except Exception as e:
+            logging.error(f"Error reading baseline results CSV: {e}")
+            raise
+
+        # Plot the baseline mAP evolution
+        line_baseline, = ax.plot(baseline_df['epoch'], baseline_df['metrics/mAP50-95(B)'],
+                                 color='green', linestyle='--', linewidth=1.5, alpha=0.8)
+        label_baseline: str = f'Baseline (max mAP@50-95: {baseline_max_map:.4f})'
+
+        handles_dict[label_baseline] = line_baseline
+        labels_dict[label_baseline] = label_baseline
+
         # Update legend handles and labels
         handles: List[Any] = list(handles_dict.values())
         labels: List[str] = list(labels_dict.keys())
 
         plt.xlabel('Epoch')
         plt.ylabel('mAP@50-95')
-        plt.title('mAP@50-95 over Epochs for All Trials')
+        plt.title('mAP@50-95 over Epochs for All Trials and Baseline Comparison')
 
         # Place legend outside the plot on the lower center
-        plt.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=3)
+        plt.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=2)
         plt.tight_layout()
         plt.grid(True)
-        plt.xlim(0, 100)
-        plt.ylim(0, 0.2)
-
-
+        plt.savefig(os.path.join(PATH, f"evolution_by_epochs{FORMAT}"))
         ax.spines[['right', 'top']].set_visible(False)
         ax.get_xaxis().tick_bottom()
         ax.get_yaxis().tick_left()
 
-
-        plt.savefig(os.path.join(PATH, f"evolution_by_epochs{FORMAT}"))
         if SHOW: plt.show()
     except Exception as e:
-        import logging
         logging.error(f"Error plotting trial data: {e}")
         raise
+
 
 
 def plot_hyperparameter_slice_plots(trials_df: pd.DataFrame,
@@ -726,11 +745,9 @@ def main():
         # Compute trial statistics
         completed_percentage, pruned_percentage = compute_trial_statistics(trials_df)
 
-        # Plot the trial data
-        plot_trial_data(trials_data, trial_state, best_trial_number, trial_max_map, completed_percentage, pruned_percentage)
-
         # Plot the slice data
-        results_baseline = os.path.join(runs_dir, "trial_1_training", "results.csv")
+        PATH_BASELINE_YOLOV8L = "/home/mariopasc/Python/Results/Coronariografias/patient-based/TPE_Sampler/baseline_evaluation"
+        results_baseline = os.path.join(PATH_BASELINE_YOLOV8L, "results.csv")
         baseline_results = {
             'params_lr0': 0.01,
             'params_lrf': 0.01,
@@ -743,6 +760,8 @@ def main():
             'params_dfl': 1.5,
             'results': f"{results_baseline}"
         }
+        # Plot the trial data
+        plot_trial_data(trials_data, trial_state, best_trial_number, trial_max_map, completed_percentage, pruned_percentage, results_baseline)
         plot_hyperparameter_slice_plots(trials_df, trial_max_map, trial_state, best_trial_number, baseline_results)
         plot_pca_hyperparameter_space(trials_df, trial_max_map)
         plot_trial_vs_map_with_optimal_line(trials_df=trials_df, trial_max_map=trial_max_map, trial_state=trial_state, best_trial_number=best_trial_number, baseline_results_path=results_baseline)
