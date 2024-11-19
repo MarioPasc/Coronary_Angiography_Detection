@@ -23,11 +23,16 @@ from .undersampling import (
 
 from .augmentation import (
     run_augmentData,
-    run_loadDataAugmentation
+    run_loadDataAugmentation,
+    Augmentor
 )
 
 from .formatting import (
     run_generateDataset
+)
+
+from .utils import (
+    run_compute_augmentation_counts
 )
 
 # Mostly modules needed for typing 
@@ -281,7 +286,7 @@ class DatasetTools:
         return run_loadDataSplits(holdout_path = holdout_path)
 
     @staticmethod
-    def undersampling(holdout_path: str, class_dict: Dict[str, list], deleted_images_path: str) -> pd.DataFrame:
+    def undersampling(holdout_path: str, class_dict: Dict[str, list], deleted_images_path: str, freezed_classes: List[str]) -> pd.DataFrame:
         """
         Applies undersampling to the train, val, and test splits based on the specified class distribution.
 
@@ -299,7 +304,8 @@ class DatasetTools:
         """
         return run_undersampling(holdout_path = holdout_path, 
                                  class_dict = class_dict,
-                                 deleted_images_path=deleted_images_path)
+                                 deleted_images_path=deleted_images_path,
+                                 freezed_classes=freezed_classes)
     
     # augmentation.py tools
 
@@ -322,6 +328,20 @@ class DatasetTools:
         """
         return run_loadDataAugmentation(train_path = train_path, 
                                         val_path = val_path)
+
+    def return_augmentor(base_output_path: str, 
+                         train_augmentation_counts_csv: str,
+                         val_augmentation_counts_csv: str,
+                         augmented_nolesion_images_train: int,
+                         augmented_nolesion_images_val: int,
+                         seed: int = 42
+                         ) -> Augmentor:
+        return Augmentor(base_output_path=base_output_path,
+                         train_augmentation_counts_csv=train_augmentation_counts_csv,
+                         val_augmentation_counts_csv=val_augmentation_counts_csv,
+                         augmented_nolesion_images_train=augmented_nolesion_images_train,
+                         augmented_nolesion_images_val=augmented_nolesion_images_val,
+                         seed=seed)
 
     @staticmethod
     def augmentData(train_df: pd.DataFrame, val_df: pd.DataFrame, base_output_path: str,
@@ -381,3 +401,28 @@ class DatasetTools:
                                    val_csv = val_csv,
                                    test_csv = test_csv,
                                    dataset_dir = dataset_dir)
+    
+    # utils.py
+    def compute_augmentation_counts(csv_path: str, labels_to_exclude: list, total_images_to_augment: int, output_csv_path: str) -> None:
+        """
+        Computes the number of augmented images needed per label to balance the dataset.
+
+        Args:
+        -----
+        csv_path : str
+            Path to the CSV file containing the dataset.
+        labels_to_exclude : list
+            List of labels that should not be augmented.
+        total_images_to_augment : int
+            Total number of images the user wants to augment.
+        output_csv_path : str
+            Path to save the output CSV file with augmentation counts.
+
+        Returns:
+        --------
+        None
+        """
+        return run_compute_augmentation_counts(csv_path=csv_path,
+                                               labels_to_exclude=labels_to_exclude,
+                                               total_images_to_augment=total_images_to_augment,
+                                               output_csv_path=output_csv_path) 

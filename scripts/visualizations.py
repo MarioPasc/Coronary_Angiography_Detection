@@ -173,6 +173,7 @@ def processed_dataset_visualization():
         save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
         os.makedirs(save_path, exist_ok=True)
         save_formats = CONFIG["FIGURE_FORMATS"]
+        SHOW = CONFIG.get("SHOW_PLOTS", False)  # Add this to CONFIG if needed
 
         # Load original datasets
         original_train = pd.read_csv(os.path.join(original_folder, 'train.csv'))
@@ -184,10 +185,21 @@ def processed_dataset_visualization():
         processed_val = pd.read_csv(os.path.join(processed_folder, 'processed_val.csv'))
         processed_test = pd.read_csv(os.path.join(processed_test_folder, 'processed_test.csv'))
 
+        # Helper function to parse 'LesionLabel' into lists
+        def parse_labels(label_str):
+            if pd.isna(label_str) or label_str == 'nolesion':
+                return ['nolesion']
+            else:
+                return label_str.split(',')
+
+        # Parse 'LesionLabel' into lists
+        for df in [original_train, original_val, original_test, processed_train, processed_val, processed_test]:
+            df['LesionLabelList'] = df['LesionLabel'].apply(parse_labels)
+
         # Helper function to categorize lesion and non-lesion counts for each set
         def categorize_counts(df, set_name):
-            lesion_count = len(df[df['LesionLabel'] != 'nolesion'])
-            no_lesion_count = len(df[df['LesionLabel'] == 'nolesion'])
+            lesion_count = len(df[df['LesionLabelList'].apply(lambda x: 'nolesion' not in x)])
+            no_lesion_count = len(df[df['LesionLabelList'].apply(lambda x: x == ['nolesion'])])
             total_count = len(df)
             return {'Set': set_name, 'Lesion': lesion_count, 'No Lesion': no_lesion_count, 'Total': total_count}
 
@@ -219,23 +231,29 @@ def processed_dataset_visualization():
             "p100": r"$100\%$"
         }
 
+        # Helper function to count labels
+        from collections import Counter
+
+        def count_labels(df, label_order, set_name):
+            label_counts = Counter()
+            for labels in df['LesionLabelList']:
+                label_counts.update(labels)
+            counts = [label_counts.get(label, 0) for label in label_order]
+            return pd.DataFrame({set_name: counts}, index=label_order)
 
         # Calculate original and processed label-based counts
-        def label_counts(df, label_order, label_name):
-            return pd.DataFrame({label_name: df['LesionLabel'].value_counts()}).reindex(label_order).fillna(0).astype(int)
-
         original_labels = pd.concat([
-            label_counts(original_train, label_order, 'Training'),
-            label_counts(original_val, label_order, 'Validation'),
-            label_counts(original_test, label_order, 'Test')
+            count_labels(original_train, label_order, 'Training'),
+            count_labels(original_val, label_order, 'Validation'),
+            count_labels(original_test, label_order, 'Test')
         ], axis=1)
         # Apply label mapping to index
         original_labels.index = original_labels.index.map(label_mapping)
 
         processed_labels = pd.concat([
-            label_counts(processed_train, label_order, 'Training'),
-            label_counts(processed_val, label_order, 'Validation'),
-            label_counts(processed_test, label_order, 'Test')
+            count_labels(processed_train, label_order, 'Training'),
+            count_labels(processed_val, label_order, 'Validation'),
+            count_labels(processed_test, label_order, 'Test')
         ], axis=1)
         # Apply label mapping to index
         processed_labels.index = processed_labels.index.map(label_mapping)
@@ -244,31 +262,31 @@ def processed_dataset_visualization():
         max_y = max(processed_counts[['Lesion', 'No Lesion', 'Total']].values.max(), processed_labels.values.max())
 
         # Plotting with adjusted y-axis
-        fig, axs = plt.subplots(1, 2, figsize=FIGSIZE)
+        import matplotlib.pyplot as plt
+        fig, axs = plt.subplots(1, 2, figsize=(14, 7))  # Adjust figsize as needed
 
         # Plot 1: Processed set-based visualization with markers for original values
         offset = 0.165
-        processed_counts.plot(kind='bar', x='Set', y=['Lesion', 'No Lesion', 'Total'], ax=axs[0])
+        processed_counts.plot(kind='bar', x='Set', y=['Lesion', 'No Lesion', 'Total'], ax=axs[0], color=['blue', 'green', 'purple'])
         for i, row in original_counts.iterrows():
-            axs[0].plot([i - offset, i, i + offset], row[['Lesion', 'No Lesion', 'Total']], "^", color="red", markersize=5, 
+            axs[0].plot([i - offset, i, i + offset], row[['Lesion', 'No Lesion', 'Total']], "^", color="red", markersize=7, 
                         label="Original Count" if i == 0 else "")
         axs[0].set_title("Processed Sample Counts per Set")
         axs[0].set_ylabel("Counts")
-        axs[0].set_ylim(0, max_y)
+        axs[0].set_ylim(0, max_y * 1.1)  # Slightly increase y limit
         axs[0].legend()
         axs[0].tick_params(axis='x', rotation=0)  # Rotate x-axis labels
 
         # Plot 2: Processed label-based visualization with markers for original values
         processed_labels.plot(kind='bar', ax=axs[1])
         for i, label in enumerate(processed_labels.index):
-            axs[1].plot([i - offset, i, i + offset], original_labels.loc[label, ['Training', 'Validation', 'Test']], "x", color="red", markersize=5, 
+            axs[1].plot([i - offset, i, i + offset], original_labels.loc[label, ['Training', 'Validation', 'Test']], "x", color="red", markersize=7, 
                         label="Original Count" if i == 0 else "")
         axs[1].set_title("Processed Label-based Sample Counts")
-        axs[1].set_ylim(0, max_y)
+        axs[1].set_ylim(0, max_y * 1.1)
         axs[1].set_xlabel("Diagnostic lesion label")
-        axs[1].set_yticklabels([])  # Disable y-axis numbers
         axs[1].legend()
-        axs[1].tick_params(axis='x', rotation=0)  # Rotate x-axis labels
+        axs[1].tick_params(axis='x', rotation=45)  # Rotate x-axis labels for readability
 
         for ax in axs:
             ax.spines[['right', 'top']].set_visible(False)
@@ -283,7 +301,8 @@ def processed_dataset_visualization():
         if SHOW: plt.show()
         logging.info(f"Processed dataset plots generated and saved in {save_path}.")
     except Exception as e:
-        logging.info(f"Error generating processed dataset plots. - {e}")
+        logging.error(f"Error generating processed dataset plots. - {e}")
+
 
 def find_complete_augmentations_with_labels_and_save():
     """
@@ -883,7 +902,7 @@ def compare_test_label_performance() -> None:
 
 
 def main():
-    original_dataset_visualization()
+    #original_dataset_visualization()
     processed_dataset_visualization()
     #find_complete_augmentations_with_labels_and_save()
     #plot_augmented_bboxes("p34_v9", "00045")

@@ -189,7 +189,11 @@ def apply_undersampling():
         
         # Load original data for comparison and apply undersampling
         pre_undersampling_df = DatasetTools.loadDataSplits(holdout_folder)
-        post_undersampling_df = DatasetTools.undersampling(holdout_folder, CONFIG["CLASS_UNDERSAMPLING"], CONFIG["OUTPUT_PATH"])
+        post_undersampling_df = DatasetTools.undersampling(holdout_folder, 
+                                                           CONFIG["CLASS_UNDERSAMPLING"], 
+                                                           CONFIG["OUTPUT_PATH"],
+                                                           CONFIG["FREEZED_CLASSES"]
+                                                           )
 
         logging.info(f"Step 4 complete: Undersampling applied. Modified content saved in {holdout_folder}.")
     except Exception as e:
@@ -201,25 +205,55 @@ def apply_data_augmentation():
         logging.info("Step 5: Applying data augmentation to balance classes.")
         
         # Define paths for augmentation
-        holdout_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Undersampled_Images")
-        augmentation_path = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Augmented_Images")
+        # We
+        undersampled_datasets = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Undersampled_Images")
+        augmentation_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Augmented_Images")
+        os.makedirs(augmentation_folder, exist_ok=True)
         
-        train_path = os.path.join(holdout_folder, 'processed_train.csv')
-        val_path = os.path.join(holdout_folder, 'processed_val.csv')
+        train_csv_path = os.path.join(undersampled_datasets, 'processed_train.csv')
+        val_csv_path = os.path.join(undersampled_datasets, 'processed_val.csv')
         
-        # Load data for augmentation
-        train_df, val_df = DatasetTools.loadDataAugmentation(train_path, val_path)
+        # Paths to save the augmentation counts CSV files
+        train_aug_counts_csv = os.path.join(augmentation_folder, 'train_augmentation_counts.csv')
+        val_aug_counts_csv = os.path.join(augmentation_folder, 'val_augmentation_counts.csv')
         
-        # Apply augmentation
-        DatasetTools.augmentData(
-            train_df, val_df, augmentation_path, 
-            CONFIG["AUGMENTED_LESION_IMAGES"], CONFIG["AUGMENTED_NONLESION_IMAGES"], 
-            CONFIG["IGNORE_TOP_N"], CONFIG["RANDOM_SEED"]
+        # Compute augmentation counts for train set
+        DatasetTools.compute_augmentation_counts(
+            csv_path=train_csv_path,
+            labels_to_exclude=CONFIG.get("LABELS_TO_EXCLUDE", []),
+            total_images_to_augment=CONFIG["AUGMENTED_LESION_IMAGES_TRAIN"],
+            output_csv_path=train_aug_counts_csv
         )
-
-        logging.info(f"Step 5 complete: Data augmentation completed. Results saved in {augmentation_path}.")
+        
+        # Compute augmentation counts for validation set
+        DatasetTools.compute_augmentation_counts(
+            csv_path=val_csv_path,
+            labels_to_exclude=CONFIG.get("LABELS_TO_EXCLUDE", []),
+            total_images_to_augment=CONFIG["AUGMENTED_LESION_IMAGES_VAL"],
+            output_csv_path=val_aug_counts_csv
+        )
+        
+        # Step 2: Load data for augmentation
+        train_df = pd.read_csv(train_csv_path)
+        val_df = pd.read_csv(val_csv_path)
+        
+        # Step 3: Initialize the Augmentor
+        augmentor = DatasetTools.return_augmentor(
+            base_output_path=augmentation_folder,
+            train_augmentation_counts_csv=train_aug_counts_csv,
+            val_augmentation_counts_csv=val_aug_counts_csv,
+            augmented_nolesion_images_train=CONFIG["AUGMENTED_NONLESION_IMAGES_TRAIN"],
+            augmented_nolesion_images_val=CONFIG["AUGMENTED_NONLESION_IMAGES_VAL"],
+            seed=CONFIG["RANDOM_SEED"]
+        )
+        
+        # Step 4: Apply augmentation
+        augmentor.augment_data(train_df, val_df)
+        
+        logging.info(f"Step 5 complete: Data augmentation completed. Results saved in {augmentation_folder}.")
     except Exception as e:
         logging.error(f"Error in Step 5: Data augmentation failed - {e}")
+
 
 # 6. Format the Dataset for YOLO
 def format_for_yolo():

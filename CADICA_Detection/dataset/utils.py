@@ -3,7 +3,7 @@
 import pandas as pd
 from collections import Counter
 
-def compute_augmentation_counts(csv_path: str, labels_to_exclude: list, total_images_to_augment: int, output_csv_path: str) -> None:
+def run_compute_augmentation_counts(csv_path: str, labels_to_exclude: list, total_images_to_augment: int, output_csv_path: str) -> None:
     """
     Computes the number of augmented images needed per label to balance the dataset.
 

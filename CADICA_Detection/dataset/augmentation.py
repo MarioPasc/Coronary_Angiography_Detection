@@ -120,7 +120,7 @@ class Augmentor:
         label_queues = {label: [] for label in label_aug_counts.keys()}
 
         # Build queues of images for each label
-        for idx, labels in image_labels['LesionLabelList'].iteritems():
+        for idx, labels in image_labels['LesionLabelList'].items():
             for label in labels:
                 if label in label_queues:
                     label_queues[label].append(idx)
