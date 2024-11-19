@@ -7,6 +7,7 @@ from tqdm import tqdm
 from typing import Tuple, List
 from collections import Counter
 import ast
+import numpy as np
 
 def run_cleanGroundTruthFileDatasetField(csv_path: str) -> pd.DataFrame:
     """
@@ -25,104 +26,66 @@ def run_cleanGroundTruthFileDatasetField(csv_path: str) -> pd.DataFrame:
 def run_filterByLabels(df: pd.DataFrame, labels: List[str]) -> pd.DataFrame:
     """
     Filters the dataset to retain only samples without lesions or those with specified lesion labels.
-
-    Args
-    -------------
-    df : pd.DataFrame
-        The original dataset DataFrame.
-    labels : List[str]
-        A list of lesion labels to keep in the filtered dataset.
-
-    Returns
-    -------------
-    pd.DataFrame
-        A filtered DataFrame containing only the specified lesion labels and non-lesion samples.
     """
     labels_set = set(labels)
     df_filtered = df[(df['Lesion'] == False) | (df['LesionLabel'].apply(lambda x: bool(set(x) & labels_set)))]
     return df_filtered
 
+
 def run_splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, random_state: int = 39) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Splits the dataset into training, validation, and testing sets based on unique patients.
-    
-    Ensures that labels with small counts are included in validation and test sets.
+    Splits the dataset into training, validation, and testing sets based on unique patients,
+    ensuring that each lesion label is represented in each split according to the desired ratios.
     """
+    from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
+    
     # Get unique patients
     patients = filtered_df['Patient'].unique()
     
-    # For each patient, get all labels associated with them
-    patient_labels = {}
+    # Create a patient-label mapping
+    patient_label_dict = {}
     for patient in patients:
         patient_df = filtered_df[filtered_df['Patient'] == patient]
-        labels_list = []
+        labels_set = set()
         for labels in patient_df['LesionLabel']:
-            labels_list.extend(labels)
-        # Count labels
-        label_counts = Counter(labels_list)
-        # Get the most frequent label for the patient, or 'nolesion' if empty
-        if label_counts:
-            primary_label = label_counts.most_common(1)[0][0]
-        else:
-            primary_label = 'nolesion'
-        patient_labels[patient] = primary_label
+            labels_set.update(labels)
+        if not labels_set:
+            labels_set.add('nolesion')
+        patient_label_dict[patient] = labels_set
     
-    # Create a DataFrame with patients and their primary label
-    patient_df = pd.DataFrame(list(patient_labels.items()), columns=['Patient', 'PrimaryLabel'])
+    # Get all unique labels
+    all_labels = set()
+    for labels in patient_label_dict.values():
+        all_labels.update(labels)
+    all_labels = sorted(all_labels)
     
-    # Get counts of patients per label
-    patient_label_counts = patient_df.groupby('PrimaryLabel').size()
+    # Create a binary label matrix for patients
+    patient_label_df = pd.DataFrame(0, index=patients, columns=all_labels)
+    for patient, labels in patient_label_dict.items():
+        for label in labels:
+            patient_label_df.loc[patient, label] = 1
     
-    # Identify labels with small counts (less than 3 patients)
-    small_labels = patient_label_counts[patient_label_counts < 3].index.tolist()
+    # Prepare data for stratification
+    X = np.arange(len(patients)).reshape(-1, 1)
+    y = patient_label_df.values
     
-    # Get patients with small labels
-    small_label_patients_df = patient_df[patient_df['PrimaryLabel'].isin(small_labels)]
-    small_patients = small_label_patients_df['Patient'].tolist()
+    # First split: train_val vs test
+    msss = MultilabelStratifiedShuffleSplit(n_splits=1, test_size=test_size, random_state=random_state)
+    train_val_indices, test_indices = next(msss.split(X, y))
     
-    # Assign patients with small labels to validation and test sets
-    val_patients_small = []
-    test_patients_small = []
-    train_patients_small = []
+    # Second split: train vs val
+    train_val_X = X[train_val_indices]
+    train_val_y = y[train_val_indices]
     
-    for label in small_labels:
-        patients_with_label = small_label_patients_df[small_label_patients_df['PrimaryLabel'] == label]['Patient'].tolist()
-        num_patients = len(patients_with_label)
-        if num_patients >= 3:
-            # Assign one patient to each set
-            val_patients_small.append(patients_with_label[0])
-            test_patients_small.append(patients_with_label[1])
-            train_patients_small.extend(patients_with_label[2:])
-        elif num_patients == 2:
-            # Assign one patient to val, one to test
-            val_patients_small.append(patients_with_label[0])
-            test_patients_small.append(patients_with_label[1])
-        elif num_patients ==1:
-            # Assign patient to validation
-            val_patients_small.append(patients_with_label[0])
+    val_size_adjusted = val_size / (1.0 - test_size)  # Adjust validation size
+    msss_val = MultilabelStratifiedShuffleSplit(n_splits=1, test_size=val_size_adjusted, random_state=random_state)
+    train_indices, val_indices = next(msss_val.split(train_val_X, train_val_y))
     
-    # Remove small label patients from patient_df
-    remaining_patient_df = patient_df[~patient_df['Patient'].isin(small_patients)]
-    
-    # Now, split remaining patients into train_val and test
-    from sklearn.model_selection import train_test_split
-    
-    train_val_patients, test_patients_remaining, train_val_labels, test_labels = train_test_split(
-        remaining_patient_df['Patient'], remaining_patient_df['PrimaryLabel'], test_size=test_size, 
-        random_state=random_state, stratify=remaining_patient_df['PrimaryLabel']
-    )
-    
-    # Then split train_val into train and val
-    val_size_adjusted = val_size / (1 - test_size)  # Adjust validation size
-    train_patients_remaining, val_patients_remaining, train_labels, val_labels = train_test_split(
-        train_val_patients, train_val_labels, test_size=val_size_adjusted,
-        random_state=random_state, stratify=train_val_labels
-    )
-    
-    # Combine patients
-    train_patients = train_patients_remaining.tolist() + train_patients_small
-    val_patients = val_patients_remaining.tolist() + val_patients_small
-    test_patients = test_patients_remaining.tolist() + test_patients_small
+    # Get patient IDs for each split
+    patients_array = patients
+    train_patients = patients_array[train_val_indices[train_indices].flatten()]
+    val_patients = patients_array[train_val_indices[val_indices].flatten()]
+    test_patients = patients_array[test_indices.flatten()]
     
     # Now, select data for each set
     train_df = filtered_df[filtered_df['Patient'].isin(train_patients)]
@@ -131,22 +94,10 @@ def run_splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, 
     
     return train_df, val_df, test_df
 
+
 def run_saveSplit(df: pd.DataFrame, output_path: str, split_name: str) -> None:
     """
     Saves the dataset split to a CSV file.
-
-    Args
-    -------------
-    df : pd.DataFrame
-        DataFrame containing the dataset split.
-    output_path : str
-        Directory where the split CSV will be saved.
-    split_name : str
-        Name of the split ('train', 'val', or 'test') used in the output filename.
-
-    Returns
-    -------------
-    None
     """
     os.makedirs(output_path, exist_ok=True)
     tqdm.pandas(desc=f'Processing {split_name} split', colour='green')

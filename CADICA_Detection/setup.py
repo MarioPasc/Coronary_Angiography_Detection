@@ -20,7 +20,8 @@ setup(
         "pyyaml",
         "scienceplots",
         "natsort",
-        "optuna"
+        "optuna",
+        "iterative-stratification"
     ],
     python_requires='>=3.9',
     package_data={

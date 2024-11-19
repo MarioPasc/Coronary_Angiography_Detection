@@ -14,8 +14,12 @@ from scipy.ndimage import gaussian_filter
 
 
 class Augmentor:
-    def __init__(self, base_output_path: str, augmented_lesion_images: int,
-                 augmented_nolesion_images: int, ignore_top_n: int = 0, seed: int = 42):
+    def __init__(self, base_output_path: str,
+                 train_augmentation_counts_csv: str,
+                 val_augmentation_counts_csv: str,
+                 augmented_nolesion_images_train: int,
+                 augmented_nolesion_images_val: int,
+                 seed: int = 42):
         """
         Initializes the Augmentor with the specified parameters.
 
@@ -23,22 +27,39 @@ class Augmentor:
         -----
         base_output_path : str
             Base directory where augmented data will be saved.
-        augmented_lesion_images : int
-            Number of augmented lesion images to generate.
-        augmented_nolesion_images : int
-            Number of augmented no-lesion images to generate.
-        ignore_top_n : int, optional
-            Number of most common lesion classes to ignore for augmentation.
+        train_augmentation_counts_csv : str
+            Path to the CSV file containing augmentation counts per label for the train set.
+        val_augmentation_counts_csv : str
+            Path to the CSV file containing augmentation counts per label for the validation set.
+        augmented_nolesion_images_train : int
+            Number of augmented no-lesion images to generate for the train set.
+        augmented_nolesion_images_val : int
+            Number of augmented no-lesion images to generate for the validation set.
         seed : int, optional
             Random seed for reproducibility.
         """
         self.base_output_path = base_output_path
-        self.augmented_lesion_images = augmented_lesion_images
-        self.augmented_nolesion_images = augmented_nolesion_images
-        self.ignore_top_n = ignore_top_n
+        self.augmented_nolesion_images = {
+            'train': augmented_nolesion_images_train,
+            'val': augmented_nolesion_images_val
+        }
         self.seed = seed
         random.seed(seed)
         np.random.seed(seed)
+
+        # Load augmentation counts DataFrames for both train and val
+        self.augmentation_counts = {
+            'train': pd.read_csv(train_augmentation_counts_csv),
+            'val': pd.read_csv(val_augmentation_counts_csv)
+        }
+
+        # Create dictionaries for quick access
+        self.label_aug_counts = {
+            'train': dict(zip(self.augmentation_counts['train']['Label'],
+                              self.augmentation_counts['train']['Augmented_Counts'])),
+            'val': dict(zip(self.augmentation_counts['val']['Label'],
+                            self.augmentation_counts['val']['Augmented_Counts']))
+        }
 
         # Mapping of augmentation types to their functions and whether they modify bounding boxes
         self.augmentation_functions = {
@@ -46,11 +67,11 @@ class Augmentor:
             'contrast': (self._random_contrast, False),
             'translation': (self._random_translation, True),
             'xray_noise': (self._xray_noise, False),
-            'elastic_deformation': (self._elastic_deformation, True),  
+            'elastic_deformation': (self._elastic_deformation, True),
         }
 
         # Probabilities for each augmentation type
-        self.augmentation_weights = [0.25, 0.2, 0.2, 0.05, 0.2]  
+        self.augmentation_weights = [0.25, 0.2, 0.2, 0.05, 0.2]
 
     def augment_data(self, train_df: pd.DataFrame, val_df: pd.DataFrame) -> None:
         """
@@ -68,52 +89,77 @@ class Augmentor:
         print("Applying augmentation to validation set.")
         self._augment_subset(val_df, 'val')
 
+
     def _augment_subset(self, subset_df: pd.DataFrame, dataset_type: str) -> None:
         """
-        Augments a specific subset (train or validation) of the dataset.
+        Augments a specific subset of the dataset.
 
         Args:
         -----
         subset_df : pd.DataFrame
-            DataFrame for the specific subset (train or validation).
+            DataFrame for the dataset subset.
         dataset_type : str
             The type of dataset ('train' or 'val').
         """
-        lesion_images = subset_df[subset_df['LesionLabel'] != 'nolesion']
-        nolesion_images = subset_df[subset_df['LesionLabel'] == 'nolesion']
-        lesion_label_counts = lesion_images['LesionLabel'].value_counts()
+        # Parse 'LesionLabel' column to lists, keeping duplicates
+        def parse_labels(label_str):
+            if pd.isna(label_str) or label_str == 'nolesion':
+                return []
+            else:
+                return label_str.split(',')
 
-        if self.ignore_top_n >= len(lesion_label_counts):
-            raise ValueError(f"Cannot ignore {self.ignore_top_n} classes when there are only {len(lesion_label_counts)} unique lesion classes.")
+        subset_df['LesionLabelList'] = subset_df['LesionLabel'].apply(parse_labels)
 
-        # Ignore top N most frequent lesion classes
-        classes_to_ignore = lesion_label_counts.nlargest(self.ignore_top_n).index.tolist()
-        lesion_label_counts = lesion_label_counts.drop(classes_to_ignore)
+        # Load the augmentation counts for the current dataset type
+        label_aug_counts = self.label_aug_counts[dataset_type]
 
-        # Calculate augmentation weights inversely proportional to the square of their frequency
-        total_instances = lesion_label_counts.sum()
-        weights = {label: (total_instances - count) ** 2 / total_instances ** 2 for label, count in lesion_label_counts.items()}
-        total_weight = sum(weights.values())
-        lesion_augmentation_counts = {label: int(self.augmented_lesion_images * weight / total_weight) for label, weight in weights.items()}
+        # Create a DataFrame mapping image indices to labels
+        image_labels = subset_df[['LesionLabelList']].copy()
+
+        # Prepare label queues
+        label_queues = {label: [] for label in label_aug_counts.keys()}
+
+        # Build queues of images for each label
+        for idx, labels in image_labels['LesionLabelList'].iteritems():
+            for label in labels:
+                if label in label_queues:
+                    label_queues[label].append(idx)
 
         augmented_images = []
-        # Augment lesion images
-        for label, count in tqdm(lesion_augmentation_counts.items(), desc="Applying data augmentation to lesion images ...", colour='green'):
-            label_images = lesion_images[lesion_images['LesionLabel'] == label]
-            for _ in range(count):
-                row = label_images.sample().iloc[0]
-                augmented_images.append(self._apply_augmentation(row, dataset_type))
+
+        # Augment images per label
+        for label, aug_count in tqdm(label_aug_counts.items(),
+                                     desc=f"Augmenting lesion images for {dataset_type}",
+                                     colour='green'):
+            if aug_count <= 0:
+                continue
+            images_with_label = label_queues[label]
+            if not images_with_label:
+                print(f"No images found with label {label} to augment.")
+                continue
+            for _ in range(aug_count):
+                idx = random.choice(images_with_label)
+                row = subset_df.iloc[idx]
+                augmented_image = self._apply_augmentation(row, dataset_type)
+                augmented_images.append(augmented_image)
 
         # Augment no-lesion images
-        for _ in tqdm(range(self.augmented_nolesion_images), desc='Applying data augmentation to non-lesion images ...', colour='green'):
+        nolesion_images = subset_df[subset_df['LesionLabel'] == 'nolesion']
+        num_nolesion_augment = self.augmented_nolesion_images[dataset_type]
+        for _ in tqdm(range(num_nolesion_augment),
+                      desc=f'Augmenting no-lesion images for {dataset_type} ...',
+                      colour='green'):
             row = nolesion_images.sample().iloc[0]
-            augmented_images.append(self._apply_augmentation(row, dataset_type))
+            augmented_image = self._apply_augmentation(row, dataset_type)
+            augmented_images.append(augmented_image)
 
         # Save augmented data
         augmented_df = pd.DataFrame(augmented_images, columns=subset_df.columns)
         augmented_df.to_csv(os.path.join(self.base_output_path, f'augmented_{dataset_type}.csv'), index=False)
         full_df = pd.concat([subset_df, augmented_df], ignore_index=True)
         full_df.to_csv(os.path.join(self.base_output_path, f'processed_{dataset_type}.csv'), index=False)
+
+
 
     def _apply_augmentation(self, row: pd.Series, dataset_type: str) -> pd.Series:
         """

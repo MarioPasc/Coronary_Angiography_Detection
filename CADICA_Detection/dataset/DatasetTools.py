@@ -5,7 +5,7 @@ from .data_loader import (
     run_getFilePaths,
     run_getSelectedFrames,
     run_getGroundtruthFiles,
-    run_extractLesionLabel,
+    run_extractLesionLabels,
     run_saveToCsv
 )
 
@@ -154,7 +154,7 @@ class DatasetTools:
         Optional[str]
             The lesion label extracted from the file, or None if no label is found.
         """
-        return run_extractLesionLabel(groundtruthFile = groundtruthFile)
+        return run_extractLesionLabels(groundtruthFile = groundtruthFile)
 
     @staticmethod
     def saveToCsv(df: pd.DataFrame, outputCsvPath: str) -> None:

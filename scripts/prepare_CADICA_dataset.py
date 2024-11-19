@@ -112,7 +112,7 @@ def generate_dataset_analysis():
                     frame_id = os.path.basename(frame).split('_')[-1].split('.')[0]
                     groundtruth_file = groundtruth_map.get(f'{patient}_{video}_{frame_id}', '')
                     has_lesion = groundtruth_file != ''
-                    lesion_label = DatasetTools.extractLesionLabel(groundtruth_file) if has_lesion else None
+                    lesion_labels_list = DatasetTools.extractLesionLabel(groundtruth_file) if has_lesion else []
 
                     # Append data to lists
                     patient_list.append(patient)
@@ -126,7 +126,7 @@ def generate_dataset_analysis():
                         selected_frames_non_lesion.append(frame)
                     groundtruth_files.append(groundtruth_file)
                     lesion_list.append(has_lesion)
-                    lesion_labels.append(lesion_label)
+                    lesion_labels.append(lesion_labels_list)
 
         # Create DataFrame
         data = {
