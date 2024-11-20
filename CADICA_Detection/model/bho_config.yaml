@@ -1,10 +1,11 @@
 model: /home/mariopasc/x2go_shared/YOLO/yolov8l.pt
-data: config.yaml  # Update this path to point to your dataset configuration
-epochs: 100
+data: ./config.yaml
+epochs: 1
 img_size: 640
-n_trials: 100
+n_trials: 1
 save_plots: true
-storage: optuna_study.db
+storage: CADICA_BHO_TPE.db
+study_name: CADICA_TPE_Sampler 
 
 hyperparameters:
   lr0:
@@ -42,4 +43,4 @@ hyperparameters:
   dfl:
     type: uniform
     low: 0.9
-    high: 2.0
+    high: 2.5

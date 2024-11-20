@@ -373,6 +373,7 @@ class BHOYOLO:
             self.storage = f'sqlite:///{storage_path}'
         else:
             self.storage = storage_path
+        self.study_name = config.get('study_name', 'optuna_study_default_name')
         self.model: str = config.get('model', './yolov8lt.pt')
         self.hyperparameters_config: Dict[str, Any] = config.get('hyperparameters', {})
         self.hyperparameters = self._prepare_hyperparameters()
@@ -768,6 +769,7 @@ class BHOYOLO:
         )
 
         study = optuna.create_study(
+            study_name=self.study_name,
             direction="maximize",
             storage=storage,
             load_if_exists=True,
