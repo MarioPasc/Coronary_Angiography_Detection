@@ -2,7 +2,8 @@
 # 8/11/2024.
 # Make inference on a given image using a *.pt YOLO model.
 # Example of usage:
-#      python predict.py ./Inference_try_images/p11_v5_00033.png --output_dir ./Inference_try_images --imgsz 640
+#      from root directory of git clone https://github.com/MarioPasc/Coronary_Angiography_Detection
+#      python inference/predict.py inference/Inference_try_images/p11_v5_00033.png --output_dir inference/Inference_try_images/ --imgsz 640 
 # We recommend using an imgsz value of 640, since the model has been trained for this image resolution, regardless of the size of the input image
 # YOLO head has been coded to work with different image sizes, but the model performs good with this resolution.
 # The available parameters are included in the global variable DEFAULT_PARAMS.
@@ -97,7 +98,7 @@ VISUALIZATION_PARAMS: Dict[str, Any] = {
     'color_mode': 'class',
 }
 
-MODEL_PATH: str = '../models/iteration2.pt'  # Replace with your actual model path
+MODEL_PATH: str = './models/iteration_2.pt'  # Replace with your actual model path
 
 
 def parse_imgsz(value: str) -> Union[int, Tuple[int, int]]:
