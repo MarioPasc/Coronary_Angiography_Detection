@@ -22,7 +22,10 @@ def run_cleanGroundTruthFileDatasetField(csv_path: str) -> pd.DataFrame:
     )
     return df
 
-
+# TODO: Implementar que cuando se quiten las labels también se tienen que eliminar las entradas
+#       de la bbox correspondiente a esta. Aunque tengamos que operar sobre el conjunto original
+#       de CADICA. 
+#       Si no lo hacemos en este paso, lo arrastraremos a la aumentación de datos. 
 def run_filterByLabels(df: pd.DataFrame, labels: List[str]) -> pd.DataFrame:
     """
     Filters the dataset to retain only samples without lesions or those with specified lesion labels.
