@@ -71,7 +71,7 @@ class Augmentor:
         }
 
         # Probabilities for each augmentation type
-        self.augmentation_weights = [0.25, 0.2, 0.2, 0.05, 0.2]
+        self.augmentation_weights = [0.33, 0.33, 0.33, 0, 0]
 
     def augment_data(self, train_df: pd.DataFrame, val_df: pd.DataFrame) -> None:
         """
@@ -221,7 +221,7 @@ class Augmentor:
         np.ndarray
             The brightness-adjusted image.
         """
-        value = random.uniform(0.7, 1.35)
+        value = random.uniform(0.75, 1.2)
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         hsv[:, :, 2] = cv2.multiply(hsv[:, :, 2], value)
         return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)

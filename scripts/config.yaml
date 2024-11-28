@@ -4,7 +4,7 @@ OUTPUT_PATH: "/home/mario/Python/Dataset/CADICA_Project"
 DS_NAME: "CADICA"
 DATA_CSV_NAME: "information_dataset.csv"
 LABELS:
-  - "p20_50"
+  - "p0_20"
 VAL_SIZE: 0.25
 TEST_SIZE: 0.2
 RANDOM_SEED: 42
