@@ -20,10 +20,6 @@ HYPERPARAMETER_LIMITS = {
     'dfl': (0.9, 1.3)
 }
 
-# Configure logging for detailed execution tracking
-logging.basicConfig(filename='hyperparameter_tuning.log', level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-
 def _adjust_hyperparameter(hyperparam_name: str, base_value: float, coef: float) -> float:
     """
     Adjusts the hyperparameter based on a Gaussian distribution around the base value,

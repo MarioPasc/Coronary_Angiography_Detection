@@ -1,4 +1,4 @@
-from ultralytics import YOLO
+from external.ultralytics import YOLO
 import pandas as pd
 
 if __name__ == "__main__":

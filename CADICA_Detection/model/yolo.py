@@ -9,10 +9,6 @@ import pandas as pd
 import logging
 from typing import Dict
 
-# Configure logging
-logging.basicConfig(filename='yolov8_detection.log', level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
-
 class Detection_YOLO:
     """
     A class to manage the training, tuning, and validation processes of YOLOv8 for object detection.

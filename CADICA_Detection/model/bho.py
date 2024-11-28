@@ -1,6 +1,6 @@
 import logging
 import optuna
-from ultralytics import YOLO
+from external.ultralytics import YOLO
 from typing import Dict, Tuple, List, Any
 import pandas as pd
 import yaml

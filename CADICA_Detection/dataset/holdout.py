@@ -2,12 +2,12 @@
 
 import pandas as pd
 import os
-from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from typing import Tuple, List
-from collections import Counter
+from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
 import ast
 import numpy as np
+import ast
 
 def run_cleanGroundTruthFileDatasetField(csv_path: str) -> pd.DataFrame:
     """
@@ -22,25 +22,71 @@ def run_cleanGroundTruthFileDatasetField(csv_path: str) -> pd.DataFrame:
     )
     return df
 
-# TODO: Implementar que cuando se quiten las labels también se tienen que eliminar las entradas
-#       de la bbox correspondiente a esta. Aunque tengamos que operar sobre el conjunto original
-#       de CADICA. 
-#       Si no lo hacemos en este paso, lo arrastraremos a la aumentación de datos. 
-def run_filterByLabels(df: pd.DataFrame, labels: List[str]) -> pd.DataFrame:
+def run_filterByLabels(df: pd.DataFrame, labels_to_remove: List[str]) -> pd.DataFrame:
     """
-    Filters the dataset to retain only samples without lesions or those with specified lesion labels.
-    """
-    labels_set = set(labels)
-    df_filtered = df[(df['Lesion'] == False) | (df['LesionLabel'].apply(lambda x: bool(set(x) & labels_set)))]
-    return df_filtered
+    Filters the dataset by removing rows where the labels to remove are the only labels in LesionLabel. 
+    Updates LesionLabel and GroundTruthFile for rows with mixed labels.
 
+    Args:
+        df (pd.DataFrame): Input dataset containing LesionLabel and paths to ground truth files.
+        labels_to_remove (List[str]): List of labels to remove.
+
+    Returns:
+        pd.DataFrame: Filtered and updated DataFrame.
+    """
+    
+    def update_ground_truth_file(file_path: str, labels_to_remove: List[str]) -> List[str]:
+        """
+        Updates the ground truth file by removing specified labels and returning the remaining labels.
+        
+        Args:
+            file_path (str): Path to the ground truth file.
+            labels_to_remove (List[str]): Labels to be removed.
+        
+        Returns:
+            List[str]: Remaining labels after removal.
+        """
+        remaining_labels = set()
+        try:
+            with open(file_path, 'r') as f:
+                lines = f.readlines()
+
+            updated_lines = []
+            for line in lines:
+                label = line.strip().split()[-1]  # Extract the last element as the label
+                if label not in labels_to_remove:
+                    updated_lines.append(line)
+                    remaining_labels.add(label)
+
+            # Overwrite the file with updated content
+            with open(file_path, 'w') as f:
+                f.writelines(updated_lines)
+
+        except Exception as e:
+            print(f"Error processing file {file_path}: {e}")
+        
+        return list(remaining_labels)
+
+    # Process each row in the DataFrame
+    for idx, row in df.iterrows():
+        if row['GroundTruthFile'] == 'nolesion' or not row['LesionLabel']:
+            continue  # Skip rows without valid GroundTruthFile or LesionLabel
+        
+        # Update the ground truth file and get remaining labels
+        remaining_labels = update_ground_truth_file(row['GroundTruthFile'], labels_to_remove)
+        df.at[idx, 'LesionLabel'] = remaining_labels  # Update the LesionLabel field
+
+        # Remove row if no labels remain
+        if not remaining_labels:
+            df.drop(idx, inplace=True)
+
+    return df
 
 def run_splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, random_state: int = 39) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Splits the dataset into training, validation, and testing sets based on unique patients,
     ensuring that each lesion label is represented in each split according to the desired ratios.
     """
-    from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
     
     # Get unique patients
     patients = filtered_df['Patient'].unique()

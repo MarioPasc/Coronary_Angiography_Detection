@@ -160,6 +160,7 @@ def split_holdout_sets():
         df = DatasetTools.cleanGroundTruthFileDatasetField(csv_path)
 
         # Filter by labels
+        logging.info(type(CONFIG["LABELS"]))
         filtered_df = DatasetTools.filterByLabels(df, CONFIG["LABELS"])
 
         # Split the data using the updated function

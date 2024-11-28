@@ -216,7 +216,7 @@ class DatasetTools:
         pd.DataFrame
             A filtered DataFrame containing only the specified lesion labels and non-lesion samples.
         """
-        return run_filterByLabels(df = df, labels = labels)
+        return run_filterByLabels(df = df, labels_to_remove = labels)
 
     @staticmethod
     def splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:

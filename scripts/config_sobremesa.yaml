@@ -1,24 +1,30 @@
 DATASET_URL: "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/p9bpx9ctcv-2.zip"
-DESTINATION_FOLDER: "/home/mario/Python/Dataset/CADICA_Project"
-OUTPUT_PATH: "/home/mario/Python/Dataset/CADICA_Project"
+DESTINATION_FOLDER: "/home/mariopasc/Python/Datasets/Coronario_Patient"
+OUTPUT_PATH: "/home/mariopasc/Python/Datasets/Coronario_Patient"
 DS_NAME: "CADICA"
 DATA_CSV_NAME: "information_dataset.csv"
 LABELS:
+  - "p0_20"
   - "p20_50"
+  - "p50_70"
+  - "p70_90"
+  - "p90_98"
+  - "p99"
+  - "p100"
 VAL_SIZE: 0.25
 TEST_SIZE: 0.2
 RANDOM_SEED: 42
 CLASS_UNDERSAMPLING:
   p0_20: [0, 0, 0]
-  p20_50: [0, 0, 0]
-  p50_70: [0, 0, 0]
+  p20_50: [0, 20, 0]
+  p50_70: [55, 0, 0]
 FREEZED_CLASSES:
   - "p99"
   - "p100"
-AUGMENTED_LESION_IMAGES_TRAIN: 0
-AUGMENTED_LESION_IMAGES_VAL: 0  
-AUGMENTED_NONLESION_IMAGES_TRAIN: 0
-AUGMENTED_NONLESION_IMAGES_VAL: 0  
+AUGMENTED_LESION_IMAGES_TRAIN: 2000
+AUGMENTED_LESION_IMAGES_VAL: 1500  
+AUGMENTED_NONLESION_IMAGES_TRAIN: 1000
+AUGMENTED_NONLESION_IMAGES_VAL: 800  
 LABELS_TO_EXCLUDE: []  # List of labels not to augment
 CLASS_MAPPINGS:
   p0_20: 0
@@ -32,4 +38,4 @@ YOLO_DATASET_FOLDER_NAME: "CADICA_Detection_YOLO"
 FIGURE_FORMATS: 
   - "png"
   - "svg"
-PAPER_RESULTS_FOLDER: "/home/mario/Python/Dataset/CADICA_Project"
+PAPER_RESULTS_FOLDER: "/home/mariopasc/Python/Results/Coronariografias/Results_Paper"
