@@ -164,3 +164,4 @@ cython_debug/
 logs/
 *.log
 videos/
+validation_yolo_format/

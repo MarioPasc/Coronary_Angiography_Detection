@@ -1,0 +1,7 @@
+path: ./validation_yolo_format
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  lesion: 0

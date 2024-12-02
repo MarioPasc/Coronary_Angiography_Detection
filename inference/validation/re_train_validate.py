@@ -2,8 +2,6 @@ import os
 from typing import Union, Dict, List
 import logging
 import shutil
-import yaml
-
 
 # Configure logging
 logging.basicConfig(filename='prediction_log.log',
@@ -190,20 +188,19 @@ class Formatting:
         names = {idx: class_name for class_name, idx in LABEL_DICT.items()}
         
         if len(names) == 1:
-            names = {'lesion': 0}
-        
-        config = {
-            "path": self.dataset_folder,
-            "train": train_path or "images/train",
-            "val": "images/val",
-            "test": test_path or "images/test",
-            "names": names
-        }
+            names = {0: 'lesion'}
 
         config_file = os.path.join(self.dataset_folder, "..", "data.yaml")
         try:
             with open(config_file, "w") as f:
-                yaml.dump(config, f, default_flow_style=False)
+                # Write YAML content manually to include a blank line
+                f.write(f"path: {self.dataset_folder}\n")
+                f.write(f"train: {train_path or 'images/train'}\n")
+                f.write(f"val: images/val\n")
+                f.write(f"test: {test_path or 'images/test'}\n\n")  # Add blank line here
+                f.write("names:\n")
+                for idx, name in enumerate(names.values()):
+                    f.write(f"  {name}: {idx}\n")
             logging.info(f"Generated config.yaml at {config_file}.")
         except Exception as e:
             logging.error(f"Error generating config.yaml: {e}")
