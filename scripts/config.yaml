@@ -5,12 +5,13 @@ DS_NAME: "CADICA"
 DATA_CSV_NAME: "information_dataset.csv"
 LABELS:
   - "p0_20"
+  - "p20_50"
 VAL_SIZE: 0.25
 TEST_SIZE: 0.2
 RANDOM_SEED: 42
 CLASS_UNDERSAMPLING:
   p0_20: [0, 0, 0]
-  p20_50: [0, 0.15, 0]
+  p20_50: [0, 0, 0]
   p50_70: [0, 0, 0]
 FREEZED_CLASSES:
   - "p99"

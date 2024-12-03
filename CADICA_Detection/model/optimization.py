@@ -6,7 +6,7 @@ import pandas as pd
 import logging
 from typing import Dict, List
 import yaml
-import external.ultralytics as ultralytics
+from CADICA_Detection.external.ultralytics.ultralytics import YOLO
 
 # Define hyperparameter limits
 HYPERPARAMETER_LIMITS = {
@@ -66,7 +66,7 @@ class HyperparameterTuning:
         """
         try:
             self.output_folder = output
-            self.model = ultralytics.YOLO(model=model)
+            self.model = YOLO(model=model)
             self.config = config_yaml_path
             self.default_params = self._load_yaml_to_dict(yaml_params_path)
 
@@ -170,7 +170,7 @@ class HyperparameterTuning:
             validation_results_path = os.path.join(f"./runs/detect/{run_name}", "validation_results.csv")
 
             for weight_file in weight_files:
-                model_batch = ultralytics.YOLO(weight_file)
+                model_batch = YOLO(weight_file)
                 results = model_batch.val(imgsz=640, conf=0.001, plots=True, save_json=True)
 
                 map_50 = results.box.map50
