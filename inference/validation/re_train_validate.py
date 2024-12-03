@@ -1,7 +1,10 @@
 import os
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Tuple
 import logging
 import shutil
+import yaml
+import json
+from ultralytics import YOLO  
 
 # Configure logging
 logging.basicConfig(filename='prediction_log.log',
@@ -12,7 +15,6 @@ LABEL_DICT: Dict[str, int] = {
     "p0_20": 0, "p20_50": 0, "p50_70": 0,
     "p70_90": 0, "p90_98": 0, "p99": 0, "p100": 0
 }
-
 
 class Formatting:
     def __init__(self, 
@@ -31,7 +33,7 @@ class Formatting:
 
     def _create_directory_structure(self, output_dir: str) -> None:
         """
-        Create the YOLO dataset directory structure for validation.
+        Create the YOLO dataset directory structure for validation and training.
 
         Args:
         -------
@@ -39,8 +41,9 @@ class Formatting:
             Path to the output directory for the dataset.
         """
         try:
-            os.makedirs(os.path.join(output_dir, "images/val"), exist_ok=True)
-            os.makedirs(os.path.join(output_dir, "labels/val"), exist_ok=True)
+            for split in ['train', 'val']:
+                os.makedirs(os.path.join(output_dir, f"images/{split}"), exist_ok=True)
+                os.makedirs(os.path.join(output_dir, f"labels/{split}"), exist_ok=True)
             logging.info("Directory structure created successfully.")
         except Exception as e:
             logging.error(f"Error creating directory structure: {e}")
@@ -69,7 +72,7 @@ class Formatting:
             logging.error(f"Error reading selected frames: {e}")
             raise
 
-    def _copy_images(self, input_path: str, output_path: str, selected_frames: List[str]) -> None:
+    def _copy_images(self, input_path: str, output_paths: List[str], selected_frames: List[str]) -> None:
         """
         Copy images from the input directory to the YOLO dataset structure, filtering by selected frames.
 
@@ -77,16 +80,17 @@ class Formatting:
         -------
         input_path : str
             Path to the input directory containing images.
-        output_path : str
-            Path to the output directory for images.
+        output_paths : List[str]
+            List of paths to the output directories for images.
         selected_frames : List[str]
             List of selected frame names without extensions.
         """
         try:
             for img_file in os.listdir(input_path):
                 if img_file.endswith(".png") and os.path.splitext(img_file)[0] in selected_frames:
-                    shutil.copy(os.path.join(input_path, img_file), os.path.join(output_path, img_file))
-            logging.info(f"Filtered images copied from {input_path} to {output_path}.")
+                    for output_path in output_paths:
+                        shutil.copy(os.path.join(input_path, img_file), os.path.join(output_path, img_file))
+            logging.info(f"Filtered images copied from {input_path} to {', '.join(output_paths)}.")
         except Exception as e:
             logging.error(f"Error copying images: {e}")
             raise
@@ -129,7 +133,7 @@ class Formatting:
     def _convert_groundtruths_to_yolo(
         self,
         groundtruth_path: str, 
-        labels_output_path: str, 
+        labels_output_paths: List[str], 
         img_width: int, 
         img_height: int,
         selected_frames: List[str]
@@ -141,8 +145,8 @@ class Formatting:
         -------
         groundtruth_path : str
             Path to the directory containing groundtruth files.
-        labels_output_path : str
-            Path to the output directory for YOLO labels.
+        labels_output_paths : List[str]
+            List of paths to the output directories for YOLO labels.
         img_width : int
             Width of the images.
         img_height : int
@@ -155,7 +159,6 @@ class Formatting:
                 frame_name = os.path.splitext(gt_file)[0]
                 if gt_file.endswith(".txt") and frame_name in selected_frames:
                     input_file_path = os.path.join(groundtruth_path, gt_file)
-                    output_file_path = os.path.join(labels_output_path, gt_file)
                     
                     with open(input_file_path, "r") as f:
                         lines = f.readlines()
@@ -165,15 +168,17 @@ class Formatting:
                         for line in lines
                     ]
                     
-                    with open(output_file_path, "w") as f:
-                        f.writelines(yolo_lines)
+                    for labels_output_path in labels_output_paths:
+                        output_file_path = os.path.join(labels_output_path, gt_file)
+                        with open(output_file_path, "w") as f:
+                            f.writelines('\n'.join(yolo_lines))
                     
-                    logging.info(f"Converted groundtruths in {gt_file} to YOLO format.")
+                    logging.info(f"Converted groundtruths in {gt_file} to YOLO format and saved to {', '.join(labels_output_paths)}.")
         except Exception as e:
             logging.error(f"Error converting groundtruths: {e}")
             raise
 
-    def _generate_config_yaml(self, train_path: str = "", test_path: str = "") -> None:
+    def _generate_config_yaml(self) -> None:
         """
         Generate a YAML configuration file for YOLO.
 
@@ -195,12 +200,12 @@ class Formatting:
             with open(config_file, "w") as f:
                 # Write YAML content manually to include a blank line
                 f.write(f"path: {self.dataset_folder}\n")
-                f.write(f"train: {train_path or 'images/train'}\n")
+                f.write(f"train: {'images/train'}\n")
                 f.write(f"val: images/val\n")
-                f.write(f"test: {test_path or 'images/test'}\n\n")  # Add blank line here
+                f.write(f"test: {'images/test'}\n\n")  
                 f.write("names:\n")
                 for idx, name in enumerate(names.values()):
-                    f.write(f"  {name}: {idx}\n")
+                    f.write(f"  {idx}: {name}\n")
             logging.info(f"Generated config.yaml at {config_file}.")
         except Exception as e:
             logging.error(f"Error generating config.yaml: {e}")
@@ -213,7 +218,7 @@ class Formatting:
         img_height: int
     ) -> None:
         """
-        Prepare YOLO validation dataset from the given input directory structure.
+        Prepare YOLO validation and training dataset from the given input directory structure.
 
         Args:
         -------
@@ -224,8 +229,14 @@ class Formatting:
         """
         try:
             self._create_directory_structure(self.dataset_folder)
-            images_output_path = os.path.join(self.dataset_folder, "images/val")
-            labels_output_path = os.path.join(self.dataset_folder, "labels/val")
+            images_output_paths = [
+                os.path.join(self.dataset_folder, "images/train"),
+                os.path.join(self.dataset_folder, "images/val")
+            ]
+            labels_output_paths = [
+                os.path.join(self.dataset_folder, "labels/train"),
+                os.path.join(self.dataset_folder, "labels/val")
+            ]
             
             video_dirs = [
                 d for d in os.listdir(self.videos_folder) 
@@ -236,22 +247,170 @@ class Formatting:
                 video_path = os.path.join(self.videos_folder, video_dir)
                 input_path = os.path.join(video_path, "input")
                 groundtruth_path = os.path.join(video_path, "groundtruth")
-                selected_frames_file = [os.path.join(video_path, file) for file in os.listdir(video_path) if file.endswith('_selectedFrames.txt')][0]
-
-                if not os.path.isfile(selected_frames_file):
+                selected_frames_files = [os.path.join(video_path, file) for file in os.listdir(video_path) if file.endswith('_selectedFrames.txt')]
+                
+                if not selected_frames_files:
                     logging.warning(f"Selected frames file not found for {video_dir}, skipping.")
                     continue
-                
+
+                selected_frames_file = selected_frames_files[0]
                 selected_frames = self._read_selected_frames(selected_frames_file)
-                self._copy_images(input_path, images_output_path, selected_frames)
+                self._copy_images(input_path, images_output_paths, selected_frames)
                 self._convert_groundtruths_to_yolo(
-                    groundtruth_path, labels_output_path, img_width, img_height, selected_frames
+                    groundtruth_path, labels_output_paths, img_width, img_height, selected_frames
                 )
-                self._generate_config_yaml()
-            logging.info("YOLO validation dataset prepared successfully.")
+            self._generate_config_yaml()
+            logging.info("YOLO validation and training dataset prepared successfully.")
         except Exception as e:
-            logging.error(f"Error preparing YOLO validation dataset: {e}")
+            logging.error(f"Error preparing YOLO dataset: {e}")
             raise
 
-formatter = Formatting(videos_folder="./videos")
-formatter.prepare_yolo_validation_dataset(img_width=512, img_height=512)
+class YOLOTrainer:
+    def __init__(self, model_path: str, data_yaml: str, args_yaml: str):
+        """
+        Initialize the YOLOTrainer with a given model and data configuration.
+
+        Args:
+        -------
+        model_path : str
+            Path to the YOLO model (.pt file).
+        data_yaml : str
+            Path to the data.yaml file.
+        args_yaml : str
+            Path to the args.yaml file containing hyperparameters.
+        """
+        self.model_path = model_path
+        self.data_yaml = data_yaml
+        self.args_yaml = args_yaml
+        self.model = YOLO(model_path)
+        self.hyperparameters = self._load_hyperparameters()
+
+    def _load_hyperparameters(self):
+        """
+        Load hyperparameters from the args.yaml file, excluding certain keys.
+
+        Returns:
+        --------
+        Dict[str, Any]
+            Dictionary of hyperparameters to use for training.
+        """
+        try:
+            with open(self.args_yaml, 'r') as f:
+                args = yaml.safe_load(f)
+            logging.info(f"Loaded hyperparameters from {self.args_yaml}")
+        except Exception as e:
+            logging.error(f"Error loading hyperparameters: {e}")
+            raise
+
+        # Parameters to exclude
+        exclude_keys = {'task', 'mode', 'model', 'data', 'epochs', 'name', 'save_dir', 'resume', 'weights', 'project'}
+        hyperparameters = {k: v for k, v in args.items() if k not in exclude_keys}
+        return hyperparameters
+
+    def validate_model(self, imgsz: int = 512, batch: int = 16, iou: float = 0.6, save_json: bool = True, save_dir: str = 'runs/val'):
+        """
+        Validate the model using the validation dataset and save metrics to a JSON file.
+
+        Args:
+        -------
+        imgsz : int
+            Image size for validation.
+        batch : int
+            Batch size for validation.
+        iou : float
+            IoU threshold for validation.
+        save_json : bool
+            Whether to save detection results in COCO JSON format.
+        save_dir : str
+            Directory to save validation results.
+        """
+        # Perform validation
+        validator = self.model.val(
+            data=self.data_yaml,
+            imgsz=imgsz,
+            batch=batch,
+            iou=iou,
+            save_json=save_json,
+            save_dir=save_dir
+        )
+
+        # Access metrics directly from the validator object
+        metrics_dict = {
+            'precision': float(validator.box.mp),            # Mean Precision over all classes
+            'recall': float(validator.box.mr),               # Mean Recall over all classes
+            'map50': float(validator.box.map50),             # Mean AP@0.5 over all classes
+            'map': float(validator.box.map),                 # Mean AP@0.5:0.95 over all classes
+            'map75': float(validator.box.map75),             # Mean AP@0.75 over all classes
+            'per_class_precision': validator.box.p.tolist(),   # List of precision per class
+            'per_class_recall': validator.box.r.tolist(),      # List of recall per class
+            'maps': validator.box.maps.tolist(),             # mAPs for each class (converted to list)
+        }
+
+        # Save metrics to JSON file
+        metrics_file = os.path.join(save_dir, 'validation_metrics.json')
+        os.makedirs(save_dir, exist_ok=True)  # Ensure the save directory exists
+        with open(metrics_file, 'w') as f:
+            json.dump(metrics_dict, f, indent=4)
+
+        logging.info(f"Validation metrics saved to {metrics_file}")
+
+    def train_model(self, epochs: int = 10, imgsz: int = 512, batch: int = 16, name: str = 'retrain_CADICA', save_dir: str = 'runs/train'):
+        """
+        Continue training the model using the training dataset.
+
+        Args:
+        -------
+        epochs : int
+            Number of epochs to train.
+        imgsz : int
+            Image size for training.
+        batch : int
+            Batch size for training.
+        name : str
+            Name of the training run.
+        save_dir : str
+            Directory to save training results.
+        """
+        # Prepare training arguments
+        train_args = {
+            'model': self.model_path,
+            'data': self.data_yaml,
+            'epochs': epochs,
+            'imgsz': imgsz,
+            'batch': batch,
+            'name': name,
+            'save_dir': save_dir,
+            'resume': False,  
+            'val': False
+        }
+
+        # Merge with hyperparameters, hyperparameters have lower priority
+        train_args.update(self.hyperparameters)
+
+        # Log the training arguments
+        logging.info(f"Training with arguments: {train_args}")
+
+        # Start training
+        self.model.train(**train_args)
+def main() -> None:
+    
+    CADICA_image_size: Tuple[int, int] = (512, 512)
+    epochs: int = 10
+    batch_size: int = 16
+    videos_folder_path: Union[str, os.PathLike] = "./videos"
+    model_path: Union[str, os.PathLike] = './iteration_2.pt'  
+    model_args: Union[str, os.PathLike] = './args.yaml'
+    
+    formatter = Formatting(videos_folder=videos_folder_path)
+    formatter.prepare_yolo_validation_dataset(img_width=CADICA_image_size[0], img_height=CADICA_image_size[1])
+
+    data_yaml: os.PathLike = os.path.join(formatter.dataset_folder, "..", "data.yaml")
+
+    model = YOLOTrainer(model_path=model_path, data_yaml=data_yaml, args_yaml=model_args)
+    model.validate_model(imgsz=max(CADICA_image_size), batch=batch_size)
+    model.train_model(epochs=epochs, imgsz=max(CADICA_image_size), batch=batch_size)
+    model.validate_model(imgsz=max(CADICA_image_size), batch=batch_size)
+    
+
+if __name__ == "__main__":
+    main()
