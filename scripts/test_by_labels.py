@@ -8,7 +8,7 @@ import logging
 import yaml
 import pandas as pd
 from typing import Union, List, Dict
-from ultralytics import YOLO
+from CADICA_Detection.external.ultralytics.ultralytics import YOLO
 import torch.multiprocessing
 
 # Set up logging

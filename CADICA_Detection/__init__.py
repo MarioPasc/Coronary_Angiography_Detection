@@ -9,9 +9,11 @@ if external_path not in sys.path:
     sys.path.insert(0, external_path)
 
 # Now we can import from our modified ultralytics
-from ultralytics import YOLO  # Adjust any other specific imports as needed
+from external.ultralytics import YOLO
 
 # Import core modules from CADICA_Detection
 from .dataset.DatasetTools import DatasetTools
 from .model.yolo import Detection_YOLO
-from .model.optimization import HyperparameterTuning
+from .optimization.optimization import HyperparameterTuning
+from .optimization.bho import BHOYOLO
+from .optimization.bho_multiobjective import BHOYOLO_Multiobjective

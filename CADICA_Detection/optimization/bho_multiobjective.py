@@ -1,7 +1,6 @@
 import logging
 import optuna
-# from CADICA_Detection.external.ultralytics.ultralytics import YOLO
-from external.ultralytics import YOLO
+from CADICA_Detection.external.ultralytics.ultralytics import YOLO
 from typing import Dict, Tuple, List, Any
 import pandas as pd
 import yaml
@@ -248,7 +247,7 @@ def set_seed(seed: int = None) -> None:
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-class BHOYOLO:
+class BHOYOLO_Multiobjective:
     """
     A class for performing Bayesian Hyperparameter Optimization (BHO) on YOLO models.
 
@@ -674,13 +673,9 @@ class BHOYOLO:
         Description
         --------------------------
         Starts the hyperparameter optimization process using Optuna.
+        
         References
         --------------------------
-        SuccessiveHalvingPruner: 
-            LI, Liam, et al. A system for massively parallel hyperparameter tuning. 
-            Proceedings of Machine Learning and Systems, 2020, vol. 2, p. 230-246.
-            https://arxiv.org/abs/1810.05934
-        
         TPESampler:
             BERGSTRA, James, et al. Algorithms for hyper-parameter optimization. 
             Advances in neural information processing systems, 2011, vol. 24.
@@ -892,7 +887,7 @@ def main():
         available_gpus = manager.list(range(torch.cuda.device_count()))
 
         # Instantiate the BHOYOLO class, passing shared variables
-        bho_yolo = BHOYOLO(config, gpu_lock=gpu_lock, available_gpus=available_gpus)
+        bho_yolo = BHOYOLO_Multiobjective(config, gpu_lock=gpu_lock, available_gpus=available_gpus)
 
         # Run optimization
         bho_yolo.optimize()

@@ -8,6 +8,15 @@ storage: CADICA_BHO_TPE.db
 study_name: CADICA_TPE_Sampler 
 
 hyperparameters:
+  optimizer:
+    type: categorical
+    choices: 
+      - SGD
+      - Adam
+      - AdamW
+      - NAdam
+      - RAdam
+      - RMSprop
   lr0:
     type: loguniform
     low: 0.000001
