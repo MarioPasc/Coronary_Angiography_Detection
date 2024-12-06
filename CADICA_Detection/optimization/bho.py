@@ -140,17 +140,17 @@ def create_gpu_monitoring_callbacks(trial, logger):
     def on_train_epoch_start(trainer):
         """Called at the start of each training epoch."""
         gpu_logger.log_metrics(trainer.epoch + 1, trainer)
-        logger.info(f"GPU metrics logged at epoch start for trial {trial.number}")
+        #logger.info(f"GPU metrics logged at epoch start for trial {trial.number}")
 
     def on_train_epoch_end(trainer):
         """Called at the end of each training epoch."""
         gpu_logger.log_metrics(trainer.epoch + 1, trainer)
-        logger.info(f"GPU metrics logged at epoch end for trial {trial.number}")
+        #logger.info(f"GPU metrics logged at epoch end for trial {trial.number}")
 
     def on_train_end(trainer):
         """Called when the training ends."""
         gpu_logger.save_to_csv()
-        logger.info(f"GPU metrics saved to CSV for trial {trial.number}")
+        #logger.info(f"GPU metrics saved to CSV for trial {trial.number}")
 
     return on_train_epoch_start, on_train_epoch_end, on_train_end
 
@@ -177,15 +177,17 @@ def create_pruning_callback(trial, logger):
         
         # Access the validation metrics
         metrics = trainer.metrics
-        map50_95 = metrics.get('metrics/mAP50-95(B)', None)
-        
+        precision_b = metrics.box.mp     # Mean Precision
+        recall_b = metrics.box.mr        # Mean Recall
+        f1_score = (2*precision_b*recall_b) / (precision_b + recall_b) if (precision_b+recall_b) > 0 else 0.0
+    
         # Log the device of the model being trained
         model_device = next(trainer.model.parameters()).device
-        logger.info(f"Epoch {epoch}, Trial {trial.number}, mAP50-95: {map50_95}, Model device: {model_device}")
+        logger.info(f"Epoch {epoch}, Trial {trial.number}, F1-Score: {f1_score}, Model device: {model_device}")
         
-        if map50_95 is not None:
+        if f1_score is not None:
             # Report the metric to Optuna
-            trial.report(map50_95, step=epoch)
+            trial.report(f1_score, step=epoch)
             # Check if the trial should be pruned
             if trial.should_prune():
                 logger.info(f"Trial {trial.number} pruned at epoch {epoch}.")
@@ -201,7 +203,7 @@ def create_pruning_callback(trial, logger):
 DEFAULT_PARAMS = {
     'data': None,  # This will be set dynamically in the class
     'epochs': 100,
-    'batch': -1,  # Automatic batch size determination
+    'batch': 16,  # Automatic batch size determination
     'imgsz': 640,
     'save': True,
     'cache': False,
@@ -224,7 +226,7 @@ DEFAULT_PARAMS = {
     'freeze': None,
     'plots': True,
     'optimizer': 'Adam',
-    'iou': 0.7,
+    'iou': 0.5, # Literature
     'lr0': 0.01,
     'lrf': 0.01,
     'momentum': 0.937,
@@ -479,6 +481,9 @@ class BHOYOLO:
             else:
                 logger.error(f"Unknown function type {func_type} for hyperparameter {hyperparam}")
                 raise ValueError(f"Unknown function type {func_type} for hyperparameter {hyperparam}")
+
+        logger.info(f"Suggested optimizer: {final_hyperparam.get('optimizer', 'Adam')}")
+        logger.info(f"Suggested batch size: {final_hyperparam.get('batch', 16)}")
         return final_hyperparam
 
     def _train_model(self, trial: optuna.Trial) -> float:
@@ -639,6 +644,7 @@ class BHOYOLO:
             recall_b = metrics.box.mr        # Mean Recall
             map_50_b = metrics.box.map50     # mAP@50
             map_50_95 = metrics.box.map      # mAP@50-95
+            f1_score = (2*precision_b*recall_b) / (precision_b + recall_b) if (precision_b+recall_b) > 0 else 0.0
 
             # Record memory after training
             if assigned_device != 'cpu':
@@ -659,6 +665,7 @@ class BHOYOLO:
             # Save metrics to the trial object
             trial.set_user_attr('precision', precision_b)
             trial.set_user_attr('recall', recall_b)
+            trial.set_user_attr('f1_score', f1_score)
             trial.set_user_attr('mAP50', map_50_b)
             trial.set_user_attr('mAP50-95', map_50_95)
             trial.set_user_attr('batch_size', actual_batch_size)
@@ -674,6 +681,7 @@ class BHOYOLO:
                 **hyperparams,
                 'precision': precision_b,
                 'recall': recall_b,
+                'f1_score': f1_score,
                 'mAP50': map_50_b,
                 'mAP50-95': map_50_95,
                 'trial_number': trial.number,
@@ -687,9 +695,9 @@ class BHOYOLO:
                 'memory_reserved_after': memory_reserved_after
             }
             self.results.append(trial_results)
-
+            logger.info(f"Trial {trial.number} completed with F1-Score: {f1_score}")
             logger.info(f"Trial {trial.number} completed with mAP50-95: {map_50_95}")
-            return map_50_95
+            return f1_score
 
         except Exception as e:
             # Log any other exceptions that occurred during training
