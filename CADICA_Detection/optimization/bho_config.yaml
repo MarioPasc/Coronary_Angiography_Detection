@@ -17,6 +17,9 @@ hyperparameters:
       - NAdam
       - RAdam
       - RMSprop
+  batch:
+    type: categorical
+    choices: [4, 8, 16, 32, 64]
   lr0:
     type: loguniform
     low: 0.000001
