@@ -442,6 +442,7 @@ class BHOYOLO_Multiobjective_Optimizer:
                 raise ValueError(f"Unknown function type {func_type} for hyperparameter {hyperparam}")
 
         logger.info(f"Suggested optimizer: {final_hyperparam.get('optimizer', 'Adam')}")
+        logger.info(f"Suggested batch size: {final_hyperparam.get('batch', 16)}")
         return final_hyperparam
 
     def _train_model(self, trial: optuna.Trial) -> float:
@@ -596,8 +597,7 @@ class BHOYOLO_Multiobjective_Optimizer:
             recall_b = metrics.box.mr        # Mean Recall
             map_50_b = metrics.box.map50     # mAP@50
             map_50_95 = metrics.box.map      # mAP@50-95
-            f1_score = (2*precision_b*recall_b) / (precision_b + recall_b) # f1-score
-
+            f1_score = (2*precision_b*recall_b) / (precision_b + recall_b) if (precision_b+recall_b) > 0 else 0.0
 
             # Record memory after training
             if assigned_device != 'cpu':
