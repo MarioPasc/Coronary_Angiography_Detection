@@ -9,7 +9,7 @@ if external_path not in sys.path:
     sys.path.insert(0, external_path)
 
 # Now we can import from our modified ultralytics
-from external.ultralytics import YOLO
+from .external.ultralytics.ultralytics import YOLO
 
 # Import core modules from CADICA_Detection
 from .dataset.DatasetTools import DatasetTools

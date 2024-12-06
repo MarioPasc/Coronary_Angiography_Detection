@@ -177,8 +177,8 @@ def create_pruning_callback(trial, logger):
         
         # Access the validation metrics
         metrics = trainer.metrics
-        precision_b = metrics.box.mp     # Mean Precision
-        recall_b = metrics.box.mr        # Mean Recall
+        precision_b = metrics.get('metrics/precision(B)', 0.0)
+        recall_b = metrics.get('metrics/recall(B)', 0.0)
         f1_score = (2*precision_b*recall_b) / (precision_b + recall_b) if (precision_b+recall_b) > 0 else 0.0
     
         # Log the device of the model being trained
@@ -205,6 +205,7 @@ DEFAULT_PARAMS = {
     'epochs': 100,
     'batch': 16,  # Automatic batch size determination
     'imgsz': 640,
+    'patience':20,
     'save': True,
     'cache': False,
     'device': None,
@@ -757,7 +758,7 @@ class BHOYOLO:
 
         # Define the pruner
         pruner = optuna.pruners.SuccessiveHalvingPruner(
-            min_resource=2,
+            min_resource=50,
             reduction_factor=3,
             min_early_stopping_rate=0
         )
@@ -768,8 +769,8 @@ class BHOYOLO:
             prior_weight=1.0,
             consider_magic_clip=True,
             consider_endpoints=True,
-            n_startup_trials=3,
-            n_ei_candidates=24,
+            n_startup_trials=20,
+            n_ei_candidates=64,
             multivariate=True,
             group=True,
             warn_independent_sampling=True,
@@ -786,7 +787,7 @@ class BHOYOLO:
             sampler=sampler
         )
 
-        n_initial_trials: int = 1
+        n_initial_trials: int = 0
         self.n_initial_trials = n_initial_trials
         n_parallel_trials: int = self.n_trials - n_initial_trials
 
