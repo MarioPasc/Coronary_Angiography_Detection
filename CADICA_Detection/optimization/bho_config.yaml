@@ -1,11 +1,13 @@
-model: /home/mariopasc/x2go_shared/YOLO/yolov8l.pt
+model: /mnt/home/users/tic_163_uma/mpascual/fscratch/YOLO_models/yolov8l.pt
 data: ./config.yaml
-epochs: 1
-img_size: 640
-n_trials: 1
+epochs: 100
+img_size: 512
+n_trials: 100
 save_plots: true
 storage: CADICA_BHO_TPE.db
-study_name: CADICA_TPE_Sampler 
+study_name: CADICA_TPE_Sampler_no_p02050_augment
+seed: 42
+sampler: "tpe" # "cmaes", o, para el baseline "random"
 
 hyperparameters:
   optimizer:
@@ -22,27 +24,27 @@ hyperparameters:
     choices: [4, 8, 16, 32, 64]
   lr0:
     type: loguniform
-    low: 0.000001
+    low: 0.00001
     high: 0.01
   lrf:
     type: loguniform
-    low: 0.000001
+    low: 0.00001
     high: 0.01
   momentum:
     type: uniform
-    low: 0.55
+    low: 0.65
     high: 0.99
   weight_decay:
     type: loguniform
-    low: 0.0000001
+    low: 0.00001
     high: 0.01
   warmup_epochs:
     type: int
-    low: 0
-    high: 5
+    low: 2
+    high: 10
   warmup_momentum:
     type: uniform
-    low: 0.7
+    low: 0.75
     high: 0.99
   box:
     type: uniform
@@ -50,9 +52,10 @@ hyperparameters:
     high: 9.0
   cls:
     type: uniform
-    low: 0.4
-    high: 0.8
+    low: 0.3
+    high: 0.9
   dfl:
     type: uniform
-    low: 0.9
-    high: 2.5
+    low: 0.5
+    high: 3.5
+

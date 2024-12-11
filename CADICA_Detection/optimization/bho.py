@@ -203,9 +203,9 @@ def create_pruning_callback(trial, logger):
 DEFAULT_PARAMS = {
     'data': None,  # This will be set dynamically in the class
     'epochs': 100,
-    'batch': 16,  # Automatic batch size determination
+    'batch': 16,  
     'imgsz': 640,
-    'patience':20,
+    'patience':10,
     'save': True,
     'cache': False,
     'device': None,
@@ -387,6 +387,8 @@ class BHOYOLO:
         self.results: List[Dict[str, Any]] = []
         self.n_trials: int = config.get('n_trials', 50)
         self.save_plots: bool = config.get('save_plots', True)
+        self.sampler_choice = config.get('sampler', 'tpe')
+        self.seed = config.get('seed', 42)
 
         # Resource configuration
         self.num_cpus: int = int(os.environ.get('SLURM_CPUS_PER_TASK', 1))
@@ -536,9 +538,8 @@ class BHOYOLO:
         logger.info(f"Starting training for trial {trial.number}.")
 
         # Generate a unique seed
-        seed = trial.number
-        set_seed(seed)
-        logger.info(f"Seed for trial {trial.number}: {seed}")
+        set_seed(self.seed)
+        logger.info(f"Seed for trial {trial.number}: {self.seed}")
 
         # Extract hyperparameters for the trial
         hyperparams = self._extract_hyperparameters(trial, logger)
@@ -670,7 +671,7 @@ class BHOYOLO:
             trial.set_user_attr('mAP50', map_50_b)
             trial.set_user_attr('mAP50-95', map_50_95)
             trial.set_user_attr('batch_size', actual_batch_size)
-            trial.set_user_attr('seed', seed)
+            trial.set_user_attr('seed', self.seed)
             trial.set_user_attr('execution_time', elapsed_time)
             trial.set_user_attr('memory_allocated_before', memory_allocated_before)
             trial.set_user_attr('memory_reserved_before', memory_reserved_before)
@@ -686,7 +687,7 @@ class BHOYOLO:
                 'mAP50': map_50_b,
                 'mAP50-95': map_50_95,
                 'trial_number': trial.number,
-                'seed': seed,
+                'seed': self.seed,
                 'gpu_id': gpu_id if assigned_device != 'cpu' else 'cpu',
                 'batch_size': actual_batch_size,
                 'execution_time': elapsed_time,
@@ -698,6 +699,9 @@ class BHOYOLO:
             self.results.append(trial_results)
             logger.info(f"Trial {trial.number} completed with F1-Score: {f1_score}")
             logger.info(f"Trial {trial.number} completed with mAP50-95: {map_50_95}")
+            
+            # Only use the final F1-Score to determine if the training is good
+            trial.report(f1_score, step=self.epochs)
             return f1_score
 
         except Exception as e:
@@ -758,25 +762,47 @@ class BHOYOLO:
 
         # Define the pruner
         pruner = optuna.pruners.SuccessiveHalvingPruner(
-            min_resource=50,
+            min_resource=30,
             reduction_factor=3,
             min_early_stopping_rate=0
         )
 
         # Define the sampler
-        sampler = optuna.samplers.TPESampler(
-            consider_prior=True,
-            prior_weight=1.0,
-            consider_magic_clip=True,
-            consider_endpoints=True,
-            n_startup_trials=20,
-            n_ei_candidates=64,
-            multivariate=True,
-            group=True,
-            warn_independent_sampling=True,
-            constant_liar=True,
-            seed=42
-        )
+        if self.sampler_choice.lower() == 'cmaes':
+            sampler = optuna.samplers.CmaEsSampler(
+                seed=self.seed,
+                n_startup_trials=40,
+                x0=None,
+                sigma0=None,
+                independent_sampler=None,
+                warn_independent_sampling=True,
+                restart_strategy='ipop',
+                popsize=100,  
+                inc_popsize=None,
+                consider_pruned_trials=False, 
+                with_margin=True, # Helps with categorical parameters
+                lr_adapt=False,
+                use_separable_cma=False,
+            )
+        elif self.sampler_choice.lower() == 'tpe':
+            sampler = optuna.samplers.TPESampler(
+                consider_prior=True,
+                prior_weight=1.0,
+                consider_magic_clip=True,
+                consider_endpoints=True,
+                n_startup_trials=40,
+                n_ei_candidates=100,
+                multivariate=True,
+                group=True,
+                warn_independent_sampling=True,
+                constant_liar=True,
+                seed=self.seed
+            )
+        elif self.sampler_choice.lower() == 'random':
+            sampler = optuna.samplers.RandomSampler(seed=self.seed)
+        else:
+            raise ValueError(f"Sampler '{self.sampler_choice}' no reconocido. Usa 'tpe' o 'cmaes'.")
+
 
         study = optuna.create_study(
             study_name=self.study_name,
