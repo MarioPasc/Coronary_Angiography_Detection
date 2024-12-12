@@ -677,6 +677,7 @@ class BHOYOLO:
             trial.set_user_attr('memory_reserved_before', memory_reserved_before)
             trial.set_user_attr('memory_allocated_after', memory_allocated_after)
             trial.set_user_attr('memory_reserved_after', memory_reserved_after)
+            trial.set_user_attr('sampler', self.sampler_choice)
 
             # Save the current hyperparameters and metrics in the results list
             trial_results = {
@@ -694,7 +695,8 @@ class BHOYOLO:
                 'memory_allocated_before': memory_allocated_before,
                 'memory_reserved_before': memory_reserved_before,
                 'memory_allocated_after': memory_allocated_after,
-                'memory_reserved_after': memory_reserved_after
+                'memory_reserved_after': memory_reserved_after,
+                'sampler': self.sampler_choice
             }
             self.results.append(trial_results)
             logger.info(f"Trial {trial.number} completed with F1-Score: {f1_score}")
