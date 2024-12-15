@@ -1,13 +1,14 @@
-# This file was used to perform the training and validation of our YOLO model configurations. 
+# This file was used to perform the training and validation of our YOLO model configurations.
 # The validation performed in the script is a epoch-wise validation, where we save each epoch in the training stage and use that snapshot of the weight of the NN
 # to compute predictions on the validation set, allowing us to make an honest hyperparameter optimization.
 
-import external.ultralytics as ultralytics
+from CADICA_Detection.external.ultralytics.ultralytics import YOLO
 import os
 import glob
 import pandas as pd
 import logging
 from typing import Dict
+
 
 class Detection_YOLO:
     """
@@ -27,9 +28,13 @@ class Detection_YOLO:
             model_path (str): Path to the YOLO model file (default is 'yolov8l.pt').
         """
         try:
-            self.model = ultralytics.YOLO(model=model_path)
+            self.model = YOLO(model=model_path)
             self.yaml_path = yaml_path
-            logging.info("Initialized Detection_YOLOv8 with model path: %s and YAML path: %s", model_path, yaml_path)
+            logging.info(
+                "Initialized Detection_YOLOv8 with model path: %s and YAML path: %s",
+                model_path,
+                yaml_path,
+            )
         except Exception as e:
             logging.error("Error initializing Detection_YOLOv8: %s", e)
             raise
@@ -47,37 +52,37 @@ class Detection_YOLO:
         try:
             # Default parameters
             default_params = {
-                'data': self.yaml_path,
-                'epochs': 100,
-                'batch': 16,
-                'imgsz': 640,
-                'save': True,
-                'save_period': 1,
-                'project': None,
-                'name': "ateroesclerosis_training",
-                'pretrained': True,
-                'optimizer': 'Adam',
-                'iou': 0.7,
-                'lr0': 7.5e-05,
-                'lrf': 0.004,
-                'momentum': 0.71,
-                'weight_decay': 0.00024,
-                'warmup_epochs': 4.5,
-                'warmup_momentum': 0.83,
-                'warmup_bias_lr': 0.025,
-                'box': 9.38,
-                'cls': 0.68361,
-                'dfl': 1.69,
-                'single_cls': True,
-                'cos_lr': True,
-                'augment': False,
+                "data": self.yaml_path,
+                "epochs": 100,
+                "batch": 16,
+                "imgsz": 640,
+                "save": True,
+                "save_period": 1,
+                "project": None,
+                "name": "ateroesclerosis_training",
+                "pretrained": True,
+                "optimizer": "Adam",
+                "iou": 0.7,
+                "lr0": 7.5e-05,
+                "lrf": 0.004,
+                "momentum": 0.71,
+                "weight_decay": 0.00024,
+                "warmup_epochs": 4.5,
+                "warmup_momentum": 0.83,
+                "warmup_bias_lr": 0.025,
+                "box": 9.38,
+                "cls": 0.68361,
+                "dfl": 1.69,
+                "single_cls": True,
+                "cos_lr": True,
+                "augment": False,
                 # Additional augmentations set to 0
-                'degrees': 0.0,
-                'translate': 0.0,
-                'scale': 0.0,
-                'shear': 0.0,
-                'mosaic': 0.0,
-                'copy_paste': 0.0,
+                "degrees": 0.0,
+                "translate": 0.0,
+                "scale": 0.0,
+                "shear": 0.0,
+                "mosaic": 0.0,
+                "copy_paste": 0.0,
             }
             params = {**default_params, **hyperparameters}
             logging.info("Starting training with parameters: %s", params)
@@ -97,13 +102,42 @@ class Detection_YOLO:
         try:
             logging.info("Starting hyperparameter tuning.")
             results_tuning = self.model.tune(
-                data=self.yaml_path, epochs=100, iterations=100, save=True, plots=True, val=True,
-                name="ateroesclerosis_tuning", seed=42, single_cls=True, cos_lr=True,
-                box=7.5, cls=0.5, dfl=1.5, lr0=0.01, lrf=0.01, momentum=0.937, weight_decay=0.0005,
-                warmup_epochs=3, warmup_momentum=0.8, imgsz=640, optimizer='Adam', augment=False,
-                crop_fraction=0.0, iou=0.5, degrees=0.0, translate=0.0, scale=0.0, shear=0.0,
-                perspective=0.0, flipud=0.0, fliplr=0.0, mosaic=0.0, close_mosaic=0, mixup=0.0,
-                copy_paste=0.0, erasing=0.0
+                data=self.yaml_path,
+                epochs=100,
+                iterations=100,
+                save=True,
+                plots=True,
+                val=True,
+                name="ateroesclerosis_tuning",
+                seed=42,
+                single_cls=True,
+                cos_lr=True,
+                box=7.5,
+                cls=0.5,
+                dfl=1.5,
+                lr0=0.01,
+                lrf=0.01,
+                momentum=0.937,
+                weight_decay=0.0005,
+                warmup_epochs=3,
+                warmup_momentum=0.8,
+                imgsz=640,
+                optimizer="Adam",
+                augment=False,
+                crop_fraction=0.0,
+                iou=0.5,
+                degrees=0.0,
+                translate=0.0,
+                scale=0.0,
+                shear=0.0,
+                perspective=0.0,
+                flipud=0.0,
+                fliplr=0.0,
+                mosaic=0.0,
+                close_mosaic=0,
+                mixup=0.0,
+                copy_paste=0.0,
+                erasing=0.0,
             )
             logging.info("Tuning completed successfully.")
         except Exception as e:
@@ -122,15 +156,33 @@ class Detection_YOLO:
             results_list = []
 
             # Gather weight files, including 'last.pt' and 'best.pt'
-            weight_files = sorted([file for file in glob.glob(os.path.join(weights_folder, '*.pt')) if 'last.pt' not in file])
-            weight_files.append(os.path.join(weights_folder, 'last.pt'))
-            weight_files.insert(0, os.path.join(weights_folder, 'best.pt'))
+            weight_files = sorted(
+                [
+                    file
+                    for file in glob.glob(os.path.join(weights_folder, "*.pt"))
+                    if "last.pt" not in file
+                ]
+            )
+            weight_files.append(os.path.join(weights_folder, "last.pt"))
+            weight_files.insert(0, os.path.join(weights_folder, "best.pt"))
 
             for epoch, weight in enumerate(weight_files):
-                epoch_num = 0 if os.path.basename(weight) == 'best.pt' else 100 if os.path.basename(weight) == 'last.pt' else int(os.path.basename(weight).replace('epoch', '').replace('.pt', ''))
-                
+                epoch_num = (
+                    0
+                    if os.path.basename(weight) == "best.pt"
+                    else (
+                        100
+                        if os.path.basename(weight) == "last.pt"
+                        else int(
+                            os.path.basename(weight)
+                            .replace("epoch", "")
+                            .replace(".pt", "")
+                        )
+                    )
+                )
+
                 # Load and validate the model with the current weights
-                model_batch = ultralytics.YOLO(weight)
+                model_batch = YOLO(weight)
                 results = model_batch.val(imgsz=640, conf=0.01, plots=True)
 
                 # Collect results
@@ -139,19 +191,25 @@ class Detection_YOLO:
                 map_05_b = results.box.map50
                 map_05_95_b = results.box.map
 
-                results_list.append({
-                    "epoch": epoch_num,
-                    "weight": os.path.basename(weight),
-                    "precision": precision_b,
-                    "recall": recall_b,
-                    "map_50": map_05_b,
-                    "map_50_95": map_05_95_b
-                })
-                logging.info("Validation completed for weight: %s", os.path.basename(weight))
+                results_list.append(
+                    {
+                        "epoch": epoch_num,
+                        "weight": os.path.basename(weight),
+                        "precision": precision_b,
+                        "recall": recall_b,
+                        "map_50": map_05_b,
+                        "map_50_95": map_05_95_b,
+                    }
+                )
+                logging.info(
+                    "Validation completed for weight: %s", os.path.basename(weight)
+                )
 
             # Save validation results to a CSV file
             results_df = pd.DataFrame(results_list)
-            results_csv_path = os.path.join('./runs/detect/ateroesclerosis_training', 'validation_results.csv')
+            results_csv_path = os.path.join(
+                "./runs/detect/ateroesclerosis_training", "validation_results.csv"
+            )
             results_df.to_csv(results_csv_path, index=False)
             logging.info("Validation results saved to %s", results_csv_path)
             print("Validation results saved to 'validation_results.csv'")
@@ -171,13 +229,14 @@ def main() -> int:
         model = Detection_YOLO(model_path="", yaml_path="./config.yaml")
         model.train()
         model.val()
-        # Uncomment to run hyperparameter tuning with Simulated annealing (https://en.wikipedia.org/wiki/Simulated_annealing). 
+        # Uncomment to run hyperparameter tuning with Simulated annealing (https://en.wikipedia.org/wiki/Simulated_annealing).
         # Ultralytics doesnt really implement a GA for this tuning.
         # model.tune()
         return 0
     except Exception as e:
         logging.error("Execution error in main: %s", e)
         return 1
+
 
 if __name__ == "__main__":
     main()

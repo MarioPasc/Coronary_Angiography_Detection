@@ -1,1 +1,1 @@
-import ultralytics
+from .ultralytics import ultralytics
