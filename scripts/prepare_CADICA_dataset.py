@@ -18,7 +18,7 @@
 
 # export PYTHONPATH="${PYTHONPATH}:/home/mariopasc/Python/Projects/Coronary_Angiography_Detection"
 
-CONFIG_PATH = "./scripts/config_sobremesa.yaml"
+CONFIG_PATH = "./scripts/config.yaml"
 
 import os
 import pandas as pd

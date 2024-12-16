@@ -1,24 +1,22 @@
 model: /mnt/home/users/tic_163_uma/mpascual/fscratch/YOLO_models/yolov8l.pt
 data: ./config.yaml
-epochs: 100
+epochs: 1000
 img_size: 512
 n_trials: 100
 save_plots: true
 storage: CADICA_BHO_TPE.db
 study_name: CADICA_TPE_Sampler_no_p02050_augment
 seed: 42
-sampler: "tpe" # "cmaes", o, para el baseline "random"
+sampler: "random" # "cmaes", o, para el baseline "random"
 
 hyperparameters:
   optimizer:
     type: categorical
     choices: 
-      - SGD
       - Adam
       - AdamW
       - NAdam
       - RAdam
-      - RMSprop
   batch:
     type: categorical
     choices: [4, 8, 16, 32, 64]

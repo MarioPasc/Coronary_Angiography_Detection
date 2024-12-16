@@ -590,10 +590,10 @@ class BHOYOLO:
             model.model.to(assigned_device)  # Explicitly move model to the assigned GPU
 
             # Create the pruning callback with access to the trial object
-            pruning_callback = create_pruning_callback(trial, logger)
+            # pruning_callback = create_pruning_callback(trial, logger)
             
             # Add the custom pruning callback
-            model.add_callback("on_fit_epoch_end", pruning_callback)
+            # model.add_callback("on_fit_epoch_end", pruning_callback)
             
             # GPU usage callbacks
             on_train_epoch_start, on_train_epoch_end, on_train_end = create_gpu_monitoring_callbacks(trial, logger)
@@ -636,7 +636,7 @@ class BHOYOLO:
 
             # Access the actual batch size used
             actual_batch_size = model.trainer.batch_size
-            logger.info(f"Actual batch size used for trial {trial.number}: {actual_batch_size}")
+            logger.info(f"Batch size used for trial {trial.number}: {actual_batch_size}")
 
             # Retrieve relevant metrics after training completes
             metrics = model.metrics
@@ -662,12 +662,14 @@ class BHOYOLO:
             # Calculate execution time
             end_time = time.time()
             elapsed_time = end_time - start_time
-            logger.info(f"Trial {trial.number} completed in {elapsed_time:.2f} seconds")
+            last_epoch = model.trainer.epoch + 1 
+            logger.info(f"Trial {trial.number} completed in {elapsed_time:.2f} seconds and {last_epoch} epochs.")
 
             # Save metrics to the trial object
             trial.set_user_attr('precision', precision_b)
             trial.set_user_attr('recall', recall_b)
             trial.set_user_attr('f1_score', f1_score)
+            trial.set_user_attr('last_epoch', last_epoch)
             trial.set_user_attr('mAP50', map_50_b)
             trial.set_user_attr('mAP50-95', map_50_95)
             trial.set_user_attr('batch_size', actual_batch_size)
@@ -685,6 +687,7 @@ class BHOYOLO:
                 'precision': precision_b,
                 'recall': recall_b,
                 'f1_score': f1_score,
+                'last_epoch': last_epoch,
                 'mAP50': map_50_b,
                 'mAP50-95': map_50_95,
                 'trial_number': trial.number,
@@ -703,7 +706,7 @@ class BHOYOLO:
             logger.info(f"Trial {trial.number} completed with mAP50-95: {map_50_95}")
             
             # Only use the final F1-Score to determine if the training is good
-            trial.report(f1_score, step=self.epochs)
+            trial.report(f1_score, step=last_epoch)
             return f1_score
 
         except Exception as e:
@@ -811,7 +814,7 @@ class BHOYOLO:
             direction="maximize",
             storage=storage,
             load_if_exists=True,
-            pruner=pruner,
+            # pruner=pruner,
             sampler=sampler
         )
 

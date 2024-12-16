@@ -1,6 +1,6 @@
 DATASET_URL: "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/p9bpx9ctcv-2.zip"
-DESTINATION_FOLDER: "/home/mario/Python/Dataset/CADICA_Project"
-OUTPUT_PATH: "/home/mario/Python/Dataset/CADICA_Project"
+DESTINATION_FOLDER: "/home/mario/Python/Datasets/CADICA_Project"
+OUTPUT_PATH: "/home/mario/Python/Datasets/CADICA_Project"
 DS_NAME: "CADICA"
 DATA_CSV_NAME: "information_dataset.csv"
 LABELS:
@@ -35,4 +35,4 @@ YOLO_DATASET_FOLDER_NAME: "CADICA_Detection_YOLO"
 FIGURE_FORMATS: 
   - "png"
   - "svg"
-PAPER_RESULTS_FOLDER: "/home/mario/Python/Dataset/CADICA_Project"
+PAPER_RESULTS_FOLDER: "/home/mario/Python/Datasets/CADICA_Project"
