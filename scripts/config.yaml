@@ -35,4 +35,5 @@ YOLO_DATASET_FOLDER_NAME: "CADICA_Detection_YOLO"
 FIGURE_FORMATS: 
   - "png"
   - "svg"
+  - "pdf"
 PAPER_RESULTS_FOLDER: "/home/mario/Python/Datasets/CADICA_Project"

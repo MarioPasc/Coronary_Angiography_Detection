@@ -133,26 +133,30 @@ class NvidiaGPUUsageLogger:
 
 def create_gpu_monitoring_callbacks(trial, logger):
     """
-    Creates callbacks for monitoring and logging GPU usage, including device info.
+    Creates callbacks for monitoring GPU usage and tracking the current epoch dynamically.
     """
-    gpu_logger = NvidiaGPUUsageLogger(trial.number)
+    gpu_logger = NvidiaGPUUsageLogger(trial.number)  # Existing GPU logger
+    current_epoch = {"epoch": 0}  # Dictionary to store the current epoch count (mutable)
 
     def on_train_epoch_start(trainer):
         """Called at the start of each training epoch."""
-        gpu_logger.log_metrics(trainer.epoch + 1, trainer)
-        #logger.info(f"GPU metrics logged at epoch start for trial {trial.number}")
+        current_epoch["epoch"] += 1  # Increment the epoch counter
+        trainer.current_epoch = current_epoch["epoch"]  # Attach to the trainer object
+        logger.info(f"Epoch {current_epoch['epoch']} started for trial {trial.number}.")
+        gpu_logger.log_metrics(current_epoch["epoch"], trainer)
 
     def on_train_epoch_end(trainer):
         """Called at the end of each training epoch."""
-        gpu_logger.log_metrics(trainer.epoch + 1, trainer)
-        #logger.info(f"GPU metrics logged at epoch end for trial {trial.number}")
+        logger.info(f"Epoch {current_epoch['epoch']} ended for trial {trial.number}.")
+        gpu_logger.log_metrics(current_epoch["epoch"], trainer)
 
     def on_train_end(trainer):
         """Called when the training ends."""
-        gpu_logger.save_to_csv()
-        #logger.info(f"GPU metrics saved to CSV for trial {trial.number}")
+        logger.info(f"Training completed at epoch {current_epoch['epoch']} for trial {trial.number}.")
+        trainer.last_epoch = current_epoch["epoch"]  # Attach the last epoch
 
     return on_train_epoch_start, on_train_epoch_end, on_train_end
+
 
 
 def create_pruning_callback(trial, logger):
@@ -662,7 +666,7 @@ class BHOYOLO:
             # Calculate execution time
             end_time = time.time()
             elapsed_time = end_time - start_time
-            last_epoch = model.trainer.epoch + 1 
+            last_epoch = model.trainer.last_epoch
             logger.info(f"Trial {trial.number} completed in {elapsed_time:.2f} seconds and {last_epoch} epochs.")
 
             # Save metrics to the trial object
@@ -771,6 +775,8 @@ class BHOYOLO:
             reduction_factor=3,
             min_early_stopping_rate=0
         )
+        
+        nop_pruner = optuna.pruners.NopPruner()
 
         # Define the sampler
         if self.sampler_choice.lower() == 'cmaes':
@@ -814,7 +820,7 @@ class BHOYOLO:
             direction="maximize",
             storage=storage,
             load_if_exists=True,
-            # pruner=pruner,
+            pruner=nop_pruner,
             sampler=sampler
         )
 
