@@ -717,7 +717,7 @@ class BHOYOLO:
             # Log any other exceptions that occurred during training
             logger.error(f"An error occurred during training of trial {trial.number}: {e}")
             logger.error(traceback.format_exc())
-            raise e  # Re-raise exception to be caught by Optuna
+            return None
 
         finally:
             # Return the GPU to the pool
@@ -755,7 +755,7 @@ class BHOYOLO:
         # Get the logger
         logger = logging.getLogger("BHOYOLO")
         logger.info("Starting hyperparameter optimization.")
-
+        optuna.logging.set_verbosity(optuna.logging.DEBUG)
         logger.info(f"CUDA available?: {torch.cuda.is_available()}")
         logger.info(f"Available GPUs: {self.available_gpus}")
         # Get the name of each GPU
@@ -780,28 +780,32 @@ class BHOYOLO:
 
         # Define the sampler
         if self.sampler_choice.lower() == 'cmaes':
-            sampler = optuna.samplers.CmaEsSampler(
-                seed=self.seed,
-                n_startup_trials=40,
-                x0=None,
-                sigma0=None,
-                independent_sampler=None,
-                warn_independent_sampling=True,
-                restart_strategy='ipop',
-                popsize=100,  
-                inc_popsize=None,
-                consider_pruned_trials=False, 
-                with_margin=True, # Helps with categorical parameters
-                lr_adapt=False,
-                use_separable_cma=False,
+            
+            # Load the existing study
+            study = optuna.load_study(
+                study_name=self.study_name, 
+                storage=self.storage
             )
+
+            # Extract the source trials for warm starting
+            source_trials = study.trials  # List of completed FrozenTrial objects
+            
+            sampler = optuna.samplers.CmaEsSampler(
+                source_trials=source_trials,
+                restart_strategy='ipop',
+                popsize=20,
+                consider_pruned_trials=False,
+                independent_sampler=optuna.samplers.RandomSampler(seed=self.seed),
+                seed=self.seed
+            )
+
         elif self.sampler_choice.lower() == 'tpe':
             sampler = optuna.samplers.TPESampler(
                 consider_prior=True,
                 prior_weight=1.0,
                 consider_magic_clip=True,
                 consider_endpoints=True,
-                n_startup_trials=40,
+                n_startup_trials=0,
                 n_ei_candidates=100,
                 multivariate=True,
                 group=True,
