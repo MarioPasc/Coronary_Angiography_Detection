@@ -184,12 +184,19 @@ def run_validation_on_labels(labels: List[str], output_base_dir: str, model_path
 
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn')
-    CONFIG_PATH = "./config.yaml"
+    CONFIG_PATH = "./scripts/config.yaml"
     CONFIG = load_config(CONFIG_PATH)
 
     # Define paths
-    output_base_dir = "/home/mariopasc/Python/Results/Coronariografias/patient-based/TPE_Sampler/First_200_trials_YOLOv8/test"  
-    models = [os.path.join("/home/mariopasc/Python/Results/Coronariografias/patient-based/TPE_Sampler/First_200_trials_YOLOv8/runs/trial_144_training/weights",  "best.pt")]  
+    output_base_dir = "/home/mario/Python/Results/Coronariografias/patient-based/"  
+    models = [
+        os.path.join(output_base_dir, "TPE", "detect", "trial_121_training", "weights", "best.pt"),
+        os.path.join(output_base_dir, "CMAES", "detect", "trial_131_training", "weights", "best.pt"),
+        os.path.join(output_base_dir, "RandomSamplerBaseline", "detect", "trial_22_training", "weights", "best.pt"),
+        os.path.join(output_base_dir, "Baseline", "weights", "best.pt")
+    ]
+    
+    model_names = ["TPE", "CMAES", "RANDOM", "BASELINE"]
 
     # Define path to YOLO dataset
     path_to_YOLO_dataset = os.path.join(CONFIG['OUTPUT_PATH'], CONFIG["YOLO_DATASET_FOLDER_NAME"])
@@ -207,12 +214,13 @@ if __name__ == "__main__":
     # Create config files for each label
     create_config_files(labels, output_base_dir)
 
+    idx = 0
     for model in models:
         # Run validation on each label-specific dataset
         df_results = run_validation_on_labels(labels, output_base_dir, model)
-
+        
         # Save results to CSV
-        model_name = os.path.basename(model).strip('.pt')
+        model_name = model_names[idx]
         results_csv_path = os.path.join(output_base_dir, f'test_label_model_{model_name}.csv')
         df_results.to_csv(results_csv_path, index=False)
         logging.info(f"Validation results saved to {results_csv_path}")
