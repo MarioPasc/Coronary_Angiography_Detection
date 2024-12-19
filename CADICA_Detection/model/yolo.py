@@ -3,6 +3,7 @@
 # to compute predictions on the validation set, allowing us to make an honest hyperparameter optimization.
 
 from CADICA_Detection.external.ultralytics.ultralytics import YOLO
+#from ultralytics import YOLO
 import os
 import glob
 import pandas as pd
@@ -100,46 +101,64 @@ class Detection_YOLO:
             Exception: If tuning fails due to model configuration or other issues.
         """
         try:
+            
+            search_space = {
+                "lr0": (0.00001, 0.005),
+                "lrf": (0.00001, 0.005),
+                "momentum": (0.65, 0.99),
+                "weight_decay": (0.00001, 0.01),
+                "warmup_epochs": (2, 10),
+                "warmup_momentum": (0.75, 0.99),
+                "box": (6.0, 9.0),
+                "cls": (0.3, 0.9),
+                "dfl": (0.5, 3.5),
+                # These augment hyperparameters are off
+                "hsv_h": (0.0, 0.0),
+                "hsv_s": (0.0, 0.0),
+                "hsv_v": (0.0, 0.0),
+                "degrees": (0.0, 0.0),
+                "translate": (0.0, 0.0),
+                "scale": (0.0, 0.0),
+                "shear": (0.0, 0.0),
+                "perspective": (0.0, 0.0),
+                "flipud": (0.0, 0.0),
+                "fliplr": (0.0, 0.0),
+                "mosaic": (0.0, 0.0),
+                "mixup": (0.0, 0.0),
+                "copy_paste": (0.0, 0.0),
+            }
+            
             logging.info("Starting hyperparameter tuning.")
+            
+            # Custom callback to log hyperparameters and fitness
+            def log_tuning_results(trainer):
+                f1_score = trainer.metrics.get("fitness", 0.0)  # Retrieve fitness (e.g., F1-Score)
+                hyperparams = trainer.args
+                logging.info(f"Hyperparameters: {hyperparams}, Fitness (F1-Score): {f1_score}")
+
+            # Register the callback
+            self.model.add_callback("on_fit_epoch_end", log_tuning_results)
+            
             results_tuning = self.model.tune(
                 data=self.yaml_path,
-                epochs=100,
+                epochs=1000,
+                patience=10,
                 iterations=100,
+                iou=0.5,
+                seed=3012022,
+                single_cls=True,
+                cos_lr=False,
+                imgsz=512,
+                optimizer="Adam",
+                augment=False,
                 save=True,
                 plots=True,
                 val=True,
-                name="ateroesclerosis_tuning",
-                seed=42,
-                single_cls=True,
-                cos_lr=True,
-                box=7.5,
-                cls=0.5,
-                dfl=1.5,
-                lr0=0.01,
-                lrf=0.01,
-                momentum=0.937,
-                weight_decay=0.0005,
-                warmup_epochs=3,
-                warmup_momentum=0.8,
-                imgsz=640,
-                optimizer="Adam",
-                augment=False,
-                crop_fraction=0.0,
-                iou=0.5,
-                degrees=0.0,
-                translate=0.0,
-                scale=0.0,
-                shear=0.0,
-                perspective=0.0,
-                flipud=0.0,
-                fliplr=0.0,
-                mosaic=0.0,
-                close_mosaic=0,
-                mixup=0.0,
-                copy_paste=0.0,
-                erasing=0.0,
+                name="simulated_annealing",
+                space=search_space
             )
             logging.info("Tuning completed successfully.")
+
         except Exception as e:
             logging.error("Tuning error: %s", e)
             raise
@@ -226,12 +245,12 @@ def main() -> int:
         int: Exit code, 0 for success.
     """
     try:
-        model = Detection_YOLO(model_path="", yaml_path="./config.yaml")
-        model.train()
-        model.val()
+        model = Detection_YOLO(model_path="/mnt/home/users/tic_163_uma/mpascual/fscratch/YOLO_models/yolov8l.pt", yaml_path="./config.yaml")
+        #model.train()
+        #model.val()
         # Uncomment to run hyperparameter tuning with Simulated annealing (https://en.wikipedia.org/wiki/Simulated_annealing).
         # Ultralytics doesnt really implement a GA for this tuning.
-        # model.tune()
+        model.tune()
         return 0
     except Exception as e:
         logging.error("Execution error in main: %s", e)
