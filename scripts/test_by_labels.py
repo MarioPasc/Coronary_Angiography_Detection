@@ -12,22 +12,27 @@ from CADICA_Detection.external.ultralytics.ultralytics import YOLO
 import torch.multiprocessing
 
 # Set up logging
-os.makedirs('./logs', exist_ok=True)
-logging.basicConfig(filename='./logs/test_by_labels.log', level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+os.makedirs("./logs", exist_ok=True)
+logging.basicConfig(
+    filename="./logs/test_by_labels.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 logging.info("Starting test by labels.")
+
 
 def load_config(yaml_path: str) -> dict:
     """
     Loads configuration parameters from a YAML file into a dictionary.
     """
     try:
-        with open(yaml_path, 'r') as file:
+        with open(yaml_path, "r") as file:
             config = yaml.safe_load(file)
         return config
     except Exception as e:
         logging.error(f"Error loading config.yaml file: {e}")
         raise e
+
 
 def load_csv_files(config: dict) -> Dict[str, pd.DataFrame]:
     """
@@ -36,23 +41,32 @@ def load_csv_files(config: dict) -> Dict[str, pd.DataFrame]:
     Returns:
         dict: A dictionary containing DataFrames for each split.
     """
-    csv_dir = os.path.join(config['OUTPUT_PATH'], 'CADICA_Holdout_Info')  # Path to the CSV files
-    splits = ['train', 'val', 'test']
+    csv_dir = os.path.join(
+        config["OUTPUT_PATH"], "CADICA_Holdout_Info"
+    )  # Path to the CSV files
+    splits = ["train", "val", "test"]
     data_frames = {}
 
     for split in splits:
-        csv_path = os.path.join(csv_dir, f'{split}.csv')
+        csv_path = os.path.join(csv_dir, f"{split}.csv")
         if os.path.exists(csv_path):
             df = pd.read_csv(csv_path)
             data_frames[split] = df
             logging.info(f"Loaded {split} CSV with {len(df)} entries.")
         else:
             logging.error(f"CSV file for {split} split not found at {csv_path}")
-            raise FileNotFoundError(f"CSV file for {split} split not found at {csv_path}")
+            raise FileNotFoundError(
+                f"CSV file for {split} split not found at {csv_path}"
+            )
 
     return data_frames
 
-def create_label_datasets(data_frames: Dict[str, pd.DataFrame], output_base_dir: str, path_to_YOLO_dataset: str) -> List[str]:
+
+def create_label_datasets(
+    data_frames: Dict[str, pd.DataFrame],
+    output_base_dir: str,
+    path_to_YOLO_dataset: str,
+) -> List[str]:
     """
     Creates label-specific datasets in YOLO format.
 
@@ -66,68 +80,56 @@ def create_label_datasets(data_frames: Dict[str, pd.DataFrame], output_base_dir:
     """
     labels = set()
     for df in data_frames.values():
-        labels.update(df['LesionLabel'].unique())
+        for label_list in df["LesionLabel"]:
+            # Split multi-labels and add them to the label set
+            split_labels = label_list.split(",")  # Assuming comma-separated
+            labels.update(split_labels)
 
     labels = list(labels)
     logging.info(f"Unique labels found: {labels}")
 
     for label in labels:
-        label_dir = os.path.join(output_base_dir, f'CADICA_{label}')
-        images_dir = os.path.join(label_dir, 'images')
-        labels_dir = os.path.join(label_dir, 'labels')
+        label_dir = os.path.join(output_base_dir, f"CADICA_{label}")
+        images_dir = os.path.join(label_dir, "images")
+        labels_dir = os.path.join(label_dir, "labels")
         os.makedirs(images_dir, exist_ok=True)
         os.makedirs(labels_dir, exist_ok=True)
 
-        for split in ['train', 'val', 'test']:
-            split_images_dir = os.path.join(label_dir, 'images', split)
-            split_labels_dir = os.path.join(label_dir, 'labels', split)
+        for split in ["train", "val", "test"]:
+            split_images_dir = os.path.join(label_dir, "images", split)
+            split_labels_dir = os.path.join(label_dir, "labels", split)
             os.makedirs(split_images_dir, exist_ok=True)
             os.makedirs(split_labels_dir, exist_ok=True)
 
             df_split = data_frames.get(split, pd.DataFrame())
-            df_label = df_split[df_split['LesionLabel'] == label]
-            logging.info(f"Processing {len(df_label)} images for label '{label}' in split '{split}'.")
 
-            for idx, row in df_label.iterrows():
-                frame_path = row['Frame_path']
-                filename = os.path.basename(frame_path)  # e.g., 'p1_v2_00015.png'
+            # Iterate through rows and duplicate image per corresponding label
+            for _, row in df_split.iterrows():
+                frame_path = row["Frame_path"]
+                filename = os.path.basename(frame_path)
 
-                # Construct paths to image and label in the YOLO dataset
-                image_src = os.path.join(path_to_YOLO_dataset, 'images', split, filename)
-                label_filename = os.path.splitext(filename)[0] + '.txt'
-                label_src = os.path.join(path_to_YOLO_dataset, 'labels', split, label_filename)
+                split_labels = row["LesionLabel"].split(",")
+                if label in split_labels:
+                    # Image Source and Destination Paths
+                    image_src = os.path.join(
+                        path_to_YOLO_dataset, "images", split, filename
+                    )
+                    label_filename = os.path.splitext(filename)[0] + ".txt"
+                    label_src = os.path.join(
+                        path_to_YOLO_dataset, "labels", split, label_filename
+                    )
 
-                # Destination paths
-                image_dst = os.path.join(split_images_dir, filename)
-                label_dst = os.path.join(split_labels_dir, label_filename)
+                    image_dst = os.path.join(split_images_dir, filename)
+                    label_dst = os.path.join(split_labels_dir, label_filename)
 
-                # Create symlink or copy the image
-                if os.path.exists(image_src):
-                    if not os.path.exists(image_dst):
-                        try:
-                            os.symlink(image_src, image_dst)
-                        except Exception as e:
-                            logging.error(f"Failed to create symlink for image {image_src} to {image_dst}: {e}")
-
-                if label.lower() == 'nolesion':
-                    # For 'nolesion', create an empty label file if it doesn't exist
-                    if not os.path.exists(label_dst):
-                        try:
-                            with open(label_dst, 'w') as f:
-                                pass  # Create an empty file
-                            logging.info(f"Created empty label file for 'nolesion' at {label_dst}")
-                        except Exception as e:
-                            logging.error(f"Failed to create empty label file at {label_dst}: {e}")
-                else:
-                    # Copy or symlink the label file
-                    if os.path.exists(label_src):
-                        if not os.path.exists(label_dst):
-                            try:
-                                os.symlink(label_src, label_dst)
-                            except Exception as e:
-                                logging.error(f"Failed to create symlink for label {label_src} to {label_dst}: {e}")
+                    # Symlink or Copy Images and Labels
+                    if os.path.exists(image_src) and not os.path.exists(image_dst):
+                        os.symlink(image_src, image_dst)
+                    if os.path.exists(label_src) and not os.path.exists(label_dst):
+                        os.symlink(label_src, label_dst)
 
     return labels
+
 
 def create_config_files(labels: List[str], output_base_dir: str) -> None:
     """
@@ -139,18 +141,21 @@ def create_config_files(labels: List[str], output_base_dir: str) -> None:
     """
     for label in labels:
         config = {
-            'path': os.path.join(output_base_dir, f'CADICA_{label}'),
-            'train': 'images/train',
-            'val': 'images/val',
-            'test': 'images/test',
-            'names': {0: label}
+            "path": os.path.join(output_base_dir, f"CADICA_{label}"),
+            "train": "images/train",
+            "val": "images/val",
+            "test": "images/test",
+            "names": {0: label},
         }
-        config_path = os.path.join(output_base_dir, f'config_{label}.yaml')
-        with open(config_path, 'w') as file:
+        config_path = os.path.join(output_base_dir, f"config_{label}.yaml")
+        with open(config_path, "w") as file:
             yaml.dump(config, file)
         logging.info(f"Created config file for label '{label}' at {config_path}")
 
-def run_validation_on_labels(labels: List[str], output_base_dir: str, model_path: str) -> pd.DataFrame:
+
+def run_validation_on_labels(
+    labels: List[str], output_base_dir: str, model_path: str
+) -> pd.DataFrame:
     """
     Runs validation on each label-specific dataset and collects results for each split (train, val, test).
 
@@ -163,47 +168,78 @@ def run_validation_on_labels(labels: List[str], output_base_dir: str, model_path
         pd.DataFrame: DataFrame containing validation results for each label and split.
     """
     results = []
-    splits = ['train', 'val', 'test']
+    splits = ["train", "val", "test"]
     for label in labels:
         logging.info(f"Validating model on label '{label}' dataset.")
-        config_path = os.path.join(output_base_dir, f'config_{label}.yaml')
+        config_path = os.path.join(output_base_dir, f"config_{label}.yaml")
         model = YOLO(model=model_path, task="detect", verbose=True)
 
-        label_results = {'Label': label}
+        label_results = {"Label": label}
         for split in splits:
             logging.info(f"Validating on split '{split}' for label '{label}'.")
             # Run validation
-            val = model.val(data=config_path, imgsz=640, batch=8, iou=0.6, plots=False, split=split, workers=0)
+            val = model.val(
+                data=config_path,
+                imgsz=512,
+                batch=16,
+                iou=0.5,
+                plots=False,
+                split=split,
+                workers=0,
+            )
             # Collect results
-            label_results[f'{split}/mAP50'] = val.box.map50
-            label_results[f'{split}/mAP50-95'] = val.box.map
+            label_results[f"{split}/precision"] = val.box.mp
+            label_results[f"{split}/recall"] = val.box.mr
+            label_results[f"{split}/mAP50"] = val.box.map50
+            label_results[f"{split}/mAP50-95"] = val.box.map
         results.append(label_results)
 
     df_results = pd.DataFrame(results)
     return df_results
 
+
 if __name__ == "__main__":
-    torch.multiprocessing.set_start_method('spawn')
-    CONFIG_PATH = "./scripts/config.yaml"
+    torch.multiprocessing.set_start_method("spawn")
+    CONFIG_PATH = "./scripts/config_sobremesa.yaml"
     CONFIG = load_config(CONFIG_PATH)
 
     # Define paths
-    output_base_dir = "/home/mario/Python/Results/Coronariografias/patient-based/"  
+    output_base_dir = "/home/mariopasc/Python/Results/Coronariografias/patient-based"
     models = [
-        os.path.join(output_base_dir, "TPE", "detect", "trial_121_training", "weights", "best.pt"),
-        os.path.join(output_base_dir, "CMAES", "detect", "trial_131_training", "weights", "best.pt"),
-        os.path.join(output_base_dir, "RandomSamplerBaseline", "detect", "trial_22_training", "weights", "best.pt"),
-        os.path.join(output_base_dir, "Baseline", "weights", "best.pt")
+        os.path.join(
+            output_base_dir, "TPE", "detect", "trial_121_training", "weights", "best.pt"
+        ),
+        os.path.join(
+            output_base_dir,
+            "CMAES",
+            "detect",
+            "trial_131_training",
+            "weights",
+            "best.pt",
+        ),
+        os.path.join(
+            output_base_dir,
+            "RandomSamplerBaseline",
+            "detect",
+            "trial_22_training",
+            "weights",
+            "best.pt",
+        ),
+        os.path.join(output_base_dir, "Baseline", "weights", "best.pt"),
     ]
-    
+
     model_names = ["TPE", "CMAES", "RANDOM", "BASELINE"]
 
     # Define path to YOLO dataset
-    path_to_YOLO_dataset = os.path.join(CONFIG['OUTPUT_PATH'], CONFIG["YOLO_DATASET_FOLDER_NAME"])
+    path_to_YOLO_dataset = os.path.join(
+        CONFIG["OUTPUT_PATH"], CONFIG["YOLO_DATASET_FOLDER_NAME"]
+    )
 
     if not os.path.exists(path_to_YOLO_dataset):
         logging.error(f"Path to YOLO Dataset not found at {path_to_YOLO_dataset}")
-        raise FileNotFoundError(f"Path to YOLO Dataset not found at {path_to_YOLO_dataset}")
+        raise FileNotFoundError(
+            f"Path to YOLO Dataset not found at {path_to_YOLO_dataset}"
+        )
 
     # Load CSV files
     data_frames = load_csv_files(CONFIG)
@@ -218,9 +254,12 @@ if __name__ == "__main__":
     for model in models:
         # Run validation on each label-specific dataset
         df_results = run_validation_on_labels(labels, output_base_dir, model)
-        
+
         # Save results to CSV
         model_name = model_names[idx]
-        results_csv_path = os.path.join(output_base_dir, f'test_label_model_{model_name}.csv')
+        results_csv_path = os.path.join(
+            output_base_dir, f"test_label_model_{model_name}.csv"
+        )
         df_results.to_csv(results_csv_path, index=False)
         logging.info(f"Validation results saved to {results_csv_path}")
+        idx += 1
