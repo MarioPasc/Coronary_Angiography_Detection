@@ -1,12 +1,14 @@
 import os
 import pandas as pd
-from sklearn.model_selection import KFold
+from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 import logging
 from typing import List, Dict
-from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 import ast
-from CADICA_Detection.dataset.augmentation import Augmentor
-
+import cv2
+import random
+from tqdm import tqdm
+import shutil
+from scipy.ndimage import gaussian_filter
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -110,9 +112,49 @@ def prepare_multilabel_data(df: pd.DataFrame) -> pd.DataFrame:
 
     return label_matrix.reset_index().rename(columns={'index': 'Patient'})
 
-def save_multilabel_folds(df: pd.DataFrame, label_matrix: pd.DataFrame, output_dir: str, n_splits: int, internal_folds: int, seed: int):
+def generate_augmented_images(df: pd.DataFrame, output_dir: str, images_per_patient: int, seed: int = 42):
     """
-    Create external and internal folds using MultilabelStratifiedKFold and save splits.
+    Generate augmented images per patient.
+    Args:
+        df: DataFrame containing image paths and labels.
+        output_dir: Directory to save augmented images.
+        images_per_patient: Number of augmented images per patient.
+        seed: Random seed for reproducibility.
+    """
+    random.seed(seed)
+    os.makedirs(output_dir, exist_ok=True)
+
+    def random_augmentation(img):
+        """Apply random augmentation to an image."""
+        transformations = [
+            lambda x: cv2.addWeighted(x, 1.5, x, 0, -30),  # Increase contrast
+            lambda x: cv2.GaussianBlur(x, (5, 5), 0),      # Apply Gaussian blur
+            lambda x: cv2.flip(x, 1),                     # Horizontal flip
+            lambda x: cv2.add(x, random.randint(-30, 30))  # Random brightness
+        ]
+        return random.choice(transformations)(img)
+
+    for patient in df['Patient'].unique():
+        patient_dir = os.path.join(output_dir, patient)
+        os.makedirs(patient_dir, exist_ok=True)
+        patient_df = df[df['Patient'] == patient]
+
+        for idx, row in tqdm(patient_df.iterrows(), total=images_per_patient, desc=f"Augmenting images for {patient}"):
+            img_path = row['Frame_path']
+            if not os.path.exists(img_path):
+                continue
+            img = cv2.imread(img_path)
+            for i in range(images_per_patient):
+                augmented_img = random_augmentation(img)
+                new_img_name = f"{os.path.basename(img_path).replace('.png', f'_aug{i}.png')}"
+                new_img_path = os.path.join(patient_dir, new_img_name)
+                cv2.imwrite(new_img_path, augmented_img)
+
+    logging.info(f"Generated augmented images in {output_dir}")
+
+def save_multilabel_folds_with_augmentation(df: pd.DataFrame, label_matrix: pd.DataFrame, output_dir: str, n_splits: int, internal_folds: int, seed: int, augmentation_dir: str):
+    """
+    Create external and internal folds using MultilabelStratifiedKFold, add augmented images, and save splits.
     Args:
         df: Original DataFrame.
         label_matrix: Multilabel binary matrix for patients.
@@ -120,6 +162,7 @@ def save_multilabel_folds(df: pd.DataFrame, label_matrix: pd.DataFrame, output_d
         n_splits: Number of external folds.
         internal_folds: Number of internal folds for train/val split.
         seed: Random seed.
+        augmentation_dir: Directory containing augmented images.
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -135,30 +178,20 @@ def save_multilabel_folds(df: pd.DataFrame, label_matrix: pd.DataFrame, output_d
         test_df = df[df['Patient'].isin(test_patients)]
         train_val_df = df[df['Patient'].isin(train_val_patients)]
 
+        # Add augmented images for train_val patients
+        augmented_data = []
+        for patient in train_val_patients:
+            patient_aug_dir = os.path.join(augmentation_dir, patient)
+            if os.path.exists(patient_aug_dir):
+                for img_name in os.listdir(patient_aug_dir):
+                    augmented_data.append({'Patient': patient, 'Frame_path': os.path.join(patient_aug_dir, img_name), 'LesionLabel': ['augmented']})
+        augmented_df = pd.DataFrame(augmented_data)
+        train_val_df = pd.concat([train_val_df, augmented_df], ignore_index=True)
+
+        # Save splits
         test_df.to_csv(os.path.join(fold_dir, "test.csv"), index=False)
         train_val_df.to_csv(os.path.join(fold_dir, "train_val.csv"), index=False)
         logging.info(f"Saved Fold {fold_idx + 1}: Test patients count: {len(test_patients)}")
-
-        # Internal folds
-        internal_dir = os.path.join(fold_dir, "internal_folds")
-        os.makedirs(internal_dir, exist_ok=True)
-
-        internal_mskf = MultilabelStratifiedKFold(n_splits=internal_folds, random_state=seed, shuffle=True)
-        train_val_labels = label_matrix[label_matrix['Patient'].isin(train_val_patients)]
-        
-        for internal_idx, (train_idx, val_idx) in enumerate(internal_mskf.split(train_val_labels['Patient'], train_val_labels.drop(columns=['Patient']))):
-            internal_fold_dir = os.path.join(internal_dir, f"internal_fold_{internal_idx + 1}")
-            os.makedirs(internal_fold_dir, exist_ok=True)
-
-            train_patients = train_val_labels.iloc[train_idx]['Patient'].tolist()
-            val_patients = train_val_labels.iloc[val_idx]['Patient'].tolist()
-
-            train_df = df[df['Patient'].isin(train_patients)]
-            val_df = df[df['Patient'].isin(val_patients)]
-
-            train_df.to_csv(os.path.join(internal_fold_dir, "train.csv"), index=False)
-            val_df.to_csv(os.path.join(internal_fold_dir, "val.csv"), index=False)
-            logging.info(f"Saved Internal Fold {internal_idx + 1} for Fold {fold_idx + 1}")
 
 ##########################
 #    INTEGRITY CHECKS    #
@@ -243,20 +276,27 @@ if __name__ == "__main__":
     LABELS = ["p100", "p99", "p90_98", "p70_90", "p50_70"]  # Labels to check
     LABELS_TO_REMOVE = ["p0_20", "p20_50"]  # Labels to remove
     INTERNAL_FOLDS = 3
+    AUGMENTATION_DIR = "./augmented_images"  # Directory to save augmented images
+    IMAGES_PER_PATIENT = 30  # Number of augmented images per patient
     
     # Load and preprocess data
     df = load_data(CSV_PATH)
+    df = clean_labels(df)
     logging.info(f"Loaded dataset CSV with {len(df)} samples.")
     df = run_filterByLabels(df, LABELS_TO_REMOVE)
     logging.info(f"Filtered dataset has {len(df)} samples after removing labels: {LABELS_TO_REMOVE}")
+
+    # Generate augmented images
+    generate_augmented_images(df, AUGMENTATION_DIR, IMAGES_PER_PATIENT, SEED)
 
     # Prepare multilabel data
     label_matrix = prepare_multilabel_data(df)
     logging.info("Created patient-label binary matrix for stratified splitting.")
 
-    # Save folds
-    save_multilabel_folds(df, label_matrix, OUTPUT_DIR, EXTERNAL_FOLDS, INTERNAL_FOLDS, SEED)
-    logging.info("Saved all external and internal folds using MultilabelStratifiedKFold.")
+    # Save folds with augmentation
+    save_multilabel_folds_with_augmentation(df, label_matrix, OUTPUT_DIR, EXTERNAL_FOLDS, INTERNAL_FOLDS, SEED, AUGMENTATION_DIR)
+    logging.info("Saved all external and internal folds with augmented data.")
+
     
     # Run integrity check
     integrity_check_patients(OUTPUT_DIR)
