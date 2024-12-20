@@ -187,7 +187,7 @@ def run_validation_on_labels(
                 split=split,
                 workers=0,
                 half=True,
-                device="cuda:1"
+                device="cuda:0",
             )
             torch.cuda.empty_cache()
             # Collect results
@@ -208,6 +208,7 @@ if __name__ == "__main__":
 
     # Define paths
     output_base_dir = "/home/mariopasc/Python/Results/Coronariografias/patient-based"
+    """
     models = [
         os.path.join(
             output_base_dir, "TPE", "detect", "trial_121_training", "weights", "best.pt"
@@ -229,9 +230,29 @@ if __name__ == "__main__":
             "best.pt",
         ),
         os.path.join(output_base_dir, "Baseline", "weights", "best.pt"),
+        os.path.join(
+            output_base_dir,
+            "SIMULATED_ANNEALING",
+            "simulated_annealing33",
+            "weights",
+            "best.pt",
+        ),
     ]
 
-    model_names = ["TPE", "CMAES", "RANDOM", "BASELINE"]
+    model_names = ["TPE", "CMAES", "RANDOM", "BASELINE", "SIMULATED ANNEALING"]
+    """
+
+    models = [
+        os.path.join(
+            output_base_dir,
+            "SIMULATED_ANNEALING",
+            "simulated_annealing33",
+            "weights",
+            "best.pt",
+        )
+    ]
+
+    model_names = ["SIMULATED ANNEALING"]
 
     # Define path to YOLO dataset
     path_to_YOLO_dataset = os.path.join(

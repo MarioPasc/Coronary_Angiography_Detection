@@ -1,14 +1,24 @@
-# Paths
-YOLO_CONFIG_PATH: "/path/to/yolo_model_config.yaml"   # Path to YOLO config file
-YOLO_MODEL_PATH: "/path/to/best.pt"                  # Path to YOLO model weights
-HYPERPARAMS_PATH: "/path/to/hyperparameters.yaml"    # Path to hyperparameters YAML file
+# General Paths
+ORIGINAL_INFORMATION_DATASET_CSV_PATH: "/home/mariopasc/Python/Datasets/CADICA_Project/information_dataset.csv"
+PROCESSED_DIR: "/home/mariopasc/Python/Datasets/CADICA_Project/Processed_CADICA_Kfold"
+SPLITS_CSV_DIR: "/home/mariopasc/Python/Datasets/CADICA_Project/double_cv_splits"
 
-# Cross-validation settings
-EXTERNAL_FOLDS: 5                                    # Number of external folds
-INTERNAL_FOLDS: 3                                    # Number of internal folds for hyperparameter tuning
-SEED: 42                                             # Random seed for reproducibility
+# K-Fold Settings
+SEED: 3012022
+EXTERNAL_FOLDS: 5
+INTERNAL_FOLDS: 1
 
-# Output settings
-OUTPUT_RESULTS_PATH: "/path/to/results/output.csv"   # Path to save evaluation CSV
-OUTPUT_FIGURES_PATH: "/path/to/figures/"             # Directory to save figures
-LOGS_PATH: "/path/to/logs/"                          # Directory for logging outputs
+# Class Mappings
+CLASS_MAPPINGS:
+  p0_20: 0
+  p20_50: 0
+  p50_70: 0
+  p70_90: 0
+  p90_98: 0
+  p99: 0
+  p100: 0
+LABELS_TO_REMOVE: ["p0_20", "p20_50"]
+
+# YOLO Splits
+OUTPUT_YOLO_DIR: "/home/mariopasc/Python/Datasets/CADICA_Project/YOLO_Splits"
+SYMBOLIC_LINKS: False  # Set to True for symbolic links, False to copy files
