@@ -186,7 +186,10 @@ def run_validation_on_labels(
                 plots=False,
                 split=split,
                 workers=0,
+                half=True,
+                device="cuda:1"
             )
+            torch.cuda.empty_cache()
             # Collect results
             label_results[f"{split}/precision"] = val.box.mp
             label_results[f"{split}/recall"] = val.box.mr

@@ -1,0 +1,14 @@
+# Paths
+YOLO_CONFIG_PATH: "/path/to/yolo_model_config.yaml"   # Path to YOLO config file
+YOLO_MODEL_PATH: "/path/to/best.pt"                  # Path to YOLO model weights
+HYPERPARAMS_PATH: "/path/to/hyperparameters.yaml"    # Path to hyperparameters YAML file
+
+# Cross-validation settings
+EXTERNAL_FOLDS: 5                                    # Number of external folds
+INTERNAL_FOLDS: 3                                    # Number of internal folds for hyperparameter tuning
+SEED: 42                                             # Random seed for reproducibility
+
+# Output settings
+OUTPUT_RESULTS_PATH: "/path/to/results/output.csv"   # Path to save evaluation CSV
+OUTPUT_FIGURES_PATH: "/path/to/figures/"             # Directory to save figures
+LOGS_PATH: "/path/to/logs/"                          # Directory for logging outputs
