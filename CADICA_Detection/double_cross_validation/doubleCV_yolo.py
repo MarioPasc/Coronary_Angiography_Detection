@@ -4,12 +4,10 @@ from CADICA_Detection.external.ultralytics.ultralytics import YOLO
 from pathlib import Path
 from typing import Dict
 
-
 def load_config(config_path: str):
     """Load configuration from YAML."""
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
-
 
 class Detection_YOLO:
     """
@@ -48,7 +46,6 @@ class Detection_YOLO:
         except Exception as e:
             print(f"Training error for {self.yaml_path}: {e}")
 
-
 def main():
     fold_configs_dir = "/home/mariopasc/Python/Datasets/CADICA_Project/YOLO_Splits"
     model_path = "yolov8l.pt"  # Fixed model path
@@ -66,17 +63,25 @@ def main():
     for config_file in sorted(os.listdir(fold_configs_dir)):
         config_path = Path(fold_configs_dir) / config_file
 
+        # Parse fold name from the config filename
+        fold_name_parts = Path(config_file).stem.split("_")
+        if len(fold_name_parts) == 4:  # Expected format: outer_X_inner_X
+            outer_fold = fold_name_parts[1]
+            inner_fold = fold_name_parts[3]
+            unique_name = f"outer_{outer_fold}_inner_{inner_fold}"
+        else:
+            unique_name = Path(config_file).stem  # Fallback in case of unexpected naming
+
         # Initialize Detection_YOLO with the current config
         detection_yolo = Detection_YOLO(
             yaml_path=str(config_path), model_path=model_path
         )
 
-        # Generate a unique name for the run
-        hyperparameters["name"] = Path(config_file).stem
+        # Assign the unique name for this run
+        hyperparameters["name"] = unique_name
 
-        print(f"Training with config: {config_path} on device: {device}")
+        print(f"Training with config: {config_path} on device: {device} with name: {unique_name}")
         detection_yolo.train(hyperparameters, device=device)
-
 
 if __name__ == "__main__":
     main()

@@ -778,34 +778,31 @@ class BHOYOLO:
         
         nop_pruner = optuna.pruners.NopPruner()
 
-        # Define the sampler
-        if self.sampler_choice.lower() == 'cmaes':
-            
-            # Load the existing study
-            study = optuna.load_study(
-                study_name=self.study_name, 
-                storage=self.storage
-            )
+        startup_trials: int = 50
 
-            # Extract the source trials for warm starting
-            source_trials = study.trials  # List of completed FrozenTrial objects
-            
-            sampler = optuna.samplers.CmaEsSampler(
-                source_trials=source_trials,
-                restart_strategy='ipop',
-                popsize=20,
-                consider_pruned_trials=False,
+        if self.sampler_choice.lower() == 'gpsampler':
+            sampler = optuna.samplers.GPSampler(
+                seed=self.seed,
                 independent_sampler=optuna.samplers.RandomSampler(seed=self.seed),
-                seed=self.seed
+                n_startup_trials=startup_trials,
+                deterministic_objective=False
             )
-
+        elif self.sampler_choice.lower() == 'qmcsampler':
+            sampler = optuna.samplers.QMCSampler(
+                qmc_type='sobol',
+                scramble=True,  # Set True for scrambling, False otherwise
+                seed=self.seed,
+                independent_sampler=optuna.samplers.RandomSampler(seed=self.seed),
+                warn_asynchronous_seeding=True,
+                warn_independent_sampling=True
+            )
         elif self.sampler_choice.lower() == 'tpe':
             sampler = optuna.samplers.TPESampler(
                 consider_prior=True,
                 prior_weight=1.0,
                 consider_magic_clip=True,
                 consider_endpoints=True,
-                n_startup_trials=0,
+                n_startup_trials=startup_trials,
                 n_ei_candidates=100,
                 multivariate=True,
                 group=True,
@@ -816,8 +813,7 @@ class BHOYOLO:
         elif self.sampler_choice.lower() == 'random':
             sampler = optuna.samplers.RandomSampler(seed=self.seed)
         else:
-            raise ValueError(f"Sampler '{self.sampler_choice}' no reconocido. Usa 'tpe' o 'cmaes'.")
-
+            raise ValueError(f"Sampler '{self.sampler_choice}' not recognized. Use 'gpsampler', 'qmcsampler', 'tpe', or 'random'.")
 
         study = optuna.create_study(
             study_name=self.study_name,
@@ -828,7 +824,7 @@ class BHOYOLO:
             sampler=sampler
         )
 
-        n_initial_trials: int = 0
+        n_initial_trials: int = 1
         self.n_initial_trials = n_initial_trials
         n_parallel_trials: int = self.n_trials - n_initial_trials
 
