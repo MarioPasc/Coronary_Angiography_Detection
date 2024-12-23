@@ -658,8 +658,8 @@ def main():
     print("Plotting training comparison")
     
     baseline_entry = {
-        "BASELINE": {
-            "best_trial": os.path.join(base_path, "Baseline", "results.csv"),
+        "Baseline": {
+            "best_trial": os.path.join(base_path, "BASELINE", "results.csv"),
             "color": colors.get("BASELINE"),
         }
     }   
