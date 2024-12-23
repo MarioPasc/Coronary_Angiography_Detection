@@ -24,6 +24,9 @@ from natsort import natsorted
 import yaml
 import cv2
 import numpy as np
+from sklearn.preprocessing import LabelEncoder
+from scipy.ndimage import gaussian_filter1d
+
 import matplotlib.pyplot as plt
 import scienceplots
 
@@ -303,695 +306,374 @@ def processed_dataset_visualization():
     except Exception as e:
         logging.error(f"Error generating processed dataset plots. - {e}")
 
-
-def find_complete_augmentations_with_labels_and_save():
+def plot_hyperparameter_results(
+    sampler_csv_paths: Dict[str, Dict[str, str]], 
+    output_path: str, 
+    output_format: str = "png",
+    metric_column: Dict[str, str] = {"F1-Score": "objective_0"}
+):
     """
-    Finds patient-video combinations in augmented data that have all four augmentation types 
-    (xray, contrast, brightness, translation) along with their lesion labels, orders by severity,
-    and saves the results as a JSON file.
-
-    The augmented dataset is loaded from a predefined path in CONFIG.
-    The JSON file is saved in CONFIG["OUTPUT_PATH"].
-
-    Returns:
-    --------
-    None
-    """
-    try:
-        # Load dataset path from CONFIG
-        processed_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Augmented_Images")
-        augmented_data_path = os.path.join(processed_folder, "augmented_train.csv")
-        output_json_path = os.path.join(CONFIG["OUTPUT_PATH"], "complete_augmentations_with_labels.json")
-        
-        # Check if the dataset exists
-        if not os.path.isfile(augmented_data_path):
-            raise FileNotFoundError(f"Augmented dataset not found at {augmented_data_path}.")
-
-        # Load augmented data
-        augmented_data = pd.read_csv(augmented_data_path)
-
-        # Dictionary to store patient-video combinations with their lesion labels and augmentation types
-        patient_video_dict = defaultdict(lambda: {"LesionLabel": None, "Augmentations": set()})
-
-        # Regex pattern to extract patient, video, and augmentation type from Frame_path
-        pattern = re.compile(r'p(\d+)_v(\d+).*_(xray|contrast|brightness|translation)')
-
-        # Populate patient_video_dict with lesion labels and sets of augmentation types
-        for _, row in augmented_data.iterrows():
-            match = pattern.search(row['Frame_path'])
-            if match:
-                patient_video = f"p{match.group(1)}_v{match.group(2)}"
-                augmentation_type = match.group(3)
-                lesion_label = row['LesionLabel']
-                
-                patient_video_dict[patient_video]["LesionLabel"] = lesion_label
-                patient_video_dict[patient_video]["Augmentations"].add(augmentation_type)
-
-        # Define lesion severity order, reversed from least to most severe
-        lesion_severity_order = ["p100", "p99", "p90_98", "p70_90", "p50_70", "p20_50", "p0_20", "nolesion"]
-
-        # Filter to find patient-video combinations that have all four augmentation types
-        complete_augmentations = {
-            pv: {"LesionLabel": details["LesionLabel"], "Augmentations": list(details["Augmentations"])}
-            for pv, details in patient_video_dict.items()
-            if len(details["Augmentations"]) == 4
-        }
-
-        # Sort results by lesion severity
-        sorted_augmentations = {
-            pv: details for pv, details in sorted(
-                complete_augmentations.items(), 
-                key=lambda x: lesion_severity_order.index(x[1]["LesionLabel"])
-            )
-        }
-
-        # Save sorted results to JSON file
-        with open(output_json_path, 'w') as json_file:
-            json.dump(sorted_augmentations, json_file, indent=4)
-
-        print(f"Complete augmentations with labels saved to {output_json_path}.")
-    
-    except FileNotFoundError as fnf_error:
-        print(f"File error: {fnf_error}")
-    
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-def plot_augmented_bboxes(patient_video: str, frame_id: str):
-    """
-    Plot a 1x4 subplot with each augmentation type for a given patient and frame.
+    Generate a single visualization of a chosen metric per trial for hyperparameter optimization samplers.
+    Adds whiskers to optimal trials based on F1-Score per epoch computed from results.csv files.
 
     Parameters:
-    patient_video (str): The identifier for the patient and video combination (e.g., "p34_v9").
-    frame_id (str): The frame identifier (e.g., "00035").
+        sampler_csv_paths (Dict[str, Dict[str, str]]): Dictionary with sampler names as keys and dictionaries containing:
+            - "path": Path to the CSV file.
+            - "color": Color to plot for the sampler.
+            - "results_root_folder": Path to the root folder containing results for optimal trials.
+        output_path (str): Path to save the output figure.
+        output_format (str): Format to save the figure (e.g., 'png', 'svg', 'pdf').
+        metric_column (Dict[str, str]): Dictionary with display name as key and column name as value to plot on Y-axis.
     """
-    try:
-        # Set up augmentation types
-        augmentations = ["Brightness", "Contrast", "Translation", "X_ray artificial noise"]
+    # Extract metric name and column
+    metric_name, metric_col = list(metric_column.items())[0]
+
+    # Helper function to calculate the optimal front
+    def calculate_optimal_front(trials: List[int], scores: List[float]):
+        frontier_x, frontier_y = [], []
+        best_so_far = -float("inf")
+        for trial, score in zip(trials, scores):
+            if score > best_so_far:
+                if frontier_x:
+                    frontier_x.append(trial)
+                    frontier_y.append(best_so_far)  # Horizontal line
+                best_so_far = score
+                frontier_x.append(trial)
+                frontier_y.append(score)  # Vertical line
+        if trials[-1] != frontier_x[-1]:
+            frontier_x.append(trials[-1])  # Extend horizontally to the last trial
+            frontier_y.append(best_so_far)
+        return frontier_x, frontier_y
+
+    # Helper function to calculate F1-Score for a trial
+    def compute_f1_score(results_file: str):
+        df = pd.read_csv(results_file)
+        precision = df["metrics/precision(B)"]
+        recall = df["metrics/recall(B)"]
+        f1_score = 2 * (precision * recall) / (precision + recall + 1e-8)
+        return f1_score
+
+    # Initialize the plot
+    fig, ax = plt.subplots(figsize=(12, 7))
+    
+    legends = []
+
+    # Plot each sampler
+    for sampler_name, sampler_data in sampler_csv_paths.items():
+        df = pd.read_csv(sampler_data["path"])
+        trials = df.index.values
+        scores = df[metric_col]
         
-        # Load the filtered data for the original and augmented bounding boxes
-        original_path = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Holdout_Info", "train.csv")
-        train_df = pd.read_csv(original_path)
-        augmentations_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Augmented_Images")
-        augmented_train_df = pd.read_csv(os.path.join(augmentations_folder, "augmented_train.csv"))
-        save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
-        os.makedirs(save_path, exist_ok=True)
-        save_formats = CONFIG["FIGURE_FORMATS"]
-
-        # Filter original bounding boxes for the specified patient and frame
-        train_df = train_df[train_df["Frame_path"].str.contains(patient_video) & train_df["Frame_path"].str.contains(frame_id)]
+        # Calculate optimal front
+        frontier_x, frontier_y = calculate_optimal_front(trials, scores)
         
-        # Filter augmented bounding boxes for specified augmentations
-        augmented_train_df = augmented_train_df[augmented_train_df["Frame_path"].str.contains(patient_video) & augmented_train_df["Frame_path"].str.contains(frame_id)]
+        # Plot all trials
+        ax.scatter(trials, scores, s=10, color=sampler_data["color"], alpha=0.5, label=sampler_name)
         
-        # Identify each augmentation
-        brightness = augmented_train_df[augmented_train_df["Groundtruth_path"].str.contains("brightness_1")].iloc[0, :]
-        contrast = augmented_train_df[augmented_train_df["Groundtruth_path"].str.contains("contrast_1")].iloc[0, :]
-        translation = augmented_train_df[augmented_train_df["Groundtruth_path"].str.contains("translation_1")].iloc[0, :]
-        xray = augmented_train_df[augmented_train_df["Groundtruth_path"].str.contains("xray_noise_1")].iloc[0, :]
-
-        # Read the original frame image
-        if not train_df.empty:
-            frame_path = train_df["Frame_path"].values[0]
-            original_image = cv2.imread(frame_path)
-            original_image_rgb = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
-        else:
-            print("Original frame image not found for specified patient_video and frame_id.")
-            return
-
-        # Extract bounding box file paths for original and augmentations
-        original_bbox_path = train_df["Groundtruth_path"].values[0]
-        augmentation_data = {
-            "Brightness": (brightness["Frame_path"], brightness["Groundtruth_path"]),
-            "Contrast": (contrast["Frame_path"], contrast["Groundtruth_path"]),
-            "Translation": (translation["Frame_path"], translation["Groundtruth_path"]),
-            "X_ray artificial noise": (xray["Frame_path"], xray["Groundtruth_path"])
-        }
-
-        # Create 1x4 subplot for the augmentations
-        fig, axes = plt.subplots(1, 4, figsize=(15,4))
+        # Plot optimal frontier
+        ax.step(frontier_x, frontier_y, where='post', color=sampler_data["color"], linewidth=2)
         
-        for i, (aug, (aug_image_path, aug_bbox_path)) in enumerate(augmentation_data.items()):
-            # Load the augmented image for this augmentation
-            aug_image = cv2.imread(aug_image_path)
-            aug_image_rgb = cv2.cvtColor(aug_image, cv2.COLOR_BGR2RGB)
-            
-            # Plot the augmented image
-            axes[i].imshow(aug_image_rgb)
-            axes[i].set_title(f"{aug}")
-            
-            # Plot original bounding boxes on augmented image
-            with open(original_bbox_path, 'r') as f:
-                for line in f:
-                    x, y, w, h, _ = line.split()
-                    axes[i].add_patch(plt.Rectangle((int(x), int(y)), int(w), int(h), 
-                                                    edgecolor='#00B945', facecolor='none', lw=2, label="Original", linestyle="-"))
+        # Add whiskers for optimal trials
+        optimal_trials = [trial for trial, _ in zip(frontier_x[::2], frontier_y[::2])]
+        for trial, mean_f1 in zip(optimal_trials, frontier_y[::2]):
+            if sampler_name != "Simulated Annealing":
+                results_file = os.path.join(sampler_data["results_root_folder"], f"trial_{trial}_training", "results.csv")
+            else:
+                results_file = os.path.join(sampler_data["results_root_folder"], f"simulated_annealing{trial}", "results.csv")
+            if os.path.exists(results_file):
+                f1_scores = compute_f1_score(results_file)
+                min_f1, max_f1 = f1_scores.min(), f1_scores.max()
+                lower_err = max(0, mean_f1 - min_f1)
+                upper_err = max(0, max_f1 - mean_f1)
+                ax.errorbar(trial, mean_f1,
+                             yerr=[[lower_err], [upper_err]],
+                             fmt="o", color=sampler_data["color"], capsize=3, alpha=0.7)
 
-            # Plot new bounding boxes for the augmentation
-            with open(aug_bbox_path, 'r') as f:
-                for line in f:
-                    x, y, w, h, _ = line.split()
-                    axes[i].add_patch(plt.Rectangle((int(x), int(y)), int(w), int(h), 
-                                                    edgecolor='#FF9500', facecolor='none', lw=2, label="Augmented"))
+        # Update legends
+        best_idx = df[metric_col].idxmax()
+        best_trial = df.loc[best_idx, "number"]
+        best_score = df.loc[best_idx, metric_col]
+        legends.append((plt.Line2D([], [], color=sampler_data["color"], linewidth=2),
+                        f"{sampler_name} (Best: {best_score:.3f}, Trial: {int(best_trial)})"))
 
-            # Remove axis for clarity
-            axes[i].axis("off")
-            
+    # Add labels and titles
+    ax.set_xlabel("Trial")
+    ax.set_ylabel(metric_name)
 
-        # Display legend for bounding boxes
-        handles, labels = axes[0].get_legend_handles_labels()
-        fig.legend(handles, ["Original Bounding Box", "Augmented Bounding Box"], loc="lower center", ncol=2)
-
-        # Save figures in specified formats
-        for fmt in save_formats:
-            fig.savefig(os.path.join(save_path, f'augmented_examples.{fmt}'), format=fmt)
-
-        if SHOW: plt.show()
-        logging.info(f"Processed dataset plots generated and saved in {save_path}.")
-    except Exception as e:
-        logging.info(f"Error generating processed dataset plots. - {e}")
-
-def plot_hyperparameter_fitness_scatter():
-    """
-    Generates a 3x3 grid of scatter plots for the first 9 hyperparameters in the provided CSV file.
-    Each plot shows the relationship between a hyperparameter and the fitness score, with points
-    color-coded by density and the maximum fitness point marked in red.
-
-    Args:
-        None
-    """
-    save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
-    os.makedirs(save_path, exist_ok=True)
-    save_formats = CONFIG["FIGURE_FORMATS"]
-    
-    # Load CSV file
-    csv_file = os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], "simulated_annealing_raw", "tune", "tune_results.csv")
-    tuning_results = pd.read_csv(csv_file)
-    
-    # Ensure 'fitness' is the target column
-    fitness_column = 'fitness'  
-    hyperparameters = tuning_results.columns.drop(fitness_column)
-
-    # Create a 3x3 grid for the scatter plots
-    fig, axes = plt.subplots(3, 3, figsize=FIGSIZE)
-    axes = axes.ravel()  # Flatten the axes array for easier iteration
-
-    # Iterate over the first 9 hyperparameters and create scatter plots
-    for idx, hyperparam in enumerate(hyperparameters[:9]):
-        # Identify the maximum fitness configuration for this hyperparameter
-        max_fitness_row = tuning_results.loc[tuning_results[fitness_column].idxmax()]
-        max_fitness_value = max_fitness_row[fitness_column]
-        max_hyperparam_value = max_fitness_row[hyperparam]
-
-        # Calculate the 2D histogram for density-based color mapping
-        hist, xedges, yedges = np.histogram2d(
-            tuning_results[hyperparam], tuning_results[fitness_column], bins=20
-        )
-        colors = [
-            hist[
-                min(np.digitize(tuning_results[hyperparam].iloc[i], xedges, right=True) - 1, hist.shape[0] - 1),
-                min(np.digitize(tuning_results[fitness_column].iloc[i], yedges, right=True) - 1, hist.shape[1] - 1),
-            ]
-            for i in range(len(tuning_results))
-        ]
-
-        # Scatter plot for each hyperparameter, using density-based coloring for points
-        axes[idx].scatter(
-            tuning_results[hyperparam],
-            tuning_results[fitness_column],
-            #c=colors,
-            #cmap="viridis",
-            s=20,  # Increased marker size for fitness points
-            alpha=0.7
-        )
-        # Mark the maximum fitness point in red with an even larger marker
-        axes[idx].scatter(
-            max_hyperparam_value,
-            max_fitness_value,
-            color='black',
-            marker='x',
-            s=85,  # Larger size for maximum fitness marker
-            label='Max Fitness'
-        )
-
-        # Set titles and labels
-        axes[idx].set_title(f"{hyperparam} = {max_hyperparam_value:.2e}", fontsize=10)
-        if idx % 3 == 0:
-            axes[idx].set_ylabel("Fitness Score")
-        axes[idx].set_xlabel(hyperparam)
-        axes[idx].set_ylim(tuning_results[fitness_column].min()-0.02, tuning_results[fitness_column].max()+0.02)
-        axes[idx].grid(False)
-        axes[idx].spines[['right', 'top']].set_visible(False)
-        axes[idx].get_xaxis().tick_bottom()
-        axes[idx].get_yaxis().tick_left()
-        axes[idx].set_yticks(np.arange(tuning_results[fitness_column].min()-0.02, tuning_results[fitness_column].max()+0.02, 0.05))
-    # Add a single legend at the lower center of the figure
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='lower center', fontsize=12, frameon=False, ncol=1)
-
-    # Adjust layout and spacing
-    plt.tight_layout(rect=[0, 0.05, 1, 0.95])  # Leave space for legend
-    # Save figures in specified formats
-    for fmt in save_formats:
-        fig.savefig(os.path.join(save_path, f'simulated_annealing_visualization.{fmt}'), format=fmt)
-    if SHOW: plt.show()
-
-def plot_map_metrics(csv_files: List[Dict]):
-    """
-    Plots mAP metrics (mAP@50 and mAP@50-95) over epochs for multiple CSV files, 
-    each with unique styling attributes.
-    
-    Args:
-        csv_files (List[Dict]): List of dictionaries where each dictionary contains details 
-                                about a CSV file and styling preferences for plotting.
-                                Required keys for each dictionary:
-                                    - 'csv_file' (str): Path to the CSV file.
-                                    - 'title' (str): Title for the plot.
-                                    - 'label' (str): Label for the data series in legend.
-                                    - 'linestyle' (str): Line style for the plot.
-                                    - 'color' (str): Color of the plot line.
-                                    - 'alpha' (float): Alpha for line transparency.
-                                    - 'linewidth' (float): Width of the line.
-                                    - 'marker' (bool): Whether to use a marker.
-                                    - 'markerstyle' (str): Style of the marker.
-                                    - 'markersize' (float): Size of the marker.
-    """
-    save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
-    os.makedirs(save_path, exist_ok=True)
-    save_formats = CONFIG["FIGURE_FORMATS"]
-    
-    # Set up two subplots for 'map_50' and 'map_50_95'
-    fig, axes = plt.subplots(1, 2, figsize=FIGSIZE)
-    metrics = ['metrics/mAP50(B)', 'metrics/mAP50-95(B)']
-    metrics_plots = ['mAP@50', 'mAP@50-95']
-    i = 0
-    unique_handles, unique_labels = [], []
-    
-    # Iterate over the two metrics for each subplot
-    for ax, metric in zip(axes, metrics):
-        ax.set_title(f'{metrics_plots[i]} over Epochs')
-        ax.set_xlabel('Epochs')
-        ax.set_ylabel(metrics_plots[i])
+    for ax in [ax]:
         ax.spines[['right', 'top']].set_visible(False)
         ax.get_xaxis().tick_bottom()
         ax.get_yaxis().tick_left()
 
-        i += 1
-        
-        # Iterate over each CSV file and plot according to its specifications
-        for file_info in csv_files:
-            # Load the CSV file
-            data = pd.read_csv(file_info['csv_file'])
-            
-            # Filter out rows with epoch=0 and weight='best.pt' as required
-            #data = data[~((data['epoch'] == 0) & (data['weight'] == 'best.pt'))]
-            
-            # Sort data by 'epoch' column
-            data = data.sort_values(by='epoch')
-            
-            # Plot data series
-            line, = ax.plot(
-                data['epoch'],
-                data[metric],
-                label=file_info['label'],
-                linestyle=file_info['linestyle'],
-                color=file_info['color'],
-                alpha=file_info['alpha'],
-                linewidth=file_info['linewidth'],
-                marker=file_info['markerstyle'] if file_info['marker'] else None,
-                markersize=file_info['markersize'] if file_info['marker'] else 0
-            )
-            ax.set_yticks(np.arange(0, 0.65, 0.05))
-
-            # Only add to unique_handles/labels once per label
-            if file_info['label'] not in unique_labels:
-                unique_handles.append(line)
-                unique_labels.append(file_info['label'])
-        
-        ax.grid(False)
+    # Unified legend
+    handles, labels = zip(*legends)
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.05), ncol=3)
     
-    # Add a single legend with unique labels at the lower center
-    fig.legend(unique_handles, unique_labels, loc='lower center', ncol=len(csv_files), fontsize=10, frameon=False)
-    
-    # Adjust layout and spacing
-    plt.tight_layout(rect=[0, 0.1, 1, 1])  # Adjust to leave space for the legend below
-    
-    # Save figures in specified formats
-    for fmt in save_formats:
-        fig.savefig(os.path.join(save_path, f'comparison_visualization.{fmt}'), format=fmt)
-    
-    if SHOW: plt.show()
-
-def validation_results_preprocessing(data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Preprocess validation results CSV: Strip 'epoch' and '.pt', and adjust epoch numbers.
-
-    :param data: DataFrame with raw validation results.
-    :return: Processed DataFrame.
-    """
-    data = data.rename(columns={'File_name': 'Epoch'})
-    data['Epoch'] = data['Epoch'].str.replace('epoch', '').str.replace('.pt', '', regex=False)
-    data = data[~data['Epoch'].isin(['last', 'best'])]
-    data['Epoch'] = data['Epoch'].astype(int) + 1
-    return data
-
-def load_hyperparameter_data(path: str, hyperparameters: List[str]) -> Dict[str, List[Dict]]:
-    """
-    Load and preprocess data from the specified path.
-
-    :param path: Path to the 'Hyperparameters' directory containing subfolders for each hyperparameter run.
-    :param hyperparameters: List of hyperparameter names to process.
-    :return: Dictionary containing preprocessed data for each hyperparameter.
-    """
-    data = {}
-    for hyperparam in hyperparameters:
-        hyperparam_data = []
-        for folder_name in os.listdir(path):
-            if folder_name.startswith(hyperparam):
-                folder_path = os.path.join(path, folder_name)
-                csv_path = os.path.join(folder_path, 'validation_results.csv')
-                if os.path.exists(csv_path):
-                    df = pd.read_csv(csv_path)
-                    df = validation_results_preprocessing(df)
-                    run_number = folder_name.split('_')[-1]
-                    args_yaml_path = os.path.join(folder_path, 'args.yaml')
-                    if os.path.exists(args_yaml_path):
-                        with open(args_yaml_path, 'r') as f:
-                            args_data = yaml.safe_load(f)
-                        hyperparam_value = args_data.get(hyperparam, 'Unknown')
-                    else:
-                        hyperparam_value = 'Unknown'
-
-                    hyperparam_data.append({
-                        'run_number': run_number,
-                        'hyperparam_value': hyperparam_value,
-                        'data': df
-                    })
-        data[hyperparam] = hyperparam_data
-    return data
-
-def plot_hyperparameter_vs_map(iteration: int) -> None:
-    """
-    Plot mAP@50-95 as a function of hyperparameter values, with error bars representing standard deviation,
-    and lines indicating the best mean result per hyperparameter.
-
-    :param iteration: Iteration number for loading data and saving plots.
-    """
-
-    path = os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], f'iteration{iteration}/Hyperparameters')
-    hyperparameters = ['lr0', 'lrf', 'momentum', 'weight_decay', 'warmup_epochs',
-                       'warmup_momentum', 'warmup_bias_lr', 'box', 'cls', 'dfl']
-    data = load_hyperparameter_data(path, hyperparameters)
-
-    fig, axes = plt.subplots(2, 5, figsize=(15,9))
-    axes = axes.flatten()
-
-    for idx, (hyperparam, hyperparam_data) in enumerate(data.items()):
-        ax = axes[idx]
-        hyperparam_data_sorted = sorted(hyperparam_data, key=lambda x: float(x['hyperparam_value']))
-
-        # Prepare lists for plotting
-        values = [float(run_info['hyperparam_value']) for run_info in hyperparam_data_sorted]
-        map50_95_mean = [run_info['data']['map50_95'].mean() for run_info in hyperparam_data_sorted]
-        map50_95_std = [run_info['data']['map50_95'].std() for run_info in hyperparam_data_sorted]
-        map50_95_last = [run_info['data']['map50_95'].iloc[-1] for run_info in hyperparam_data_sorted]
-
-        # Plot mean mAP@50-95 with error bars (standard deviation)
-        ax.errorbar(values, map50_95_mean, yerr=map50_95_std, fmt='-o', alpha=0.7,
-                    markersize=5, label="Mean mAP@50-95", color='#0C5DA5', capsize=3)
-        # Plot last mAP@50-95
-        ax.plot(values, map50_95_last, '-s', alpha=0.7, markersize=5,
-                label="Last mAP@50-95", color='#00B945')
-
-        # Find best mean mAP@50-95 for this hyperparameter
-        max_mean_map50_95 = max(map50_95_mean)
-        max_mean_index = map50_95_mean.index(max_mean_map50_95)
-        max_hyperparam_value = values[max_mean_index]
-
-        # Plot horizontal and vertical lines indicating best mean mAP@50-95
-        ax.hlines(y=max_mean_map50_95, xmin=min(values), xmax=max_hyperparam_value,
-                  colors='red', linestyles='dashed', label='Best Mean mAP@50-95')
-        ax.vlines(x=max_hyperparam_value, ymin=0, ymax=max_mean_map50_95,
-                  colors='red', linestyles='dashed')
-
-        # Highlight the best point
-        ax.plot(max_hyperparam_value, max_mean_map50_95, 'ro', markersize=7)
-
-        ax.set_title(hyperparam, fontsize=10)
-
-        # Set x and y labels with fontsize 8
-        if idx in [5, 6, 7, 8, 9]:
-            ax.set_xlabel('Hyperparameter Value', fontsize=8)
-        if idx in [0, 5]:
-            ax.set_ylabel('mAP@50-95', fontsize=8)
-
-        # Set x and y ticks
-        ax.set_ylim(0, 0.38)
-        ax.set_yticks(np.arange(0, 0.4, 0.05))
-        ax.tick_params(axis='both', which='major', labelsize=8)
-
-        # Set x-ticks based on min and max hyperparameter values
-        x_min, x_max = min(values), max(values)
-        x_ticks = np.linspace(x_min, x_max, num=5)
-        ax.set_xticks(x_ticks)
-        ax.get_xaxis().tick_bottom()
-        ax.get_yaxis().tick_left()
-        ax.spines[['right', 'top']].set_visible(False)
-
-    # Collect handles and labels for the legend, avoiding duplicates
-    handles_labels = [ax.get_legend_handles_labels() for ax in axes]
-    handles, labels = [sum(lol, []) for lol in zip(*handles_labels)]
-    by_label = dict(zip(labels, handles))
-    fig.legend(by_label.values(), by_label.keys(), loc='lower center',
-               ncol=3, fontsize=10, frameon=False)
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
-
-    save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
-    os.makedirs(save_path, exist_ok=True)
-    save_formats = CONFIG["FIGURE_FORMATS"]
-    # Save figures in specified formats
-    for fmt in save_formats:
-        fig.savefig(os.path.join(save_path, f'iter{iteration}_hyperparameter_vs_map_.{fmt}'), format=fmt)
-    if SHOW:
-        plt.show()
-
-
-
-def plot_epoch_vs_map(iteration: int) -> None:
-    """
-    Plot mAP@50-95 as a function of epochs, with the best hyperparameter value in the title for each hyperparameter.
-
-    :param data: Dictionary containing preprocessed data for each hyperparameter.
-    """
-    iter_path = f'iteration{iteration}/Hyperparameters'
-    path = os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], iter_path)
-    hyperparameters = ['lr0', 'lrf', 'momentum', 'weight_decay', 'warmup_epochs', 'warmup_momentum', 'warmup_bias_lr', 'box', 'cls', 'dfl']
-    data = load_hyperparameter_data(path, hyperparameters)
-
-    fig, axes = plt.subplots(2, 5, figsize=FIGSIZE)
-    axes = axes.flatten()
-
-    for idx, (hyperparam, hyperparam_data) in enumerate(data.items()):
-        ax = axes[idx]
-        
-        # Find the best hyperparameter value (highest mean mAP@50-95)
-        best_run_info = max(hyperparam_data, key=lambda x: x['data']['map50_95'].mean())
-        best_hyperparam_value = best_run_info['hyperparam_value']
-
-        # Plot the mAP@50-95 across epochs for each run
-        for run_info in hyperparam_data:
-            df = run_info['data']
-            df['Epoch'] = natsorted(df['Epoch'])
-            ax.plot(df['Epoch'], df['map50_95'], color='gray', alpha=0.5, linewidth=0.8)
-        
-        # Highlight the best run
-        best_run_df = best_run_info['data']
-        ax.plot(best_run_df['Epoch'], best_run_df['map50_95'], color='#0C5DA5', linewidth=1.5, label="Best Run")
-
-        ax.set_title(f"{hyperparam} (Best: {best_hyperparam_value})")
-        if idx in [5,6,7,8,9]: ax.set_xlabel('Epoch')
-        if idx in [0, 5]: ax.set_ylabel('mAP@50-95')
-        ax.set_xlim(1, 100)
-        ax.set_ylim(0, 0.38)
-        ax.set_yticks(np.arange(0, 0.4, 0.05))
-        ax.spines[['right', 'top']].set_visible(False)
-        ax.get_xaxis().tick_bottom()
-        ax.get_yaxis().tick_left()
-
+    # Save and show the figure
     plt.tight_layout()
-    save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
-    os.makedirs(save_path, exist_ok=True)
-    save_formats = CONFIG["FIGURE_FORMATS"]
-    # Save figures in specified formats
-    for fmt in save_formats:
-        fig.savefig(os.path.join(save_path, f'iter{iteration}_epoch_vs_map.{fmt}'), format=fmt)
+    plt.savefig(f"{output_path}.{output_format}", format=output_format, bbox_inches='tight')
     if SHOW: plt.show()
 
-
-def compare_test_label_performance() -> None:
+def plot_hyperparameter_scatter(
+    sampler_csv_paths: Dict[str, Dict[str, str]],
+    output_path: str,
+    output_format: str = "png",
+    metric_column: Dict[str, str] = {"F1-Score": "user_attrs_f1_score"}
+):
     """
-    Plot mAP@50 and mAP@50-95 for different models as a function of labels,
-    with one legend for model colors and another for dataset line styles,
-    using formatted labels for the x-axis.
+    Generate scatterplots for hyperparameters with performance metric as Y-axis, highlighting the best hyperparameter values
+    for each sampler.
+
+    Parameters:
+        sampler_csv_paths (Dict[str, Dict[str, str]]): Dictionary with sampler names as keys and dictionaries containing:
+            - "path": Path to the CSV file.
+            - "color": Color to plot for the sampler.
+        output_path (str): Path to save the output figure.
+        output_format (str): Format to save the figure (e.g., 'png', 'svg', 'pdf').
+        metric_column (Dict[str, str]): Dictionary with display name as key and column name as value for the metric.
     """
-    paths = ['test_label_model_iteration_1.csv',
-             'test_label_model_iteration_2.csv',
-             'test_label_model_simulated_annealing.csv']
-    models = [pd.read_csv(os.path.join(CONFIG["OUTPUT_PATH"], model_path)) for model_path in paths]
-    model_names = ["Iteration 1", "Iteration 2", "Simulated Annealing"]
-    
-    # Define label order and mapping
-    label_order = ["p0_20", "p20_50", "p50_70", "p70_90", "p90_98", "p99", "p100"]
-    label_mapping = {
-        "p0_20": r"$< 20\%$",
-        "p20_50": r"$[20, 50)\%$",
-        "p50_70": r"$[50, 70)\%$",
-        "p70_90": r"$[70, 90)\%$",
-        "p90_98": r"$[90, 98)\%$",
-        "p99": r"$99\%$",
-        "p100": r"$100\%$"
-    }
-    colors = ['#0C5DA5', '#00B945', '#FF2C00']
-    linestyles = ['dashed', 'dotted', 'solid']
-    set_names = ['train', 'val', 'test']
-    set_names_mapping = {'train': "Training", 'val': 'Validation', 'test': "Test"}
+    # Extract metric name and column
+    metric_name, metric_col = list(metric_column.items())[0]
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    axes[0].set_title("Comparison of mAP@50")
-    axes[1].set_title("Comparison of mAP@50-95")
+    # List of hyperparameters to plot
+    hyperparameters = [
+        "params_batch", "params_box", "params_cls", "params_dfl", "params_lr0",
+        "params_lrf", "params_momentum", "params_optimizer", "params_warmup_epochs",
+        "params_warmup_momentum", "params_weight_decay", "user_attrs_last_epoch"
+    ]
 
-    # Plot mAP@50 and mAP@50-95 for each model and set
-    for i, model in enumerate(models):
-        # Filter out the "nolesion" label from the model data
-        model = model[model['Label'].isin(label_order)]
+    # Prepare the figure with 2 rows x 6 columns subplots
+    fig, axes = plt.subplots(2, 6, figsize=(18, 8), sharey=True)
+    axes = axes.ravel()  # Flatten axes for easy indexing
 
-        for j, (set_name, linestyle) in enumerate(zip(set_names, linestyles)):
-            alpha = 0.5 if set_name in ['train', 'val'] else 1.0  # Set alpha for train and val
-            linewidth = 1.5 if set_name in ['test'] else 1.0  # Set alpha for train and val
+    # Process each hyperparameter
+    for idx, hyperparameter in enumerate(hyperparameters):
+        ax = axes[idx]
+        
+        # Process each sampler and plot data
+        for sampler_name, sampler_data in sampler_csv_paths.items():
+            # Load data
+            df = pd.read_csv(sampler_data["path"])
+            if hyperparameter not in df.columns or metric_col not in df.columns:
+                continue
+            
+            # Encode categorical variables (e.g., params_optimizer)
+            if hyperparameter == "params_optimizer":
+                label_encoder = LabelEncoder()
+                df[hyperparameter] = label_encoder.fit_transform(df[hyperparameter].astype(str))
+            
+            # Identify the best point for the given sampler based on the metric
+            best_idx = df[metric_col].idxmax()
+            best_value = df.loc[best_idx, hyperparameter]
+            best_score = df.loc[best_idx, metric_col]
+            
+            # Scatter plot with all points and highlight the best
+            scatter = ax.scatter(
+                df[hyperparameter], df[metric_col], color=sampler_data["color"], alpha=0.2, s=20, label=sampler_name if idx == 0 else ""
+            )
+            ax.scatter(
+                best_value, best_score, color=sampler_data["color"], alpha=1.0, edgecolor='black', s=80
+            )
+            ax.plot([], [], 'o', color=sampler_data["color"], label=sampler_name)  # Dummy plot for legend
+        
+        # Add titles and labels
+        # ax.set_title(hyperparameter.replace("_", " ").title())
+        ax.set_xlabel(hyperparameter.replace("_", " ").title())
+        if idx % 6 == 0:
+            ax.set_ylabel(metric_name)
 
-            axes[0].plot(label_order, model[f'{set_name.lower()}/mAP50'], marker='o', color=colors[i], linestyle=linestyle, alpha=alpha, linewidth=linewidth)
-            axes[1].plot(label_order, model[f'{set_name.lower()}/mAP50-95'], marker='o', color=colors[i], linestyle=linestyle, alpha=alpha, linewidth=linewidth)
-
-    # Update x-axis labels with formatted versions
-    formatted_labels = [label_mapping[label] for label in label_order]
     for ax in axes:
-        ax.set_xticks(range(len(label_order)))
-        ax.set_xticklabels(formatted_labels, ha='center', fontsize=11)
         ax.spines[['right', 'top']].set_visible(False)
         ax.get_xaxis().tick_bottom()
         ax.get_yaxis().tick_left()
-        ax.set_ylim(0.0, 1.1)
 
-    # Create a custom legend for line styles
-    from matplotlib.lines import Line2D
-    labels_for_sets = [set_names_mapping[set] for set in set_names]
-    style_legend = [Line2D([0], [0], color='black', linestyle=linestyle, label=name) for linestyle, name in zip(linestyles, labels_for_sets)]
-    color_legend = [Line2D([0], [0], color=color, linestyle='solid', label=name) for color, name in zip(colors, model_names)]
-    
-    # Adjust legend placement
-    fig.legend(handles=color_legend + style_legend, loc='lower center', ncol=3 + 3)
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
+    # Unified legend
+    handles, labels = fig.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))  # Remove duplicate legend entries
+    fig.legend(by_label.values(), by_label.keys(), loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=len(sampler_csv_paths))
 
-    save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
-    os.makedirs(save_path, exist_ok=True)
-    save_formats = CONFIG["FIGURE_FORMATS"]
-    # Save figures in specified formats
-    for fmt in save_formats:
-        fig.savefig(os.path.join(save_path, f'test_label_vs_map.{fmt}'), format=fmt)
+    # Adjust layout
+    plt.tight_layout()
+    #plt.subplots_adjust(bottom=0.1)
+
+    # Save the figure
+    plt.savefig(f"{output_path}.{output_format}", format=output_format, bbox_inches='tight')
     if SHOW: plt.show()
 
+def plot_training_comparison(
+    sampler_csv_paths: Dict[str, Dict[str, str]],
+    output_path: str,
+    output_format: str = "png"
+):
+    """
+    Compare the training performance of baseline and optimized YOLO models by computing F1-Score per epoch,
+    alongside train/val box loss and dfl loss plots.
+
+    Parameters:
+        sampler_csv_paths (Dict[str, Dict[str, str]]): Dictionary with sampler names as keys and dictionaries containing:
+            - "path": Path to the CSV file for training results.
+            - "color": Color for the data series.
+        output_path (str): Path to save the output figure.
+        output_format (str): Format to save the figure (e.g., 'png', 'svg', 'pdf').
+    """
+    # Initialize the figure with 3 subplots
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    f1_ax, box_loss_ax, dfl_loss_ax = axes
+
+    # Plot each sampler's training data, including Baseline
+    for sampler_name, sampler_data in sampler_csv_paths.items():
+        df = pd.read_csv(sampler_data["best_trial"])
+        if "epoch" not in df.columns or "metrics/precision(B)" not in df.columns or "metrics/recall(B)" not in df.columns:
+            continue
+        
+        # Compute F1-Score per epoch
+        precision = df["metrics/precision(B)"]
+        recall = df["metrics/recall(B)"]
+        f1_score = 2 * (precision * recall) / (precision + recall + 1e-8)
+        smoothed_f1 = gaussian_filter1d(f1_score, sigma=1)
+        
+        # Subplot 1: F1-Score
+        f1_ax.plot(df["epoch"], smoothed_f1, color=sampler_data["color"], linewidth=2, label=sampler_name.upper())
+
+        # Subplot 2: train/box_loss vs val/box_loss
+        if "train/box_loss" in df.columns and "val/box_loss" in df.columns:
+            box_loss_ax.plot(df["epoch"], df["train/box_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Train Loss (linestyle)")
+            box_loss_ax.plot(df["epoch"], df["val/box_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Val Loss (linestyle)")
+        
+        # Subplot 3: train/dfl_loss vs val/dfl_loss
+        if "train/dfl_loss" in df.columns and "val/dfl_loss" in df.columns:
+            dfl_loss_ax.plot(df["epoch"], df["train/dfl_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Train Loss (linestyle)")
+            dfl_loss_ax.plot(df["epoch"], df["val/dfl_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Val Loss (linestyle)")
+
+    # Subplot 1: F1-Score formatting
+    f1_ax.set_title("Performance Comparison")
+    f1_ax.set_xlabel("Epoch")
+    f1_ax.set_ylabel("F1-Score")
+    
+    # Subplot 2: Box Loss formatting
+    box_loss_ax.set_title("Box Loss")
+    box_loss_ax.set_xlabel("Epoch")
+    box_loss_ax.set_ylabel("Loss")
+    
+    # Subplot 3: DFL Loss formatting
+    dfl_loss_ax.set_title("DFL Loss")
+    dfl_loss_ax.set_xlabel("Epoch")
+    dfl_loss_ax.set_ylabel("Loss")
+    
+    idx = 0
+    for ax in axes:
+        ax.spines[['right', 'top']].set_visible(False)
+        ax.get_xaxis().tick_bottom()
+        ax.get_yaxis().tick_left()
+        
+        if idx == 0: text = "a."
+        elif idx == 1: text = "b."
+        else: text = "c."
+        
+        ax.text(-0.05, 1.05, text, transform=ax.transAxes, fontsize=12, fontweight='bold',
+                va='top', ha='left', bbox=dict(facecolor='white', edgecolor='none', alpha=0.8))
+        idx += 1
+
+    # Unified legend (remove duplicates)
+    handles, labels = [], []
+    for ax in [f1_ax, box_loss_ax, dfl_loss_ax]:
+        h, l = ax.get_legend_handles_labels()
+        handles += h
+        labels += l
+    by_label = dict(zip(labels, handles))
+    fig.legend(by_label.values(), by_label.keys(), loc="lower center", bbox_to_anchor=(0.5, -0.1), ncol=2)
+    
+    # Adjust layout
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.2)
+
+    # Save the figure
+    plt.savefig(f"{output_path}.{output_format}", format=output_format, bbox_inches='tight')
+    if SHOW: plt.show()
 
 def main():
-    #original_dataset_visualization()
-    processed_dataset_visualization()
-    #find_complete_augmentations_with_labels_and_save()
-    #plot_augmented_bboxes("p34_v9", "00045")
-    #plot_hyperparameter_fitness_scatter()
-    """
-    csv_files = [
-        {
-            'csv_file': os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], "baselines", "yolov8l_config_noaugment", "validation_results.csv"),
-            'title': 'Validation Results',
-            'label': 'Baseline',
-            'linestyle': '--',
-            'color': '#0C5DA5',
-            'alpha': 0.7,
-            'linewidth': 1.5,
-            'marker': False,
-            'markerstyle': 'v',
-            'markersize': 5
-        },
-        {
-            'csv_file': os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], "simulated_annealing_validation", "ateroesclerosis_training", "validation_results.csv"),
-            'title': 'Ultralytics Simulated Annealing',
-            'label': 'Results of validating simulated annealing',
-            'linestyle': ':',
-            'color': '#FF2C00',
-            'alpha': 0.7,
-            'linewidth': 1.5,
-            'marker': False,
-            'markerstyle': 'o',
-            'markersize': 5
-        },
-        {
-            'csv_file': os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], "iteration1", "validation", "ateroesclerosis_training", "validation_results.csv"),
-            'title': 'Iteration 1',
-            'label': 'Results after firest iteration',
-            'linestyle': '-.',
-            'color': '#00B945',
-            'alpha': 0.7,
-            'linewidth': 1.5,
-            'marker': False,
-            'markerstyle': 's',
-            'markersize': 5
-        },
-        {
-            'csv_file': os.path.join(CONFIG["PAPER_RESULTS_FOLDER"], "iteration2", "validation", "ateroesclerosis_training", "validation_results.csv"),
-            'title': 'Iteration 2',
-            'label': 'Results after second iteration',
-            'linestyle': '-',
-            'color': '#FF9500',
-            'alpha': 0.7,
-            'linewidth': 1.5,
-            'marker': False,
-            'markerstyle': 'o',
-            'markersize': 5
-        }
-    ]
-    """
-    csv_files = [
-        {
-            'csv_file': os.path.join('/home/mariopasc/Python/Results/Coronariografias/Difference_performance/detect', 'holdout_patients', 'results.csv'),
-            'title': 'Patient-based holdout',
-            'label': 'Patient based holdout',
-            'linestyle': '--',
-            'color': '#0C5DA5',
-            'alpha': 0.7,
-            'linewidth': 1.5,
-            'marker': False,
-            'markerstyle': 'v',
-            'markersize': 5
-        },
-        {
-            'csv_file': os.path.join('/home/mariopasc/Python/Results/Coronariografias/Difference_performance/detect', 'holdout_pVideo', 'results.csv'),
-            'title': 'Patient_Video based holdout',
-            'label': 'Patient_Video based holdout',
-            'linestyle': ':',
-            'color': '#FF2C00',
-            'alpha': 0.7,
-            'linewidth': 1.5,
-            'marker': False,
-            'markerstyle': 'o',
-            'markersize': 5
-        }
-    ]
-    #plot_map_metrics(csv_files=csv_files)
+    # processed_dataset_visualization()
     
+    colors = {
+        "RANDOM": "#00B945",
+        "TPE": "#FF2C00",
+        "GPSAMPLER": "#0C5DA5",
+        "QMCSAMPLER": "#FF9500",
+        "BASELINE": "#474747",
+        "SIMULATED_ANNEALING": "#845B97"
+    }
+
+    save_plots_path = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation/PLOTS"
+
+    base_path = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation"
+    base_name = "hyperparameter_optimization_results.csv"
     
-    #for iteration in [1,2]:
-    #    plot_epoch_vs_map(iteration)
-    #    plot_hyperparameter_vs_map(iteration)
-    #compare_test_label_performance()
+    # Example Usage
+    sampler_paths = {
+        "Random Search": {
+            "path": os.path.join(base_path, "RANDOM", base_name),
+            "color": colors.get("RANDOM"), 
+            "results_root_folder": os.path.join(base_path, "RANDOM", "detect"),
+            "best_trial": os.path.join(base_path, "RANDOM", "detect", "trial_97_training", "results.csv")
+        },
+        "Tree-structured Parzen Estimator": {
+            "path": os.path.join(base_path, "TPE", base_name),
+            "color": colors.get("TPE"), 
+            "results_root_folder": os.path.join(base_path, "TPE", "detect"),
+            "best_trial": os.path.join(base_path, "TPE", "detect", "trial_139_training", "results.csv")
+        },
+        "Gaussian Process-Based Algorithm": {
+            "path": os.path.join(base_path, "GPSAMPLER", base_name),
+            "color": colors.get("GPSAMPLER"),
+            "results_root_folder": os.path.join(base_path, "GPSAMPLER", "detect"),
+            "best_trial": os.path.join(base_path, "GPSAMPLER", "detect", "trial_98_training", "results.csv")
+        },
+        "Quasi Monte Carlo": {
+            "path": os.path.join(base_path, "QMCSAMPLER", base_name),
+            "color": colors.get("QMCSAMPLER"), 
+            "results_root_folder": os.path.join(base_path, "QMCSAMPLER", "detect"),
+            "best_trial": os.path.join(base_path, "QMCSAMPLER", "detect", "trial_45_training", "results.csv")
+        },
+        "Simulated Annealing": {
+            "path": os.path.join(base_path, "SIMULATED_ANNEALING", base_name),
+            "color": colors.get("SIMULATED_ANNEALING"),
+            "results_root_folder": os.path.join(base_path, "SIMULATED_ANNEALING", "detect"),
+            "best_trial": os.path.join(base_path, "SIMULATED_ANNEALING", "detect", "simulated_annealing97", "results.csv")
+        },
+    }
+
+    
+    print("Plotting results per trial")
+    plot_hyperparameter_results(sampler_paths, 
+                                output_path=os.path.join(save_plots_path, "performance_per_trial"), 
+                                output_format="svg", 
+                                metric_column={"F1-Score": "user_attrs_f1_score"})
+
+    print("Plotting hyperparameter distributions")
+    plot_hyperparameter_scatter(sampler_paths, 
+                                output_path=os.path.join(save_plots_path, "hyperparameter_scatterplots"), 
+                                output_format="svg", 
+                                metric_column={"F1-Score": "user_attrs_f1_score"})
+    
+    print("Plotting training comparison")
+    
+    baseline_entry = {
+        "BASELINE": {
+            "best_trial": os.path.join(base_path, "Baseline", "results.csv"),
+            "color": colors.get("BASELINE"),
+        }
+    }   
+
+    
+    plot_training_comparison(
+        sampler_csv_paths={
+            **sampler_paths,  # Existing entries
+            **baseline_entry  # Add the new BASELINE entry
+        },
+        output_path=os.path.join(save_plots_path, "training_comparison"),
+        output_format="svg",
+    )
+
 
 if __name__ == "__main__":
     main()
