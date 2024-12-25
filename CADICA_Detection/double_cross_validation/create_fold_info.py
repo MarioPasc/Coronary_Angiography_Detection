@@ -261,7 +261,7 @@ def save_multilabel_folds(
             train_val_df.to_csv(
                 os.path.join(internal_fold_dir, "train.csv"), index=False
             )
-            train_val_df.to_csv(os.path.join(internal_fold_dir, "val.csv"), index=False)
+            test_df.to_csv(os.path.join(internal_fold_dir, "val.csv"), index=False)
             logging.info(
                 f"Saved Internal Fold 1 for Fold {fold_idx + 1} with train and val identical."
             )
@@ -441,6 +441,8 @@ if __name__ == "__main__":
     logging.info(f"Saved updated dataset to {OUTPUT_PROCESSED_CSV}.")
 
     df = processed_df
+
+    # df = pd.read_csv(OUTPUT_PROCESSED_CSV)
 
     # Prepare multilabel data
     label_matrix = prepare_multilabel_data(df)

@@ -310,7 +310,8 @@ def plot_hyperparameter_results(
     sampler_csv_paths: Dict[str, Dict[str, str]], 
     output_path: str, 
     output_format: str = "png",
-    metric_column: Dict[str, str] = {"F1-Score": "objective_0"}
+    metric_column: Dict[str, str] = {"F1-Score": "objective_0"},
+    whiskers: bool = False
 ):
     """
     Generate a single visualization of a chosen metric per trial for hyperparameter optimization samplers.
@@ -374,20 +375,21 @@ def plot_hyperparameter_results(
         ax.step(frontier_x, frontier_y, where='post', color=sampler_data["color"], linewidth=2)
         
         # Add whiskers for optimal trials
-        optimal_trials = [trial for trial, _ in zip(frontier_x[::2], frontier_y[::2])]
-        for trial, mean_f1 in zip(optimal_trials, frontier_y[::2]):
-            if sampler_name != "Simulated Annealing":
-                results_file = os.path.join(sampler_data["results_root_folder"], f"trial_{trial}_training", "results.csv")
-            else:
-                results_file = os.path.join(sampler_data["results_root_folder"], f"simulated_annealing{trial}", "results.csv")
-            if os.path.exists(results_file):
-                f1_scores = compute_f1_score(results_file)
-                min_f1, max_f1 = f1_scores.min(), f1_scores.max()
-                lower_err = max(0, mean_f1 - min_f1)
-                upper_err = max(0, max_f1 - mean_f1)
-                ax.errorbar(trial, mean_f1,
-                             yerr=[[lower_err], [upper_err]],
-                             fmt="o", color=sampler_data["color"], capsize=3, alpha=0.7)
+        if whiskers:
+            optimal_trials = [trial for trial, _ in zip(frontier_x[::2], frontier_y[::2])]
+            for trial, mean_f1 in zip(optimal_trials, frontier_y[::2]):
+                if sampler_name != "Simulated Annealing":
+                    results_file = os.path.join(sampler_data["results_root_folder"], f"trial_{trial}_training", "results.csv")
+                else:
+                    results_file = os.path.join(sampler_data["results_root_folder"], f"simulated_annealing{trial}", "results.csv")
+                if os.path.exists(results_file):
+                    f1_scores = compute_f1_score(results_file)
+                    min_f1, max_f1 = f1_scores.min(), f1_scores.max()
+                    lower_err = max(0, mean_f1 - min_f1)
+                    upper_err = max(0, max_f1 - mean_f1)
+                    ax.errorbar(trial, mean_f1,
+                                yerr=[[lower_err], [upper_err]],
+                                fmt="o", color=sampler_data["color"], capsize=3, alpha=0.7)
 
         # Update legends
         best_idx = df[metric_col].idxmax()
@@ -407,7 +409,7 @@ def plot_hyperparameter_results(
 
     # Unified legend
     handles, labels = zip(*legends)
-    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.05), ncol=3)
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.1), ncol=2)
     
     # Save and show the figure
     plt.tight_layout()
@@ -533,7 +535,7 @@ def plot_training_comparison(
         smoothed_f1 = gaussian_filter1d(f1_score, sigma=1)
         
         # Subplot 1: F1-Score
-        f1_ax.plot(df["epoch"], smoothed_f1, color=sampler_data["color"], linewidth=2, label=sampler_name.upper())
+        f1_ax.plot(df["epoch"], smoothed_f1, color=sampler_data["color"], linewidth=2, label=sampler_name)
 
         # Subplot 2: train/box_loss vs val/box_loss
         if "train/box_loss" in df.columns and "val/box_loss" in df.columns:
@@ -593,14 +595,14 @@ def plot_training_comparison(
 
 def main():
     # processed_dataset_visualization()
-    
+        
     colors = {
-        "RANDOM": "#00B945",
-        "TPE": "#FF2C00",
-        "GPSAMPLER": "#0C5DA5",
-        "QMCSAMPLER": "#FF9500",
-        "BASELINE": "#474747",
-        "SIMULATED_ANNEALING": "#845B97"
+        "RANDOM": "#994455",
+        "TPE": "#6699CC",
+        "GPSAMPLER": "#997700",
+        "QMCSAMPLER": "#EE99AA",
+        "SIMULATED_ANNEALING": "#004488",
+        "BASELINE": "#000000",
     }
 
     save_plots_path = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation/PLOTS"
@@ -614,7 +616,7 @@ def main():
             "path": os.path.join(base_path, "RANDOM", base_name),
             "color": colors.get("RANDOM"), 
             "results_root_folder": os.path.join(base_path, "RANDOM", "detect"),
-            "best_trial": os.path.join(base_path, "RANDOM", "detect", "trial_97_training", "results.csv")
+            "best_trial": os.path.join(base_path, "RANDOM", "detect", "trial_40_training", "results.csv")
         },
         "Tree-structured Parzen Estimator": {
             "path": os.path.join(base_path, "TPE", base_name),
@@ -626,22 +628,24 @@ def main():
             "path": os.path.join(base_path, "GPSAMPLER", base_name),
             "color": colors.get("GPSAMPLER"),
             "results_root_folder": os.path.join(base_path, "GPSAMPLER", "detect"),
-            "best_trial": os.path.join(base_path, "GPSAMPLER", "detect", "trial_98_training", "results.csv")
-        },
-        "Quasi Monte Carlo": {
-            "path": os.path.join(base_path, "QMCSAMPLER", base_name),
-            "color": colors.get("QMCSAMPLER"), 
-            "results_root_folder": os.path.join(base_path, "QMCSAMPLER", "detect"),
-            "best_trial": os.path.join(base_path, "QMCSAMPLER", "detect", "trial_45_training", "results.csv")
+            "best_trial": os.path.join(base_path, "GPSAMPLER", "detect", "trial_121_training", "results.csv")
         },
         "Simulated Annealing": {
             "path": os.path.join(base_path, "SIMULATED_ANNEALING", base_name),
             "color": colors.get("SIMULATED_ANNEALING"),
             "results_root_folder": os.path.join(base_path, "SIMULATED_ANNEALING", "detect"),
-            "best_trial": os.path.join(base_path, "SIMULATED_ANNEALING", "detect", "simulated_annealing97", "results.csv")
+            "best_trial": os.path.join(base_path, "SIMULATED_ANNEALING", "detect", "simulated_annealing34", "results.csv")
         },
     }
 
+    """
+        "Quasi Monte Carlo": {
+        "path": os.path.join(base_path, "QMCSAMPLER", base_name),
+        "color": colors.get("QMCSAMPLER"), 
+        "results_root_folder": os.path.join(base_path, "QMCSAMPLER", "detect"),
+        "best_trial": os.path.join(base_path, "QMCSAMPLER", "detect", "trial_103_training", "results.csv")
+    },
+    """
     
     print("Plotting results per trial")
     plot_hyperparameter_results(sampler_paths, 
