@@ -532,10 +532,11 @@ def plot_training_comparison(
         precision = df["metrics/precision(B)"]
         recall = df["metrics/recall(B)"]
         f1_score = 2 * (precision * recall) / (precision + recall + 1e-8)
-        smoothed_f1 = gaussian_filter1d(f1_score, sigma=1)
+        smoothed_f1 = gaussian_filter1d(f1_score, sigma=1.0)
         
         # Subplot 1: F1-Score
-        f1_ax.plot(df["epoch"], smoothed_f1, color=sampler_data["color"], linewidth=2, label=sampler_name)
+        f1_ax.plot(df["epoch"], f1_score, color=sampler_data["color"], linewidth=1, alpha=0.5, label="")
+        f1_ax.plot(df["epoch"], smoothed_f1, color=sampler_data["color"], linewidth=2, alpha=1.0, label=f"{sampler_name}")
 
         # Subplot 2: train/box_loss vs val/box_loss
         if "train/box_loss" in df.columns and "val/box_loss" in df.columns:
@@ -630,6 +631,12 @@ def main():
             "results_root_folder": os.path.join(base_path, "GPSAMPLER", "detect"),
             "best_trial": os.path.join(base_path, "GPSAMPLER", "detect", "trial_121_training", "results.csv")
         },
+        #"Quasi Monte Carlo": {
+        #    "path": os.path.join(base_path, "QMCSAMPLER", base_name),
+        #    "color": colors.get("QMCSAMPLER"), 
+        #    "results_root_folder": os.path.join(base_path, "QMCSAMPLER", "detect"),
+        #    "best_trial": os.path.join(base_path, "QMCSAMPLER", "detect", "trial_103_training", "results.csv")
+        #},
         "Simulated Annealing": {
             "path": os.path.join(base_path, "SIMULATED_ANNEALING", base_name),
             "color": colors.get("SIMULATED_ANNEALING"),
@@ -638,14 +645,9 @@ def main():
         },
     }
 
-    """
-        "Quasi Monte Carlo": {
-        "path": os.path.join(base_path, "QMCSAMPLER", base_name),
-        "color": colors.get("QMCSAMPLER"), 
-        "results_root_folder": os.path.join(base_path, "QMCSAMPLER", "detect"),
-        "best_trial": os.path.join(base_path, "QMCSAMPLER", "detect", "trial_103_training", "results.csv")
-    },
-    """
+
+
+
     
     print("Plotting results per trial")
     plot_hyperparameter_results(sampler_paths, 

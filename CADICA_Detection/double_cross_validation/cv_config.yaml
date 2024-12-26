@@ -5,7 +5,7 @@ SPLITS_CSV_DIR: "/home/mario/Python/Datasets/CADICA_Project/double_cv_splits"
 
 # K-Fold Settings
 SEED: 3012022
-EXTERNAL_FOLDS: 5
+EXTERNAL_FOLDS: 3
 INTERNAL_FOLDS: 1
 
 # Class Mappings

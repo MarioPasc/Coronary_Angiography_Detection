@@ -126,10 +126,7 @@ def generate_fold_configs(root_folder: str, output_base_dir: str) -> None:
         for inner_idx, inner_fold in enumerate(
             sorted(os.listdir(internal_folds_path)), start=1
         ):
-            inner_fold_path = internal_folds_path / inner_fold
-            if not inner_fold_path.is_dir():
-                continue
-
+            inner_fold_path = os.path.join(output_base_dir, f"fold_{outer_idx}", f"internal_fold_{inner_idx}")
             # Create YAML configuration
             config = {
                 "path": str(inner_fold_path),

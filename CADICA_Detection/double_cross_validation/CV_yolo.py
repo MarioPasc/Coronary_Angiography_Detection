@@ -49,6 +49,20 @@ class Detection_YOLO:
         self.config = load_config(yaml_path)
         self.dataset_path = self.config.get("path", "")
 
+        logging.info(f"Config YAML Path: {self.yaml_path}")
+        logging.info(f"YAML Content: {self.config}")
+
+
+    def validate_dataset_structure(self):
+        """Verify if the dataset path and splits are correctly structured."""
+        required_dirs = ["images/train", "images/val", "images/test", "labels/train", "labels/val", "labels/test"]
+        for dir_ in required_dirs:
+            full_path = os.path.join(self.dataset_path, dir_)
+            if not os.path.exists(full_path):
+                logging.error(f"Missing directory: {full_path}")
+            else:
+                logging.info(f"Found directory: {full_path} ({len(os.listdir(full_path))} files)")
+
     def train(self, hyperparameters: Dict[str, Any], device: str) -> None:
         """
         Train the YOLO model with the provided hyperparameters.
@@ -69,7 +83,7 @@ class Detection_YOLO:
         except Exception as e:
             logging.error(f"Training error for {self.yaml_path}: {e}")
 
-    def validate(self, unique_name: str, split: str = "test", device: str = "cuda:0") -> None:
+    def validate(self, unique_name: str, split: str = "test", device: str = "cuda:0", batch: int = 16) -> None:
         """
         Run validation using the best model on the specified data split.
 
@@ -88,10 +102,11 @@ class Detection_YOLO:
             model = YOLO(model=str(best_model_path), task="detect", verbose=True)
 
             logging.info(f"Running validation on split: {split}")
+            logging.info(f"Config file is at: {self.yaml_path}")
             val = model.val(
-                data=self.config,
+                data=self.yaml_path,
                 imgsz=512,
-                batch=16,
+                batch=batch,
                 iou=0.5,
                 plots=False,
                 split=split,
@@ -108,8 +123,9 @@ class Detection_YOLO:
                 f"{split}/mAP50": val.box.map50,
                 f"{split}/mAP50-95": val.box.map,
             }
+            logging.info(f"Validation results for '{split}': Precision={val.box.mp}, Recall={val.box.mr}, mAP50={val.box.map50}, mAP50-95={val.box.map}")
 
-            results_csv_path = Path(f"./results/{unique_name}_validation_metrics.csv")
+            results_csv_path = Path(f"./runs/detect/{unique_name}/{unique_name}_validation_metrics.csv")
             pd.DataFrame([results]).to_csv(results_csv_path, index=False)
             logging.info(f"Validation metrics saved to {results_csv_path}")
         except Exception as e:
@@ -122,11 +138,20 @@ def main():
     model_path = "yolov8l.pt"
     output_base_dir = "/media/hddb/mario/data/"
     device = "cuda:0"
-    epochs = 100
-    hyperparameters_path = "./args_tpe.yaml"  
+    epochs = 2
 
-    tuned_hyperparameters = load_hyperparameters(hyperparameters_path)
-
+    # Dictionary of hyperparameter configurations
+    hyperparameters_configs = {
+        'TPE': 'args_tpe.yaml',
+        'RANDOM': 'args_random.yaml',
+        'GAUSSIAN_PROCESS': 'args_gp.yaml',
+        'SIMULATED_ANNEALING': 'args_sim.yaml'
+    }
+    
+    # For the next run
+    hyperparameters_configs = {
+        'BASELINE': 'args_baseline.yaml'
+    }
 
     logging.info(f"CUDA is available: {torch.cuda.is_available()}")
     logging.info(f"Number of GPUs: {torch.cuda.device_count()}")
@@ -136,57 +161,66 @@ def main():
     configs = [path for path in os.listdir(fold_configs_dir) if not os.path.isdir(os.path.join(fold_configs_dir, path))]
 
     logging.info(f"Config files found: ")
-    for config in sorted(configs): logging.info(f"  - {config}")
+    for config in sorted(configs): 
+        logging.info(f"  - {config}")
 
-    # Train and validate for each fold config
-    for config_file in sorted(configs):
-        config_path = Path(fold_configs_dir) / config_file
-        unique_name = Path(config_file).stem
+    # Iterate through each hyperparameter configuration
+    for prefix, hyperparameters_path in hyperparameters_configs.items():
+        logging.info(f"Processing hyperparameter configuration: {prefix}")
+        tuned_hyperparameters = load_hyperparameters(hyperparameters_path)
 
-        logging.info(f"Processing fold: {unique_name}")
-        detection_yolo = Detection_YOLO(yaml_path=str(config_path), model_path=model_path)
+        # Train and validate for each fold config
+        for config_file in sorted(configs):
+            config_path = Path(fold_configs_dir) / config_file
+            unique_name = f"{prefix}_{Path(config_file).stem}"  # Add prefix to unique name
+            nonprefix_unique_name = Path(config_file).stem
+            logging.info(f"Processing fold: {unique_name}")
+            detection_yolo = Detection_YOLO(yaml_path=str(config_path), model_path=model_path)
 
-        # Determine corresponding CSV paths based on the config file name
-        outer_fold = unique_name.split("_")[1]
-        fold_dir = Path(splits_base_dir) / f"fold_{outer_fold}"
-        internal_fold_dir = fold_dir / "internal_folds/internal_fold_1"
+            # Determine corresponding CSV paths based on the config file name
+            outer_fold = nonprefix_unique_name.split("_")[1]
+            fold_dir = Path(splits_base_dir) / f"fold_{outer_fold}"
+            internal_fold_dir = fold_dir / "internal_folds/internal_fold_1"
 
-        train_csv_path = internal_fold_dir / "train.csv"
-        val_csv_path = internal_fold_dir / "val.csv"
-        test_csv_path = fold_dir / "test.csv"
+            train_csv_path = internal_fold_dir / "train.csv"
+            val_csv_path = internal_fold_dir / "val.csv"
+            test_csv_path = fold_dir / "test.csv"
 
-        logging.info(f"Using train CSV: {train_csv_path}")
-        logging.info(f"Using val CSV: {val_csv_path}")
-        logging.info(f"Using test CSV: {test_csv_path}")
+            logging.info(f"Using train CSV: {train_csv_path}")
+            logging.info(f"Using val CSV: {val_csv_path}")
+            logging.info(f"Using test CSV: {test_csv_path}")
 
-        # Override hyperparameters for the specific fold
-        hyperparameters = tuned_hyperparameters.copy()
-        hyperparameters["data"] = config_path
-        hyperparameters["name"] = unique_name
-        hyperparameters["epochs"] = epochs 
+            # Override hyperparameters for the specific fold
+            hyperparameters = tuned_hyperparameters.copy()
+            hyperparameters["data"] = config_path
+            hyperparameters["device"] = device
+            hyperparameters["patience"] = epochs
+            hyperparameters["name"] = unique_name
+            hyperparameters["epochs"] = epochs 
 
-        # Train the model
-        detection_yolo.train(hyperparameters, device=device)
+            # Train the model
+            detection_yolo.train(hyperparameters, device=device)
 
-        # Validate on the test split
-        detection_yolo.validate(split="test", device=device)
+            # Validate on the test split
+            detection_yolo.validate(split="test", device=device, unique_name=unique_name, batch=16)
 
-        # Run label-specific validation
-        if all(path.exists() for path in [train_csv_path, val_csv_path, test_csv_path]):
-            train_df = pd.read_csv(train_csv_path)
-            val_df = pd.read_csv(val_csv_path)
-            test_df = pd.read_csv(test_csv_path)
+            # Run label-specific validation
+            if all(path.exists() for path in [train_csv_path, val_csv_path, test_csv_path]):
+                train_df = pd.read_csv(train_csv_path)
+                val_df = pd.read_csv(val_csv_path)
+                test_df = pd.read_csv(test_csv_path)
 
-            label_tester = LabelTester(train_df, val_df, test_df, detection_yolo.dataset_path, output_base_dir, model_path)
-            labels = label_tester.create_label_datasets()
-            label_tester.create_config_files(labels)
-            results_df = label_tester.run_validation_on_labels(labels)
+                best_model_path = Path(f"./runs/detect/{unique_name}/weights/best.pt")
+                label_tester = LabelTester(train_df, val_df, test_df, detection_yolo.dataset_path, output_base_dir, best_model_path)
+                labels = label_tester.create_label_datasets()
+                label_tester.create_config_files(labels)
+                results_df = label_tester.run_validation_on_labels(labels)
 
-            results_csv_path = Path(output_base_dir) / f"{unique_name}_label_validation_results.csv"
-            results_df.to_csv(results_csv_path, index=False)
-            logging.info(f"Label-specific validation results saved to {results_csv_path}")
-        else:
-            logging.warning(f"Missing CSV files for fold: {unique_name}")
+                results_csv_path = Path(f"./runs/detect/{unique_name}/{unique_name}_label_validation_results.csv")
+                results_df.to_csv(results_csv_path, index=False)
+                logging.info(f"Label-specific validation results saved to {results_csv_path}")
+            else:
+                logging.warning(f"Missing CSV files for fold: {unique_name}")
 
 if __name__ == "__main__":
     main()

@@ -1,10 +1,12 @@
 import os
+import shutil
 import logging
 import pandas as pd
 import yaml
 from typing import List
 from CADICA_Detection.external.ultralytics.ultralytics import YOLO
 import torch.multiprocessing
+import torch
 
 class LabelTester:
     def __init__(self, train_df: pd.DataFrame, 
@@ -21,12 +23,17 @@ class LabelTester:
         self.model_path = model_path
 
     def create_label_datasets(self) -> List[str]:
+        """
+        Creates symlinked YOLO-compatible datasets for each label found in the 
+        training, validation, and test DataFrames. Returns a list of all unique labels.
+        """
         data_frames = {"train": self.train_df, "val": self.val_df, "test": self.test_df}
         labels = set()
 
         for df in data_frames.values():
             for label_list in df["LesionLabel"]:
                 split_labels = label_list.split(",")
+                split_labels = [label.strip().replace("'", "") for label in split_labels]
                 labels.update(split_labels)
 
         labels = list(labels)
@@ -44,6 +51,7 @@ class LabelTester:
                     frame_path = row["Frame_path"]
                     filename = os.path.basename(frame_path)
 
+                    # Check if this label is present in the current row
                     if label in row["LesionLabel"].split(","):
                         image_src = os.path.join(self.yolo_dataset_path, "images", split, filename)
                         label_filename = os.path.splitext(filename)[0] + ".txt"
@@ -60,6 +68,9 @@ class LabelTester:
         return labels
 
     def create_config_files(self, labels: List[str]) -> None:
+        """
+        Creates a YAML config file for each label, to be used by YOLO for detection.
+        """
         for label in labels:
             config = {
                 "path": os.path.join(self.output_base_dir, f"CADICA_{label}"),
@@ -74,7 +85,13 @@ class LabelTester:
             logging.info(f"Created config file for label '{label}' at {config_path}")
 
     def run_validation_on_labels(self, labels: List[str]) -> pd.DataFrame:
-        torch.multiprocessing.set_start_method("spawn")
+        """
+        Runs validation on each label, returns a DataFrame with precision, recall, 
+        mAP50, mAP50-95 for train/val/test splits.
+        
+        At the end, removes all label-specific directories and config files.
+        """
+        torch.multiprocessing.set_start_method("spawn", force=True)
 
         results = []
         splits = ["train", "val", "test"]
@@ -105,5 +122,19 @@ class LabelTester:
                 label_results[f"{split}/mAP50-95"] = val.box.map
 
             results.append(label_results)
+
+        # Once we've completed validation for all labels, clean up
+        for label in labels:
+            # Remove the label-specific directory
+            label_dir = os.path.join(self.output_base_dir, f"CADICA_{label}")
+            if os.path.exists(label_dir):
+                logging.info(f"Removing directory: {label_dir}")
+                shutil.rmtree(label_dir, ignore_errors=True)
+
+            # Remove the label-specific config file
+            config_file = os.path.join(self.output_base_dir, f"config_{label}.yaml")
+            if os.path.exists(config_file):
+                logging.info(f"Removing config file: {config_file}")
+                os.remove(config_file)
 
         return pd.DataFrame(results)

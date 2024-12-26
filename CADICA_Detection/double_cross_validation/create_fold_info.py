@@ -229,6 +229,10 @@ def save_multilabel_folds(
     """
     os.makedirs(output_dir, exist_ok=True)
 
+    label_distribution = label_matrix.drop(columns=["Patient"]).sum(axis=0)
+    print("Label Distribution:")
+    print(label_distribution)
+
     mskf = MultilabelStratifiedKFold(n_splits=n_splits, random_state=seed, shuffle=True)
     for fold_idx, (train_val_idx, test_idx) in enumerate(
         mskf.split(label_matrix["Patient"], label_matrix.drop(columns=["Patient"]))
@@ -261,7 +265,7 @@ def save_multilabel_folds(
             train_val_df.to_csv(
                 os.path.join(internal_fold_dir, "train.csv"), index=False
             )
-            test_df.to_csv(os.path.join(internal_fold_dir, "val.csv"), index=False)
+            train_val_df.to_csv(os.path.join(internal_fold_dir, "val.csv"), index=False)
             logging.info(
                 f"Saved Internal Fold 1 for Fold {fold_idx + 1} with train and val identical."
             )
