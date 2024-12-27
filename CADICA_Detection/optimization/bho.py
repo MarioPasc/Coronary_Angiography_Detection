@@ -743,7 +743,7 @@ class BHOYOLO:
             Proceedings of Machine Learning and Systems, 2020, vol. 2, p. 230-246.
             https://arxiv.org/abs/1810.05934
         
-        TPESampler:
+        Tree-structured Parzen Estimator Sampler:
             BERGSTRA, James, et al. Algorithms for hyper-parameter optimization. 
             Advances in neural information processing systems, 2011, vol. 24.
             https://proceedings.neurips.cc/paper_files/paper/2011/file/86e8f7ab32cfd12577bc2619bc635690-Paper.pdf
@@ -751,6 +751,16 @@ class BHOYOLO:
             BERGSTRA, James; YAMINS, Dan; COX, David D. Making a science of model search. 
             arXiv preprint arXiv:1209.5111, 2012.
             https://arxiv.org/abs/1209.5111
+            
+            Check the official optuna website for more information:
+            https://optuna.readthedocs.io/en/stable/reference/samplers/generated/optuna.samplers.TPESampler.html#optuna.samplers.TPESampler
+            
+        Gaussian Process Sampler:
+            This resource is the best at understanding how GP-based samplers work for 
+            Bayesian Hyperparameter Optimization: https://www.miguelgondu.com/blogposts/2023-07-31/intro-to-bo/
+            
+            Check the base config for GP-based BHO in optuna website (Matern kernel twice differentiable, ARD, logEI, ...)
+            https://optuna.readthedocs.io/en/stable/reference/samplers/generated/optuna.samplers.GPSampler.html#optuna.samplers.GPSampler
         """
         # Get the logger
         logger = logging.getLogger("BHOYOLO")

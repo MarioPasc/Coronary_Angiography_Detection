@@ -10,6 +10,18 @@ import pandas as pd
 import logging
 from typing import Dict
 
+import logging
+
+# Configure logging to file and console
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("./simulated_annealing.log"),
+        logging.StreamHandler()
+    ]
+)
+logging.info("Starting cross-validation process.")
 
 class Detection_YOLO:
     """
@@ -130,20 +142,33 @@ class Detection_YOLO:
             
             logging.info("Starting hyperparameter tuning.")
             
-            # Custom callback to log hyperparameters and fitness
+            import time
+            
+            # ---- Capture the time when tuning starts ----
+            start_time = time.time()
+            
+            logging.info(f"Starting timer: {time.time() - start_time} s")
+        
             def log_tuning_results(trainer):
-                f1_score = trainer.metrics.get("fitness", 0.0)  # Retrieve fitness (e.g., F1-Score)
+                """
+                Callback to log:
+                - The time elapsed since the start of tuning
+                - The hyperparameters currently in use
+                - The fitness (e.g., F1-Score)
+                """
+                elapsed = time.time() - start_time
+                f1_score = trainer.metrics.get("fitness", 0.0)
                 hyperparams = trainer.args
-                logging.info(f"Hyperparameters: {hyperparams}, Fitness (F1-Score): {f1_score}")
+                logging.info(f"[{elapsed:.1f}s] Hyperparams: {hyperparams}, Fitness (F1-Score): {f1_score}")
 
             # Register the callback
             self.model.add_callback("on_fit_epoch_end", log_tuning_results)
-            
+
             results_tuning = self.model.tune(
                 data=self.yaml_path,
                 epochs=1000,
                 patience=10,
-                iterations=100,
+                iterations=200,
                 iou=0.5,
                 seed=3012022,
                 single_cls=True,
@@ -158,6 +183,12 @@ class Detection_YOLO:
                 space=search_space
             )
             logging.info("Tuning completed successfully.")
+
+            # ---- End time + compute duration ----
+            end_time = time.time()
+            total_time = end_time - start_time
+            logging.info(f"Tuning completed successfully in {total_time:.2f} seconds.")
+
 
         except Exception as e:
             logging.error("Tuning error: %s", e)

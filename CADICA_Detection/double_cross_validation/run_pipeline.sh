@@ -4,3 +4,4 @@ export PYTHONPATH="${PYTHONPATH}:/home/mariopasc/Python/Projects/Coronary_Angiog
 
 python ./create_fold_info.py
 python ./create_yolo_splits.py
+python ./aux_transform_csvs.py

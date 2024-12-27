@@ -92,11 +92,24 @@ def run_filterByLabels(df: pd.DataFrame, labels_to_remove: List[str]) -> pd.Data
 
 
 def run_splitData(
-    filtered_df: pd.DataFrame, val_size: float, test_size: float, random_state: int = 39
+    filtered_df: pd.DataFrame,
+    val_size: float,
+    test_size: float = 0.0,
+    random_state: int = 39
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Splits the dataset into training, validation, and testing sets based on unique patients,
     ensuring that each lesion label is represented in each split according to the desired ratios.
+    If test_size is zero or None, the test set will be a copy of the validation set.
+    
+    Args:
+        filtered_df (pd.DataFrame): The filtered DataFrame to split.
+        val_size (float): Fraction of data to allocate as validation set.
+        test_size (float, optional): Fraction of data to allocate as test set. Defaults to 0.0.
+        random_state (int, optional): Random seed for reproducibility. Defaults to 39.
+
+    Returns:
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: (train_df, val_df, test_df)
     """
 
     # Get unique patients
@@ -113,11 +126,11 @@ def run_splitData(
             labels_set.add("nolesion")
         patient_label_dict[patient] = labels_set
 
-    # Get all unique labels
+    # Gather all unique labels
     all_labels = set()
     for labels in patient_label_dict.values():
         all_labels.update(labels)
-    all_labels = sorted(all_labels)  # type: ignore
+    all_labels = sorted(all_labels)
 
     # Create a binary label matrix for patients
     patient_label_df = pd.DataFrame(0, index=patients, columns=all_labels)
@@ -126,35 +139,57 @@ def run_splitData(
             patient_label_df.loc[patient, label] = 1
 
     # Prepare data for stratification
-    X = np.arange(len(patients)).reshape(-1, 1)
-    y = patient_label_df.values
+    X = np.arange(len(patients)).reshape(-1, 1)  # Features are just indices
+    y = patient_label_df.values                 # Multi-label array
 
-    # First split: train_val vs test
-    msss = MultilabelStratifiedShuffleSplit(
-        n_splits=1, test_size=test_size, random_state=random_state
-    )
-    train_val_indices, test_indices = next(msss.split(X, y))
+    # Case 1: If test_size > 0, do the standard train-val-test split
+    if test_size is not None and test_size > 0:
+        # First split: train+val vs test
+        msss = MultilabelStratifiedShuffleSplit(
+            n_splits=1, test_size=test_size, random_state=random_state
+        )
+        train_val_indices, test_indices = next(msss.split(X, y))
 
-    # Second split: train vs val
-    train_val_X = X[train_val_indices]
-    train_val_y = y[train_val_indices]
+        # Second split: train vs val
+        train_val_X = X[train_val_indices]
+        train_val_y = y[train_val_indices]
 
-    val_size_adjusted = val_size / (1.0 - test_size)  # Adjust validation size
-    msss_val = MultilabelStratifiedShuffleSplit(
-        n_splits=1, test_size=val_size_adjusted, random_state=random_state
-    )
-    train_indices, val_indices = next(msss_val.split(train_val_X, train_val_y))
+        # Adjust validation size if test_size is not zero
+        val_size_adjusted = val_size / (1.0 - test_size)
+        msss_val = MultilabelStratifiedShuffleSplit(
+            n_splits=1, test_size=val_size_adjusted, random_state=random_state
+        )
+        train_indices, val_indices = next(msss_val.split(train_val_X, train_val_y))
 
-    # Get patient IDs for each split
-    patients_array = patients
-    train_patients = patients_array[train_val_indices[train_indices].flatten()]
-    val_patients = patients_array[train_val_indices[val_indices].flatten()]
-    test_patients = patients_array[test_indices.flatten()]
+        # Get final patient IDs for each split
+        train_patients = patients[train_val_indices[train_indices].flatten()]
+        val_patients = patients[train_val_indices[val_indices].flatten()]
+        test_patients = patients[test_indices.flatten()]
 
-    # Now, select data for each set
-    train_df = filtered_df[filtered_df["Patient"].isin(train_patients)]
-    val_df = filtered_df[filtered_df["Patient"].isin(val_patients)]
-    test_df = filtered_df[filtered_df["Patient"].isin(test_patients)]
+        # Create DataFrames for each set
+        train_df = filtered_df[filtered_df["Patient"].isin(train_patients)]
+        val_df = filtered_df[filtered_df["Patient"].isin(val_patients)]
+        test_df = filtered_df[filtered_df["Patient"].isin(test_patients)]
+
+    else:
+        # Case 2: test_size == 0 or None => perform only train-val split, copy val to test
+
+        # We do a single split for train vs validation
+        msss_val_only = MultilabelStratifiedShuffleSplit(
+            n_splits=1, test_size=val_size, random_state=random_state
+        )
+        train_indices, val_indices = next(msss_val_only.split(X, y))
+
+        # Get patient IDs for train/val
+        train_patients = patients[train_indices.flatten()]
+        val_patients = patients[val_indices.flatten()]
+
+        # Create DataFrames for train and val
+        train_df = filtered_df[filtered_df["Patient"].isin(train_patients)]
+        val_df = filtered_df[filtered_df["Patient"].isin(val_patients)]
+
+        # For the test set, just copy the validation set
+        test_df = val_df.copy()
 
     return train_df, val_df, test_df
 

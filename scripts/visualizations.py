@@ -13,7 +13,7 @@
 #       II. lineplot for variation of mAP@50-95 per hyperparameter value. X-axis: hyperparameter value, Y-axis: mAP@50-95 ✅ 
 # 5. Results comparison: Lineplot of mAP@50-95 performance per model. X-axis: epoch, Y-axis: mAP@50-95, one data series per model (baseline, Simulated Annealing, iteration 1, iteration 2) ✅ 
 
-from typing import List, Dict
+from typing import List, Dict, Any
 import pandas as pd
 import os
 import logging
@@ -594,10 +594,336 @@ def plot_training_comparison(
     plt.savefig(f"{output_path}.{output_format}", format=output_format, bbox_inches='tight')
     if SHOW: plt.show()
 
+def compute_f1_score(precision: float, recall: float) -> float:
+    """
+    Computes the F1-Score from precision and recall.
+    """
+    return (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+def aggregate_fold_data(root_folder: str) -> pd.DataFrame:
+    """
+    Aggregates test metrics and label-specific metrics across models and folds.
+
+    Args:
+        root_folder: Root directory containing fold subfolders.
+
+    Returns:
+        A DataFrame containing aggregated data with these columns:
+            ['Model', 'Fold', 'Overall_F1', 'Overall_mAP50', 'Overall_mAP50-95', 
+             'Labels'] 
+        where 'Labels' is a dictionary:
+            { label_name: (F1, mAP50, mAP50-95) }
+        Missing labels per fold are stored as np.nan in that label's tuple.
+    """
+    records = []
+    
+    for fold_folder in os.listdir(root_folder):
+        fold_path = os.path.join(root_folder, fold_folder)
+        if not os.path.isdir(fold_path):
+            continue
+        
+        metrics_file = os.path.join(fold_path, f"{fold_folder}_validation_metrics.csv")
+        label_metrics_file = os.path.join(fold_path, f"{fold_folder}_label_validation_results.csv")
+        if not (os.path.exists(metrics_file) and os.path.exists(label_metrics_file)):
+            print(f"[WARNING] Metrics files missing for {fold_path}. Skipping this folder.")
+            continue
+        
+        # Extract model name (e.g., "RANDOM" from "RANDOM_outer_1_inner_1")
+        model_name = fold_folder.split("_outer")[0]
+        # Extract outer fold number
+        parts = fold_folder.split("_")
+        fold_number = parts[2] if len(parts) > 2 else "?"
+
+        overall_df = pd.read_csv(metrics_file)
+        label_df = pd.read_csv(label_metrics_file)
+
+        # Filter out 'nolesion' and compute F1
+        label_df = label_df[label_df['Label'] != 'nolesion'].copy()
+        label_df['F1'] = label_df.apply(
+            lambda row: compute_f1_score(row['test/precision'], row['test/recall']), axis=1
+        )
+
+        # Compute overall F1
+        overall_f1 = compute_f1_score(
+            overall_df['test/precision'].iloc[0],
+            overall_df['test/recall'].iloc[0]
+        )
+        overall_map50 = overall_df['test/mAP50'].iloc[0]
+        overall_map5095 = overall_df['test/mAP50-95'].iloc[0]
+
+        label_dict = {}
+        for _, row in label_df.iterrows():
+            label_name = row['Label']
+            f1_val = row['F1']
+            map50_val = row['test/mAP50']
+            map5095_val = row['test/mAP50-95']
+            label_dict[label_name] = (f1_val, map50_val, map5095_val)
+        
+        records.append({
+            'Model': model_name,
+            'Fold': fold_number,
+            'Overall_F1': overall_f1,
+            'Overall_mAP50': overall_map50,
+            'Overall_mAP50-95': overall_map5095,
+            'Labels': label_dict
+        })
+
+    df = pd.DataFrame(records)
+    return df
+
+def generate_boxplot(df: pd.DataFrame, output_path: str, output_format:str="svg"):
+    """
+    Generates a boxplot for overall and label-specific F1-scores across models,
+    using a predefined label and model order. Uses subplots() to allow customizing
+    axis spines and ticks.
+    
+    Args:
+        df: DataFrame from aggregate_fold_data().
+        output_path: Path to save the boxplot image.
+    """
+    import matplotlib.patches as mpatches
+
+    # Desired model order
+    model_order = ["TPE", "GPSAMPLER", "RANDOM", "SIMULATED_ANNEALING", "BASELINE"]
+    # Color mapping
+    colors = {
+        "RANDOM": "#994455",
+        "TPE": "#6699CC",
+        "GPSAMPLER": "#997700",
+        "QMCSAMPLER": "#EE99AA",  # If you ever have QMCSAMPLER
+        "SIMULATED_ANNEALING": "#004488",
+        "BASELINE": "#000000",
+    }
+
+    # Desired label order (including Overall)
+    label_order = ["Overall", "p100", "p99", "p90_98", "p70_90", "p50_70"]
+    label_mapping = {
+        "p50_70": r"$[50, 70)\%$",
+        "p70_90": r"$[70, 90)\%$",
+        "p90_98": r"$[90, 98)\%$",
+        "p99": r"$99\%$",
+        "p100": r"$100\%$"
+    }
+
+    # Build an internal structure for plotting: { label -> { model -> [F1 across folds] } }
+    f1_scores = { label: {m: [] for m in model_order} for label in label_order }
+
+    for _, row in df.iterrows():
+        model = row['Model']
+        if model not in model_order:
+            continue
+        # Overall
+        f1_scores["Overall"][model].append(row['Overall_F1'])
+        # Label-specific
+        labels_dict = row['Labels']
+        for label in labels_dict:
+            if label in label_order:  # Only gather if label is recognized in our order
+                f1_scores[label][model].append(labels_dict[label][0])  # the F1 is index 0
+
+    # Create figure and axes
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    positions = []
+    data_to_plot = []
+    color_patches = []
+
+    offset = 0.15
+    xtick_labels = []
+
+    # We'll iterate over label_order and create multiple sub-positions for each model
+    for label_idx, label in enumerate(label_order):
+        num_models = len(model_order)
+        # center position for this label
+        mid_position = label_idx
+        start_position = mid_position - (offset * (num_models - 1) / 2.0)
+
+        for m_idx, model in enumerate(model_order):
+            all_values = f1_scores[label][model]
+            positions.append(start_position + m_idx * offset)
+            data_to_plot.append(all_values)
+            color_patches.append(colors.get(model, "#000000"))
+
+        xtick_labels.append(label)
+
+    bplot = ax.boxplot(
+        data_to_plot, 
+        positions=positions, 
+        patch_artist=True, 
+        widths=offset * 0.8,
+        medianprops=dict(color="black")
+    )
+
+    for patch, c in zip(bplot['boxes'], color_patches):
+        patch.set_facecolor(c)
+
+    # X-ticks
+    ax.set_xticks(range(len(label_order)))
+    ax.set_xticklabels([label_mapping.get(lbl, lbl) for lbl in label_order], rotation=0)
+
+    ax.set_title("F1-Score Across Models and Labels")
+    ax.set_xlabel("Labels (including Overall)")
+    ax.set_ylabel("F1-Score")
+
+    # Hide top/right spines and set bottom/left ticks
+    ax.spines[['right', 'top']].set_visible(False)
+    ax.get_xaxis().tick_bottom()
+    ax.get_yaxis().tick_left()
+
+    # Draw horizontal grid lines
+    ax.grid(axis='y', linestyle='--', alpha=0.7)
+
+    # Create legend
+    legend_handles = []
+    for model in model_order:
+        if model in colors:
+            patch = mpatches.Patch(color=colors[model], label=model)
+            legend_handles.append(patch)
+    # Place legend outside the lower center
+    ax.legend(
+        handles=legend_handles, 
+        loc='upper center', 
+        bbox_to_anchor=(0.5, -0.08),
+        ncol=len(model_order),
+        frameon=False
+    )
+
+    fig.tight_layout()
+    # Use bbox_inches="tight" so the legend is included
+    plt.savefig(f"{output_path}.{output_format}", format=output_format, bbox_inches='tight')
+    plt.close(fig)
+    print(f"[INFO] Boxplot saved at {output_path}")
+
+
+def generate_latex_table(df: pd.DataFrame, output_tex_path: str):
+    """
+    Generates a LaTeX table summarizing mean and std of F1, mAP50, mAP50-95
+    for each label (including Overall) and each model, in a specific model order.
+    No bold highlights.
+
+    Args:
+        df: DataFrame from aggregate_fold_data().
+        output_tex_path: Path to the .tex file to write.
+    """
+    # Desired model order
+    model_order = ["TPE", "GPSAMPLER", "RANDOM", "SIMULATED_ANNEALING", "BASELINE"]
+    # Desired label order, plus mapping
+    label_order = ["Overall", "p100", "p99", "p90_98", "p70_90", "p50_70"]
+    label_mapping = {
+        "p50_70": r"$[50, 70)\%$",
+        "p70_90": r"$[70, 90)\%$",
+        "p90_98": r"$[90, 98)\%$",
+        "p99": r"$99\%$",
+        "p100": r"$100\%$"
+    }
+
+    # Collect all (F1, mAP50, mAP50-95) values
+    # metrics_dict[label][model] = [(f1, map50, map50-95), ... per fold]
+    metrics_dict = {
+        label: {m: [] for m in model_order} for label in label_order
+    }
+
+    for _, row in df.iterrows():
+        model = row['Model']
+        if model not in model_order:
+            continue
+
+        # Overall
+        metrics_dict["Overall"][model].append(
+            (row['Overall_F1'], row['Overall_mAP50'], row['Overall_mAP50-95'])
+        )
+
+        # Labels
+        labels_dict = row['Labels']
+        for label in labels_dict:
+            if label in label_order:
+                metrics_dict[label][model].append(labels_dict[label])
+
+    # Build the final rows
+    # For each label and model, compute mean ± std
+    table_rows = {label: [] for label in label_order}
+
+    for label in label_order:
+        for model in model_order:
+            data_list = metrics_dict[label][model]
+            if len(data_list) == 0:
+                # No data
+                f1_str = "N/A"
+                map50_str = "N/A"
+                map5095_str = "N/A"
+            else:
+                arr = np.array(data_list, dtype=np.float32)
+                mean_vals = np.nanmean(arr, axis=0)
+                std_vals = np.nanstd(arr, axis=0)
+                mean_f1, mean_mAP50, mean_mAP5095 = mean_vals
+                std_f1, std_mAP50, std_mAP5095 = std_vals
+
+                if np.isnan(mean_f1):
+                    f1_str = "N/A"
+                else:
+                    f1_str = f"{mean_f1:.3f} ± {std_f1:.3f}"
+
+                if np.isnan(mean_mAP50):
+                    map50_str = "N/A"
+                else:
+                    map50_str = f"{mean_mAP50:.3f} ± {std_mAP50:.3f}"
+
+                if np.isnan(mean_mAP5095):
+                    map5095_str = "N/A"
+                else:
+                    map5095_str = f"{mean_mAP5095:.3f} ± {std_mAP5095:.3f}"
+
+            table_rows[label].append({
+                "Metric": label,
+                "Model": model,
+                "F1": f1_str,
+                "mAP50": map50_str,
+                "mAP50-95": map5095_str
+            })
+
+    # Generate LaTeX code
+    latex_lines = []
+    latex_lines.append(r"\begin{table}[h!]")
+    latex_lines.append(r"\centering")
+    latex_lines.append(r"\begin{tabular}{l l c c c}")
+    latex_lines.append(r"\hline")
+    latex_lines.append(r"Metric & Model & F1-Score & mAP50 & mAP50-95 \\")
+    latex_lines.append(r"\hline")
+
+    for label in label_order:
+        rows_for_label = table_rows[label]
+        # Remove models that truly have no entry if you prefer, 
+        # but here we'll keep them all in the specified order.
+        # The first row will contain the label, subsequent ones are blank in that column.
+        if all((r["F1"] == "N/A" and r["mAP50"] == "N/A" and r["mAP50-95"] == "N/A") for r in rows_for_label):
+            # means no data at all for that label
+            continue
+
+        # We'll map the label if possible
+        label_display = label_mapping.get(label, label)
+
+        first_row = rows_for_label[0]
+        latex_lines.append(
+            f"{label_display} & {first_row['Model']} & {first_row['F1']} & {first_row['mAP50']} & {first_row['mAP50-95']} \\\\"
+        )
+        for row in rows_for_label[1:]:
+            latex_lines.append(
+                f" & {row['Model']} & {row['F1']} & {row['mAP50']} & {row['mAP50-95']} \\\\"
+            )
+        latex_lines.append(r"\hline")
+
+    latex_lines.append(r"\end{tabular}")
+    latex_lines.append(r"\caption{Performance metrics (mean $\pm$ std) across models and labels.}")
+    latex_lines.append(r"\label{tab:performance_metrics}")
+    latex_lines.append(r"\end{table}")
+
+    with open(output_tex_path, "w") as f:
+        f.write("\n".join(latex_lines))
+    print(f"[INFO] LaTeX table saved at {output_tex_path}")
+
 def main():
     # processed_dataset_visualization()
         
-    colors = {
+    colors: Dict[str, str] = {
         "RANDOM": "#994455",
         "TPE": "#6699CC",
         "GPSAMPLER": "#997700",
@@ -606,13 +932,14 @@ def main():
         "BASELINE": "#000000",
     }
 
-    save_plots_path = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation/PLOTS"
+    save_plots_path: str = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation/PLOTS"
 
-    base_path = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation"
-    base_name = "hyperparameter_optimization_results.csv"
+    base_path: str = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation"
+    base_name: str = "hyperparameter_optimization_results.csv"
     
-    # Example Usage
-    sampler_paths = {
+    image_format: str = "svg"
+    
+    sampler_paths: Dict[str, Dict[str, Any]] = {
         "Random Search": {
             "path": os.path.join(base_path, "RANDOM", base_name),
             "color": colors.get("RANDOM"), 
@@ -631,12 +958,6 @@ def main():
             "results_root_folder": os.path.join(base_path, "GPSAMPLER", "detect"),
             "best_trial": os.path.join(base_path, "GPSAMPLER", "detect", "trial_121_training", "results.csv")
         },
-        #"Quasi Monte Carlo": {
-        #    "path": os.path.join(base_path, "QMCSAMPLER", base_name),
-        #    "color": colors.get("QMCSAMPLER"), 
-        #    "results_root_folder": os.path.join(base_path, "QMCSAMPLER", "detect"),
-        #    "best_trial": os.path.join(base_path, "QMCSAMPLER", "detect", "trial_103_training", "results.csv")
-        #},
         "Simulated Annealing": {
             "path": os.path.join(base_path, "SIMULATED_ANNEALING", base_name),
             "color": colors.get("SIMULATED_ANNEALING"),
@@ -645,20 +966,18 @@ def main():
         },
     }
 
+    # Pipeline
 
-
-
-    
     print("Plotting results per trial")
     plot_hyperparameter_results(sampler_paths, 
                                 output_path=os.path.join(save_plots_path, "performance_per_trial"), 
-                                output_format="svg", 
+                                output_format=image_format, 
                                 metric_column={"F1-Score": "user_attrs_f1_score"})
 
     print("Plotting hyperparameter distributions")
     plot_hyperparameter_scatter(sampler_paths, 
                                 output_path=os.path.join(save_plots_path, "hyperparameter_scatterplots"), 
-                                output_format="svg", 
+                                output_format=image_format, 
                                 metric_column={"F1-Score": "user_attrs_f1_score"})
     
     print("Plotting training comparison")
@@ -669,7 +988,6 @@ def main():
             "color": colors.get("BASELINE"),
         }
     }   
-
     
     plot_training_comparison(
         sampler_csv_paths={
@@ -679,6 +997,16 @@ def main():
         output_path=os.path.join(save_plots_path, "training_comparison"),
         output_format="svg",
     )
+    
+    root_folder_cv = os.path.join(base_path, "CV")
+    output_boxplot = os.path.join(save_plots_path, "boxplots_cross_validation")
+    output_tex = os.path.join(save_plots_path, "performance_table.tex")
+
+    print("Plotting cross-validation performance results")
+    aggregated_df = aggregate_fold_data(root_folder_cv)
+    generate_boxplot(aggregated_df, output_boxplot, output_format=image_format)
+    print("Generating cross-validation performance table")
+    generate_latex_table(aggregated_df, output_tex)
 
 
 if __name__ == "__main__":
