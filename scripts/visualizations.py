@@ -17,15 +17,12 @@ from typing import List, Dict, Any
 import pandas as pd
 import os
 import logging
-import json
-from collections import defaultdict
-import re
-from natsort import natsorted
 import yaml
-import cv2
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 from scipy.ndimage import gaussian_filter1d
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
 
 import matplotlib.pyplot as plt
 import scienceplots
@@ -69,7 +66,7 @@ def load_config(yaml_path: str) -> dict:
 # Load the CONFIG variable
 CONFIG = load_config(CONFIG_PATH)
 
-def original_dataset_visualization():
+def original_dataset_visualization(save_path:str):
     """
     Generates and saves visualizations for original dataset analysis: 
     1) Samples per set (training/validation/test) for Lesion, No Lesion, and Total counts.
@@ -87,7 +84,9 @@ def original_dataset_visualization():
     try:
         # Load variables
         original_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Holdout_Info")
-        save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
+        
+        if not save_path:
+            save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
         os.makedirs(save_path, exist_ok=True)
         save_formats = CONFIG["FIGURE_FORMATS"]
 
@@ -159,7 +158,7 @@ def original_dataset_visualization():
     except Exception as e:
         logging.info(f"Error generating original dataset plots. - {e}")
 
-def processed_dataset_visualization():
+def processed_dataset_visualization(save_path:str):
     """
     Generates and saves visualizations for processed dataset analysis, showing changes in counts due to augmentation and undersampling.
     Adds markers to each bar representing the original dataset counts for comparison.
@@ -173,7 +172,10 @@ def processed_dataset_visualization():
         original_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Holdout_Info")
         processed_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Augmented_Images")
         processed_test_folder = os.path.join(CONFIG["OUTPUT_PATH"], "CADICA_Undersampled_Images")
-        save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
+
+        if not save_path:
+            save_path = os.path.join(CONFIG["OUTPUT_PATH"], "PAPER_Figures")
+
         os.makedirs(save_path, exist_ok=True)
         save_formats = CONFIG["FIGURE_FORMATS"]
         SHOW = CONFIG.get("SHOW_PLOTS", False)  # Add this to CONFIG if needed
@@ -306,6 +308,10 @@ def processed_dataset_visualization():
     except Exception as e:
         logging.error(f"Error generating processed dataset plots. - {e}")
 
+#########################################
+# RESULTS PER TRIAL, DIFFERENT VERSIONS #
+#########################################
+
 def plot_hyperparameter_results(
     sampler_csv_paths: Dict[str, Dict[str, str]], 
     output_path: str, 
@@ -416,6 +422,406 @@ def plot_hyperparameter_results(
     plt.savefig(f"{output_path}.{output_format}", format=output_format, bbox_inches='tight')
     if SHOW: plt.show()
 
+def plot_hyperparameter_results_with_gaussian(
+    sampler_csv_paths: Dict[str, Dict[str, str]], 
+    output_path: str, 
+    output_format: str = "png",
+    metric_column: Dict[str, str] = {"F1-Score": "objective_0"},
+    whiskers: bool = False,
+    sigma: float = 2.0
+):
+    """
+    Generate a single visualization of a chosen metric per trial for hyperparameter optimization samplers,
+    adding a Gaussian-filtered trend line for each sampler.
+
+    This function retains the original logic that:
+      - Plots all trials as scatter points.
+      - Draws the optimal frontier steps.
+      - Optionally adds whiskers to optimal trials.
+      - Adds a smoothed (Gaussian-filtered) line to indicate the performance tendency.
+    
+    Parameters:
+        sampler_csv_paths (Dict[str, Dict[str, str]]): Dictionary with sampler names as keys and dictionaries containing:
+            - "path": Path to the CSV file.
+            - "color": Color to plot for the sampler.
+            - "results_root_folder": (Optional) Path to root folder containing results for optimal trials.
+        output_path (str): Path to save the output figure.
+        output_format (str): Format to save the figure (e.g., 'png', 'svg', 'pdf').
+        metric_column (Dict[str, str]): Dictionary with display name as key and column name as value to plot on Y-axis.
+        whiskers (bool): Whether to add whiskers for optimal trials.
+        sigma (float): Standard deviation for the Gaussian filter used in smoothing the scatter points.
+    """
+    # Extract metric name and column
+    metric_name, metric_col = list(metric_column.items())[0]
+
+    # Helper function to calculate the optimal front
+    def calculate_optimal_front(trials: List[int], scores: List[float]):
+        frontier_x, frontier_y = [], []
+        best_so_far = -float("inf")
+        for trial, score in zip(trials, scores):
+            if score > best_so_far:
+                if frontier_x:
+                    frontier_x.append(trial)
+                    frontier_y.append(best_so_far)  # Horizontal line
+                best_so_far = score
+                frontier_x.append(trial)
+                frontier_y.append(score)  # Vertical line
+        if trials[-1] != frontier_x[-1]:
+            frontier_x.append(trials[-1])  # Extend horizontally to the last trial
+            frontier_y.append(best_so_far)
+        return frontier_x, frontier_y
+
+    # Helper function to calculate F1-Score for a trial
+    def compute_f1_score(results_file: str):
+        df = pd.read_csv(results_file)
+        precision = df["metrics/precision(B)"]
+        recall = df["metrics/recall(B)"]
+        f1_score = 2 * (precision * recall) / (precision + recall + 1e-8)
+        return f1_score
+
+    fig, ax = plt.subplots(figsize=(12, 7))
+    legends = []
+
+    for sampler_name, sampler_data in sampler_csv_paths.items():
+        df = pd.read_csv(sampler_data["path"])
+        trials = df.index.values
+        scores = df[metric_col].values
+        
+        # Calculate optimal front
+        frontier_x, frontier_y = calculate_optimal_front(trials, scores)
+
+        # Scatter plot for all trials
+        ax.scatter(trials, scores, s=10, color=sampler_data["color"], alpha=0.5, label=sampler_name)
+
+        # Plot the optimal frontier
+        ax.step(frontier_x, frontier_y, where='post', color=sampler_data["color"], linewidth=2)
+
+        # Gaussian smoothing for the scatter points
+        smoothed_scores = gaussian_filter1d(scores, sigma=sigma)
+        ax.plot(trials, smoothed_scores, color=sampler_data["color"], linestyle='--', linewidth=2, alpha=0.8)
+
+        # Optionally plot whiskers for optimal trials
+        if whiskers:
+            optimal_trials = [trial for trial, _ in zip(frontier_x[::2], frontier_y[::2])]
+            for trial, mean_f1 in zip(optimal_trials, frontier_y[::2]):
+                if sampler_name != "Simulated Annealing":
+                    results_file = os.path.join(sampler_data["results_root_folder"], f"trial_{trial}_training", "results.csv")
+                else:
+                    results_file = os.path.join(sampler_data["results_root_folder"], f"simulated_annealing{trial}", "results.csv")
+                if os.path.exists(results_file):
+                    f1_scores = compute_f1_score(results_file)
+                    min_f1, max_f1 = f1_scores.min(), f1_scores.max()
+                    lower_err = max(0, mean_f1 - min_f1)
+                    upper_err = max(0, max_f1 - mean_f1)
+                    ax.errorbar(trial, mean_f1,
+                                yerr=[[lower_err], [upper_err]],
+                                fmt="o", color=sampler_data["color"], capsize=3, alpha=0.7)
+
+        # Legend info
+        best_idx = df[metric_col].idxmax()
+        best_trial = df.loc[best_idx, "number"]
+        best_score = df.loc[best_idx, metric_col]
+        legends.append((plt.Line2D([], [], color=sampler_data["color"], linewidth=2),
+                        f"{sampler_name} (Best: {best_score:.3f}, Trial: {int(best_trial)})"))
+
+    ax.set_xlabel("Trial")
+    ax.set_ylabel(metric_name)
+    ax.spines[['right', 'top']].set_visible(False)
+    ax.get_xaxis().tick_bottom()
+    ax.get_yaxis().tick_left()
+
+    # Unified legend
+    handles, labels = zip(*legends)
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, -0.1), ncol=2)
+
+    plt.tight_layout()
+    plt.savefig(f"{output_path}.{output_format}", format=output_format, bbox_inches='tight')
+    if SHOW: plt.show()
+
+def plot_hyperparameter_results_with_regression(
+    sampler_csv_paths: Dict[str, Dict[str, str]], 
+    output_path: str, 
+    output_format: str = "png",
+    metric_column: Dict[str, str] = {"F1-Score": "objective_0"},
+    whiskers: bool = False,
+    debug: bool = True
+):
+    """
+    Generate a figure with two subplots:
+      - Subplot[0]: The original hyperparameter results (scatter + optimal frontier + optional whiskers).
+      - Subplot[1]: Scatter + fitted linear regression line for each model.
+    
+    A single unified legend is created at the end, including:
+      {model_name} best trial {best_trial} best value {best_score:.4f} |
+      Regression: y={slope:.4f}x+{intercept:.4f} R^2={r2:.4f}
+
+    Parameters:
+        sampler_csv_paths (Dict[str, Dict[str, str]]): 
+            Dictionary with sampler names as keys and dictionaries containing:
+              - "path": Path to the CSV file.
+              - "color": Color to plot for the sampler.
+              - "results_root_folder": Path to the root folder for optimal trials.
+        output_path (str): Path to save the output figure.
+        output_format (str): Format to save the figure ('png', 'svg', 'pdf', etc.).
+        metric_column (Dict[str, str]): Display name as key and column name as value for the Y-axis.
+        whiskers (bool): Whether to add whiskers for optimal trials in subplot 0.
+        debug (bool): Whether to print debug info and save CSVs for diagnosing issues.
+    """
+
+    metric_name, metric_col = list(metric_column.items())[0]
+
+    def calculate_optimal_front(trials: List[int], scores: List[float]):
+        frontier_x, frontier_y = [], []
+        best_so_far = -float("inf")
+        for trial, score in zip(trials, scores):
+            if score > best_so_far:
+                if frontier_x:
+                    frontier_x.append(trial)
+                    frontier_y.append(best_so_far)  # Horizontal line
+                best_so_far = score
+                frontier_x.append(trial)
+                frontier_y.append(score)  # Vertical line
+        if trials[-1] != frontier_x[-1]:
+            frontier_x.append(trials[-1])
+            frontier_y.append(best_so_far)
+        return frontier_x, frontier_y
+
+    def compute_f1_score(results_file: str):
+        df = pd.read_csv(results_file)
+        precision = df["metrics/precision(B)"]
+        recall = df["metrics/recall(B)"]
+        f1_score = 2 * (precision * recall) / (precision + recall + 1e-8)
+        return f1_score
+
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(16, 6))
+
+    # Dictionary to store sampler info for the unified legend
+    # Each entry will look like:
+    # sampler_info[sampler_name] = {
+    #     "color": ...,
+    #     "best_trial": ...,
+    #     "best_score": ...,
+    #     "slope": ...,
+    #     "intercept": ...,
+    #     "r2": ...
+    # }
+    sampler_info = {}
+
+    # -------------------------
+    # Subplot[0]: Original logic
+    # -------------------------
+    for sampler_name, sampler_data in sampler_csv_paths.items():
+        df = pd.read_csv(sampler_data["path"])
+
+        # Debug: Save/inspect the data
+        if debug:
+            debug_csv_path = os.path.join(
+                os.path.dirname(output_path), 
+                f"{sampler_name}_debug_original.csv"
+            )
+            df.to_csv(debug_csv_path, index=False)
+            print(f"[DEBUG] Saved original data for '{sampler_name}' to: {debug_csv_path}")
+
+        trials = df.index.values
+        scores = df[metric_col].values
+
+        # Calculate optimal frontier
+        frontier_x, frontier_y = calculate_optimal_front(trials, scores)
+
+        # Scatter plot
+        ax0.scatter(
+            trials, scores, 
+            s=10, 
+            color=sampler_data["color"], 
+            alpha=0.5, 
+            label="_nolegend_"  # no legend for subplot 0
+        )
+        # Plot the frontier
+        ax0.step(frontier_x, frontier_y, where='post',
+                 color=sampler_data["color"], linewidth=2, label="_nolegend_")
+
+        # Whiskers if requested
+        if whiskers:
+            optimal_trials = [trial for trial, _ in zip(frontier_x[::2], frontier_y[::2])]
+            for trial, mean_f1 in zip(optimal_trials, frontier_y[::2]):
+                results_file = None
+                if sampler_name != "Simulated Annealing":
+                    results_file = os.path.join(
+                        sampler_data["results_root_folder"], 
+                        f"trial_{trial}_training", 
+                        "results.csv"
+                    )
+                else:
+                    results_file = os.path.join(
+                        sampler_data["results_root_folder"], 
+                        f"simulated_annealing{trial}", 
+                        "results.csv"
+                    )
+                if os.path.exists(results_file):
+                    f1_scores = compute_f1_score(results_file)
+                    min_f1, max_f1 = f1_scores.min(), f1_scores.max()
+                    lower_err = max(0, mean_f1 - min_f1)
+                    upper_err = max(0, max_f1 - mean_f1)
+                    ax0.errorbar(
+                        trial, mean_f1,
+                        yerr=[[lower_err], [upper_err]],
+                        fmt="o", color=sampler_data["color"], capsize=3, alpha=0.7,
+                        label="_nolegend_"
+                    )
+
+        # Identify best trial info
+        best_idx = df[metric_col].idxmax()
+        best_trial = df.loc[best_idx, "number"]
+        best_score = df.loc[best_idx, metric_col]
+
+        # Initialize sampler info so we can fill in the regression data later
+        sampler_info[sampler_name] = {
+            "color": sampler_data["color"],
+            "best_trial": int(best_trial),
+            "best_score": float(best_score),
+            "slope": None,
+            "intercept": None,
+            "r2": None
+        }
+
+    ax0.set_xlabel("Trial")
+    ax0.set_ylabel(metric_name)
+    ax0.set_title("Original Hyperparameter Results")
+    ax0.spines[['right', 'top']].set_visible(False)
+    ax0.get_xaxis().tick_bottom()
+    ax0.get_yaxis().tick_left()
+
+    # -------------------------
+    # Subplot[1]: Linear Regression
+    # -------------------------
+    for sampler_name, sampler_data in sampler_csv_paths.items():
+        df = pd.read_csv(sampler_data["path"])
+
+        # Debug: Save/inspect the data
+        if debug:
+            debug_csv_path = os.path.join(
+                os.path.dirname(output_path), 
+                f"{sampler_name}_debug_regression.csv"
+            )
+            df.to_csv(debug_csv_path, index=False)
+            print(f"[DEBUG] Saved regression data for '{sampler_name}' to: {debug_csv_path}")
+
+        # Drop or fill NaNs in the metric column
+        if df[metric_col].isnull().any():
+            nan_rows = df[df[metric_col].isnull()]
+            print(f"[DEBUG] Detected NaN in '{metric_col}' for sampler '{sampler_name}':")
+            print(nan_rows)
+            df = df.dropna(subset=[metric_col])
+            print(f"[DEBUG] Dropped NaN rows for sampler '{sampler_name}'.")
+
+        # If the dataframe is empty after dropping, skip
+        if df.empty:
+            print(f"[ERROR] No valid rows left for sampler '{sampler_name}' after dropping NaNs.")
+            continue
+
+        # Prepare data for regression
+        trials = df.index.values.reshape(-1, 1)
+        scores = df[metric_col].values
+
+        # Fit linear regression
+        try:
+            reg = LinearRegression().fit(trials, scores)
+            y_pred = reg.predict(trials)
+            r2 = r2_score(scores, y_pred)
+            slope = reg.coef_[0]
+            intercept = reg.intercept_
+
+            # Scatter + regression line
+            ax1.scatter(trials, scores, s=10, color=sampler_data["color"], alpha=0.5, label="_nolegend_")
+            ax1.plot(trials, y_pred, color=sampler_data["color"], linewidth=2, label="_nolegend_")
+
+            # Save the regression data in our sampler info
+            if sampler_name in sampler_info:
+                sampler_info[sampler_name]["slope"] = float(slope)
+                sampler_info[sampler_name]["intercept"] = float(intercept)
+                sampler_info[sampler_name]["r2"] = float(r2)
+            else:
+                # If for some reason the sampler wasn't in the first subplot
+                sampler_info[sampler_name] = {
+                    "color": sampler_data["color"],
+                    "best_trial": None,
+                    "best_score": None,
+                    "slope": float(slope),
+                    "intercept": float(intercept),
+                    "r2": float(r2)
+                }
+
+        except ValueError as e:
+            print(f"[ERROR] Could not fit Linear Regression for sampler '{sampler_name}': {e}")
+            continue
+
+    ax1.set_xlabel("Trial")
+    ax1.set_ylabel(metric_name)
+    ax1.set_title("Linear Regression Models")
+    ax1.spines[['right', 'top']].set_visible(False)
+    ax1.get_xaxis().tick_bottom()
+    ax1.get_yaxis().tick_left()
+
+    # -------------------------
+    # Unified Legend
+    # -------------------------
+    # Create one legend entry per sampler, with a line in the sampler's color
+    legend_handles = []
+    legend_labels = []
+
+    subplot_labels = ["a.", "b."]
+    for idx, ax in enumerate([ax0, ax1]):
+        ax.spines[['right', 'top']].set_visible(False)
+        ax.get_xaxis().tick_bottom()
+        ax.get_yaxis().tick_left()
+        ax.text(-0.05, 1.05, subplot_labels[idx], transform=ax.transAxes, fontsize=12, fontweight='bold',
+                va='top', ha='left', bbox=dict(facecolor='white', edgecolor='none', alpha=0.8))
+
+    for sampler_name, info in sampler_info.items():
+        line = plt.Line2D([], [], color=info["color"], linewidth=2)
+        best_trial = info["best_trial"]
+        best_score = info["best_score"]
+        slope = info["slope"]
+        intercept = info["intercept"]
+        r2 = info["r2"]
+
+        # Build label with .4f precision
+        # e.g. "Random Search best trial 10 best value 0.9234 | Regression: y=0.1234x+0.5678 R^2=0.4321"
+        label_parts = [f"{sampler_name}"]
+        if best_trial is not None and best_score is not None:
+            label_parts.append(
+                f"Value: {best_score:.4f} Trial: {best_trial}"
+            )
+        if slope is not None and intercept is not None and r2 is not None:
+            label_parts.append(
+                f"Regression: y={slope:.4f}x+{intercept:.4f} with R$^2$={r2:.4f}"
+            )
+
+        label = " | ".join(label_parts)
+        legend_handles.append(line)
+        legend_labels.append(label)
+
+    # Place the legend at the bottom, in one line (adjust as needed)
+    fig.legend(
+        legend_handles, 
+        legend_labels, 
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.1),
+        ncol=1  # or more columns if you have many samplers
+    )
+
+    plt.tight_layout()
+    # Make sure legend is not cut off
+    plt.subplots_adjust(bottom=0.2)
+
+    # Save and show
+    plt.savefig(f"{output_path}.{output_format}", format=output_format, bbox_inches="tight")
+    if SHOW: plt.show()
+
+
+
+
+
 def plot_hyperparameter_scatter(
     sampler_csv_paths: Dict[str, Dict[str, str]],
     output_path: str,
@@ -480,7 +886,7 @@ def plot_hyperparameter_scatter(
         
         # Add titles and labels
         # ax.set_title(hyperparameter.replace("_", " ").title())
-        ax.set_xlabel(hyperparameter.replace("_", " ").title())
+        ax.set_xlabel(hyperparameter.replace("_", " ").title().lstrip("Params").lstrip("User Attrs"))
         if idx % 6 == 0:
             ax.set_ylabel(metric_name)
 
@@ -509,7 +915,7 @@ def plot_training_comparison(
 ):
     """
     Compare the training performance of baseline and optimized YOLO models by computing F1-Score per epoch,
-    alongside train/val box loss and dfl loss plots.
+    alongside train/val box loss, dfl loss, and cls loss plots.
 
     Parameters:
         sampler_csv_paths (Dict[str, Dict[str, str]]): Dictionary with sampler names as keys and dictionaries containing:
@@ -518,9 +924,9 @@ def plot_training_comparison(
         output_path (str): Path to save the output figure.
         output_format (str): Format to save the figure (e.g., 'png', 'svg', 'pdf').
     """
-    # Initialize the figure with 3 subplots
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-    f1_ax, box_loss_ax, dfl_loss_ax = axes
+    # Initialize the figure with 4 subplots
+    fig, axes = plt.subplots(1, 4, figsize=(24, 6))
+    f1_ax, box_loss_ax, dfl_loss_ax, cls_loss_ax = axes
 
     # Plot each sampler's training data, including Baseline
     for sampler_name, sampler_data in sampler_csv_paths.items():
@@ -540,13 +946,18 @@ def plot_training_comparison(
 
         # Subplot 2: train/box_loss vs val/box_loss
         if "train/box_loss" in df.columns and "val/box_loss" in df.columns:
-            box_loss_ax.plot(df["epoch"], df["train/box_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Train Loss (linestyle)")
-            box_loss_ax.plot(df["epoch"], df["val/box_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Val Loss (linestyle)")
+            box_loss_ax.plot(df["epoch"], df["train/box_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Train Loss")
+            box_loss_ax.plot(df["epoch"], df["val/box_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Val Loss")
         
         # Subplot 3: train/dfl_loss vs val/dfl_loss
         if "train/dfl_loss" in df.columns and "val/dfl_loss" in df.columns:
-            dfl_loss_ax.plot(df["epoch"], df["train/dfl_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Train Loss (linestyle)")
-            dfl_loss_ax.plot(df["epoch"], df["val/dfl_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Val Loss (linestyle)")
+            dfl_loss_ax.plot(df["epoch"], df["train/dfl_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Train Loss")
+            dfl_loss_ax.plot(df["epoch"], df["val/dfl_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Val Loss")
+
+        # Subplot 4: train/cls_loss vs val/cls_loss
+        if "train/cls_loss" in df.columns and "val/cls_loss" in df.columns:
+            cls_loss_ax.plot(df["epoch"], df["train/cls_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Train Loss")
+            cls_loss_ax.plot(df["epoch"], df["val/cls_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Val Loss")
 
     # Subplot 1: F1-Score formatting
     f1_ax.set_title("Performance Comparison")
@@ -556,30 +967,33 @@ def plot_training_comparison(
     # Subplot 2: Box Loss formatting
     box_loss_ax.set_title("Box Loss")
     box_loss_ax.set_xlabel("Epoch")
-    box_loss_ax.set_ylabel("Loss")
+    box_loss_ax.set_ylabel("log-Loss")
+    box_loss_ax.set_yscale("log")
     
     # Subplot 3: DFL Loss formatting
     dfl_loss_ax.set_title("DFL Loss")
     dfl_loss_ax.set_xlabel("Epoch")
-    dfl_loss_ax.set_ylabel("Loss")
+    dfl_loss_ax.set_ylabel("log-Loss")
+    dfl_loss_ax.set_yscale("log")
+
+    # Subplot 4: CLS Loss formatting
+    cls_loss_ax.set_title("CLS Loss")
+    cls_loss_ax.set_xlabel("Epoch")
+    cls_loss_ax.set_ylabel("log-Loss")
+    cls_loss_ax.set_yscale("log")
     
-    idx = 0
-    for ax in axes:
+    # Format subplot labels (e.g. a., b., c., d.)
+    subplot_labels = ["a.", "b.", "c.", "d."]
+    for idx, ax in enumerate(axes):
         ax.spines[['right', 'top']].set_visible(False)
         ax.get_xaxis().tick_bottom()
         ax.get_yaxis().tick_left()
-        
-        if idx == 0: text = "a."
-        elif idx == 1: text = "b."
-        else: text = "c."
-        
-        ax.text(-0.05, 1.05, text, transform=ax.transAxes, fontsize=12, fontweight='bold',
+        ax.text(-0.05, 1.05, subplot_labels[idx], transform=ax.transAxes, fontsize=12, fontweight='bold',
                 va='top', ha='left', bbox=dict(facecolor='white', edgecolor='none', alpha=0.8))
-        idx += 1
 
-    # Unified legend (remove duplicates)
+    # Create a unified legend (remove duplicates)
     handles, labels = [], []
-    for ax in [f1_ax, box_loss_ax, dfl_loss_ax]:
+    for ax in axes:
         h, l = ax.get_legend_handles_labels()
         handles += h
         labels += l
@@ -760,8 +1174,8 @@ def generate_boxplot(df: pd.DataFrame, output_path: str, output_format:str="svg"
     ax.set_xticks(range(len(label_order)))
     ax.set_xticklabels([label_mapping.get(lbl, lbl) for lbl in label_order], rotation=0)
 
-    ax.set_title("F1-Score Across Models and Labels")
-    ax.set_xlabel("Labels (including Overall)")
+    ax.set_title("Cross Validation F1-Score")
+    ax.set_xlabel("Labels")
     ax.set_ylabel("F1-Score")
 
     # Hide top/right spines and set bottom/left ticks
@@ -806,6 +1220,13 @@ def generate_latex_table(df: pd.DataFrame, output_tex_path: str):
     """
     # Desired model order
     model_order = ["TPE", "GPSAMPLER", "RANDOM", "SIMULATED_ANNEALING", "BASELINE"]
+    model_mapping = {
+        "TPE": "Tree-Structured Parzen Estimator",
+        "GPSAMPLER": "Gaussian Process-Based Algorithm",
+        "RANDOM": "Random Search",
+        "SIMULATED_ANNEALING": "Simulated Annealing",
+        "BASELINE": "Baseline"
+    }
     # Desired label order, plus mapping
     label_order = ["Overall", "p100", "p99", "p90_98", "p70_90", "p50_70"]
     label_mapping = {
@@ -874,7 +1295,7 @@ def generate_latex_table(df: pd.DataFrame, output_tex_path: str):
 
             table_rows[label].append({
                 "Metric": label,
-                "Model": model,
+                "Model": model_mapping.get(model),
                 "F1": f1_str,
                 "mAP50": map50_str,
                 "mAP50-95": map5095_str
@@ -921,8 +1342,6 @@ def generate_latex_table(df: pd.DataFrame, output_tex_path: str):
     print(f"[INFO] LaTeX table saved at {output_tex_path}")
 
 def main():
-    # processed_dataset_visualization()
-        
     colors: Dict[str, str] = {
         "RANDOM": "#994455",
         "TPE": "#6699CC",
@@ -932,37 +1351,41 @@ def main():
         "BASELINE": "#000000",
     }
 
-    save_plots_path: str = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation/PLOTS"
-
-    base_path: str = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation"
+    save_plots_path: str = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation/train_val/PLOTS"
+    os.makedirs(save_plots_path, exist_ok=True)
+    
+    base_path: str = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation/train_val"
     base_name: str = "hyperparameter_optimization_results.csv"
     
     image_format: str = "svg"
+    
+    processed_dataset_visualization(save_path=save_plots_path)
+
     
     sampler_paths: Dict[str, Dict[str, Any]] = {
         "Random Search": {
             "path": os.path.join(base_path, "RANDOM", base_name),
             "color": colors.get("RANDOM"), 
             "results_root_folder": os.path.join(base_path, "RANDOM", "detect"),
-            "best_trial": os.path.join(base_path, "RANDOM", "detect", "trial_40_training", "results.csv")
+            "best_trial": os.path.join(base_path, "RANDOM", "detect", "trial_71_training", "results.csv")
         },
         "Tree-structured Parzen Estimator": {
             "path": os.path.join(base_path, "TPE", base_name),
             "color": colors.get("TPE"), 
             "results_root_folder": os.path.join(base_path, "TPE", "detect"),
-            "best_trial": os.path.join(base_path, "TPE", "detect", "trial_139_training", "results.csv")
+            "best_trial": os.path.join(base_path, "TPE", "detect", "trial_175_training", "results.csv")
         },
         "Gaussian Process-Based Algorithm": {
             "path": os.path.join(base_path, "GPSAMPLER", base_name),
             "color": colors.get("GPSAMPLER"),
             "results_root_folder": os.path.join(base_path, "GPSAMPLER", "detect"),
-            "best_trial": os.path.join(base_path, "GPSAMPLER", "detect", "trial_121_training", "results.csv")
+            "best_trial": os.path.join(base_path, "GPSAMPLER", "detect", "trial_46_training", "results.csv")
         },
         "Simulated Annealing": {
             "path": os.path.join(base_path, "SIMULATED_ANNEALING", base_name),
             "color": colors.get("SIMULATED_ANNEALING"),
             "results_root_folder": os.path.join(base_path, "SIMULATED_ANNEALING", "detect"),
-            "best_trial": os.path.join(base_path, "SIMULATED_ANNEALING", "detect", "simulated_annealing34", "results.csv")
+            "best_trial": os.path.join(base_path, "SIMULATED_ANNEALING", "detect", "simulated_annealing105", "results.csv")
         },
     }
 
@@ -972,13 +1395,23 @@ def main():
     plot_hyperparameter_results(sampler_paths, 
                                 output_path=os.path.join(save_plots_path, "performance_per_trial"), 
                                 output_format=image_format, 
-                                metric_column={"F1-Score": "user_attrs_f1_score"})
+                                metric_column={"F1-Score": "value"})
+    plot_hyperparameter_results_with_gaussian(sampler_paths, 
+                                output_path=os.path.join(save_plots_path, "performance_per_trial_gaussian"), 
+                                output_format=image_format, 
+                                metric_column={"F1-Score": "value"})
+    
+    plot_hyperparameter_results_with_regression(sampler_paths, 
+                                output_path=os.path.join(save_plots_path, "performance_per_trial_regression"), 
+                                output_format=image_format, 
+                                metric_column={"F1-Score": "value"},
+                                debug=False)
 
     print("Plotting hyperparameter distributions")
     plot_hyperparameter_scatter(sampler_paths, 
                                 output_path=os.path.join(save_plots_path, "hyperparameter_scatterplots"), 
                                 output_format=image_format, 
-                                metric_column={"F1-Score": "user_attrs_f1_score"})
+                                metric_column={"F1-Score": "value"})
     
     print("Plotting training comparison")
     
