@@ -1357,7 +1357,7 @@ def main():
     base_path: str = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation/train_val"
     base_name: str = "hyperparameter_optimization_results.csv"
     
-    image_format: str = "svg"
+    image_format: str = "pdf"
     
     processed_dataset_visualization(save_path=save_plots_path)
 
@@ -1428,7 +1428,7 @@ def main():
             **baseline_entry  # Add the new BASELINE entry
         },
         output_path=os.path.join(save_plots_path, "training_comparison"),
-        output_format="svg",
+        output_format=image_format,
     )
     
     root_folder_cv = os.path.join(base_path, "CV")
