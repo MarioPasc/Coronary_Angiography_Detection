@@ -33,7 +33,7 @@ plt.rcParams.update({'figure.dpi': '300'})
 plt.rcParams['axes.spines.top'] = False
 plt.rcParams['axes.spines.right'] = False
 
-CONFIG_PATH = "./scripts/config.yaml"
+CONFIG_PATH = "./config.yaml"
 FIGSIZE = (15,7.5)
 SHOW = False
 
@@ -301,7 +301,9 @@ def processed_dataset_visualization(save_path:str):
 
         # Save figures in specified formats
         for fmt in save_formats:
-            fig.savefig(os.path.join(save_path, f'processed_dataset_visualizations.{fmt}'), format=fmt)
+            path_save: os.PathLike = os.path.join(save_path, f'processed_dataset_visualizations.{fmt}')
+            print(f"Saving figure: {path_save}")
+            fig.savefig(path_save, format=fmt)
 
         if SHOW: plt.show()
         logging.info(f"Processed dataset plots generated and saved in {save_path}.")
@@ -946,18 +948,18 @@ def plot_training_comparison(
 
         # Subplot 2: train/box_loss vs val/box_loss
         if "train/box_loss" in df.columns and "val/box_loss" in df.columns:
-            box_loss_ax.plot(df["epoch"], df["train/box_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Train Loss")
-            box_loss_ax.plot(df["epoch"], df["val/box_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Val Loss")
+            box_loss_ax.plot(df["epoch"], df["train/box_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Linestyle for Training Loss")
+            box_loss_ax.plot(df["epoch"], df["val/box_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Linestyle for Validation Loss")
         
         # Subplot 3: train/dfl_loss vs val/dfl_loss
         if "train/dfl_loss" in df.columns and "val/dfl_loss" in df.columns:
-            dfl_loss_ax.plot(df["epoch"], df["train/dfl_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Train Loss")
-            dfl_loss_ax.plot(df["epoch"], df["val/dfl_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Val Loss")
+            dfl_loss_ax.plot(df["epoch"], df["train/dfl_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Linestyle for Training Loss")
+            dfl_loss_ax.plot(df["epoch"], df["val/dfl_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Linestyle for Validation Loss")
 
         # Subplot 4: train/cls_loss vs val/cls_loss
         if "train/cls_loss" in df.columns and "val/cls_loss" in df.columns:
-            cls_loss_ax.plot(df["epoch"], df["train/cls_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Train Loss")
-            cls_loss_ax.plot(df["epoch"], df["val/cls_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Val Loss")
+            cls_loss_ax.plot(df["epoch"], df["train/cls_loss"], color=sampler_data["color"], linestyle="--", linewidth=2, label=f"Linestyle for Training Loss")
+            cls_loss_ax.plot(df["epoch"], df["val/cls_loss"], color=sampler_data["color"], linestyle=":", linewidth=2, label=f"Linestyle for Validation Loss")
 
     # Subplot 1: F1-Score formatting
     f1_ax.set_title("Performance Comparison")
@@ -1085,7 +1087,7 @@ def aggregate_fold_data(root_folder: str) -> pd.DataFrame:
     df = pd.DataFrame(records)
     return df
 
-def generate_boxplot(df: pd.DataFrame, output_path: str, output_format:str="svg"):
+def generate_boxplot(df: pd.DataFrame, colors:Dict[str, str], output_path: str, output_format:str="svg"):
     """
     Generates a boxplot for overall and label-specific F1-scores across models,
     using a predefined label and model order. Uses subplots() to allow customizing
@@ -1098,15 +1100,14 @@ def generate_boxplot(df: pd.DataFrame, output_path: str, output_format:str="svg"
     import matplotlib.patches as mpatches
 
     # Desired model order
-    model_order = ["TPE", "GPSAMPLER", "RANDOM", "SIMULATED_ANNEALING", "BASELINE"]
-    # Color mapping
-    colors = {
-        "RANDOM": "#994455",
-        "TPE": "#6699CC",
-        "GPSAMPLER": "#997700",
-        "QMCSAMPLER": "#EE99AA",  # If you ever have QMCSAMPLER
-        "SIMULATED_ANNEALING": "#004488",
-        "BASELINE": "#000000",
+    model_order = ["TPE", "GPSAMPLER", "SIMULATED_ANNEALING", "BASELINE"]
+
+    model_mapping = {
+        "TPE": "Tree-Structured Parzen Estimator",
+        "GPSAMPLER": "Gaussian Process-Based Algorithm",
+        "RANDOM": "Random Search",
+        "SIMULATED_ANNEALING": "Simulated Annealing",
+        "BASELINE": "Baseline"
     }
 
     # Desired label order (including Overall)
@@ -1174,7 +1175,7 @@ def generate_boxplot(df: pd.DataFrame, output_path: str, output_format:str="svg"
     ax.set_xticks(range(len(label_order)))
     ax.set_xticklabels([label_mapping.get(lbl, lbl) for lbl in label_order], rotation=0)
 
-    ax.set_title("Cross Validation F1-Score")
+    #ax.set_title("Cross Validation F1-Score")
     ax.set_xlabel("Labels")
     ax.set_ylabel("F1-Score")
 
@@ -1190,7 +1191,7 @@ def generate_boxplot(df: pd.DataFrame, output_path: str, output_format:str="svg"
     legend_handles = []
     for model in model_order:
         if model in colors:
-            patch = mpatches.Patch(color=colors[model], label=model)
+            patch = mpatches.Patch(color=colors[model], label=model_mapping.get(model))
             legend_handles.append(patch)
     # Place legend outside the lower center
     ax.legend(
@@ -1219,7 +1220,7 @@ def generate_latex_table(df: pd.DataFrame, output_tex_path: str):
         output_tex_path: Path to the .tex file to write.
     """
     # Desired model order
-    model_order = ["TPE", "GPSAMPLER", "RANDOM", "SIMULATED_ANNEALING", "BASELINE"]
+    model_order = ["TPE", "GPSAMPLER", "SIMULATED_ANNEALING", "BASELINE"]
     model_mapping = {
         "TPE": "Tree-Structured Parzen Estimator",
         "GPSAMPLER": "Gaussian Process-Based Algorithm",
@@ -1343,12 +1344,12 @@ def generate_latex_table(df: pd.DataFrame, output_tex_path: str):
 
 def main():
     colors: Dict[str, str] = {
-        "RANDOM": "#994455",
-        "TPE": "#6699CC",
+        "RANDOM": "#6699CC",#994455
+        "TPE": "#994455",#6699CC
         "GPSAMPLER": "#997700",
         "QMCSAMPLER": "#EE99AA",
         "SIMULATED_ANNEALING": "#004488",
-        "BASELINE": "#000000",
+        "BASELINE": "#44AA99",
     }
 
     save_plots_path: str = "/home/mario/Python/Results/Coronariografias/patient_based_non_augmentation/train_val/PLOTS"
@@ -1363,12 +1364,12 @@ def main():
 
     
     sampler_paths: Dict[str, Dict[str, Any]] = {
-        "Random Search": {
-            "path": os.path.join(base_path, "RANDOM", base_name),
-            "color": colors.get("RANDOM"), 
-            "results_root_folder": os.path.join(base_path, "RANDOM", "detect"),
-            "best_trial": os.path.join(base_path, "RANDOM", "detect", "trial_71_training", "results.csv")
-        },
+        #"Random Search": {
+        #    "path": os.path.join(base_path, "RANDOM", base_name),
+        #    "color": colors.get("RANDOM"), 
+        #    "results_root_folder": os.path.join(base_path, "RANDOM", "detect"),
+        #    "best_trial": os.path.join(base_path, "RANDOM", "detect", "trial_71_training", "results.csv")
+        #},
         "Tree-structured Parzen Estimator": {
             "path": os.path.join(base_path, "TPE", base_name),
             "color": colors.get("TPE"), 
@@ -1437,7 +1438,7 @@ def main():
 
     print("Plotting cross-validation performance results")
     aggregated_df = aggregate_fold_data(root_folder_cv)
-    generate_boxplot(aggregated_df, output_boxplot, output_format=image_format)
+    generate_boxplot(df=aggregated_df, output_path=output_boxplot, colors=colors, output_format=image_format)
     print("Generating cross-validation performance table")
     generate_latex_table(aggregated_df, output_tex)
 
