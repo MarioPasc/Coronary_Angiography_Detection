@@ -27,11 +27,26 @@ from sklearn.metrics import r2_score
 import matplotlib.pyplot as plt
 import scienceplots
 
+# -----------------------------------------------------
+# 1) Define Global Fontsize Variables
+# -----------------------------------------------------
+FONTSIZE_TITLES = 18
+FONTSIZE_LEGENDS = 18
+FONTSIZE_AXIS = 18
+
 plt.style.use(['science', 'ieee', 'std-colors'])
-plt.rcParams['font.size'] = 12
+# Remove or comment out the old universal font size:
 plt.rcParams.update({'figure.dpi': '300'})
 plt.rcParams['axes.spines.top'] = False
 plt.rcParams['axes.spines.right'] = False
+
+# -----------------------------------------------------
+# 2) Update rcParams so that all figures use the globals
+# -----------------------------------------------------
+plt.rc('axes', titlesize=FONTSIZE_TITLES, labelsize=FONTSIZE_AXIS)
+plt.rc('xtick', labelsize=FONTSIZE_AXIS)
+plt.rc('ytick', labelsize=FONTSIZE_AXIS)
+plt.rc('legend', fontsize=FONTSIZE_LEGENDS)
 
 CONFIG_PATH = "./config.yaml"
 FIGSIZE = (15,7.5)
@@ -900,7 +915,7 @@ def plot_hyperparameter_scatter(
     # Unified legend
     handles, labels = fig.gca().get_legend_handles_labels()
     by_label = dict(zip(labels, handles))  # Remove duplicate legend entries
-    fig.legend(by_label.values(), by_label.keys(), loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=len(sampler_csv_paths))
+    fig.legend(by_label.values(), by_label.keys(), loc='lower center', bbox_to_anchor=(0.5, -0.08), ncol=len(sampler_csv_paths))
 
     # Adjust layout
     plt.tight_layout()
@@ -927,8 +942,8 @@ def plot_training_comparison(
         output_format (str): Format to save the figure (e.g., 'png', 'svg', 'pdf').
     """
     # Initialize the figure with 4 subplots
-    fig, axes = plt.subplots(1, 4, figsize=(24, 6))
-    f1_ax, box_loss_ax, dfl_loss_ax, cls_loss_ax = axes
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+    f1_ax, box_loss_ax, dfl_loss_ax, cls_loss_ax = axes.ravel()
 
     # Plot each sampler's training data, including Baseline
     for sampler_name, sampler_data in sampler_csv_paths.items():
@@ -986,21 +1001,23 @@ def plot_training_comparison(
     
     # Format subplot labels (e.g. a., b., c., d.)
     subplot_labels = ["a.", "b.", "c.", "d."]
-    for idx, ax in enumerate(axes):
+    for idx, ax in enumerate(axes.ravel()):
         ax.spines[['right', 'top']].set_visible(False)
         ax.get_xaxis().tick_bottom()
         ax.get_yaxis().tick_left()
-        ax.text(-0.05, 1.05, subplot_labels[idx], transform=ax.transAxes, fontsize=12, fontweight='bold',
+        ax.text(-0.05, 1.05, subplot_labels[idx], transform=ax.transAxes, fontsize=18, fontweight='bold',
                 va='top', ha='left', bbox=dict(facecolor='white', edgecolor='none', alpha=0.8))
+        if idx == 0 or idx == 1: 
+            ax.set_xlabel("")
 
     # Create a unified legend (remove duplicates)
     handles, labels = [], []
-    for ax in axes:
+    for ax in axes.ravel():
         h, l = ax.get_legend_handles_labels()
         handles += h
         labels += l
     by_label = dict(zip(labels, handles))
-    fig.legend(by_label.values(), by_label.keys(), loc="lower center", bbox_to_anchor=(0.5, -0.1), ncol=2)
+    fig.legend(by_label.values(), by_label.keys(), loc="lower center", bbox_to_anchor=(0.5, -0.05), ncol=3)
     
     # Adjust layout
     plt.tight_layout()
@@ -1136,7 +1153,7 @@ def generate_boxplot(df: pd.DataFrame, colors:Dict[str, str], output_path: str, 
                 f1_scores[label][model].append(labels_dict[label][0])  # the F1 is index 0
 
     # Create figure and axes
-    fig, ax = plt.subplots(figsize=(12, 8))
+    fig, ax = plt.subplots(figsize=(16, 8))
 
     positions = []
     data_to_plot = []
