@@ -868,7 +868,7 @@ def plot_hyperparameter_scatter(
     ]
 
     # Prepare the figure with 2 rows x 6 columns subplots
-    fig, axes = plt.subplots(2, 6, figsize=(18, 8), sharey=True)
+    fig, axes = plt.subplots(4, 3, figsize=(14, 12), sharey=True)
     axes = axes.ravel()  # Flatten axes for easy indexing
 
     # Process each hyperparameter
@@ -904,7 +904,7 @@ def plot_hyperparameter_scatter(
         # Add titles and labels
         # ax.set_title(hyperparameter.replace("_", " ").title())
         ax.set_xlabel(hyperparameter.replace("_", " ").title().lstrip("Params").lstrip("User Attrs"))
-        if idx % 6 == 0:
+        if idx % 3 == 0:
             ax.set_ylabel(metric_name)
 
     for ax in axes:
@@ -1123,16 +1123,16 @@ def generate_boxplot(df: pd.DataFrame, colors:Dict[str, str], output_path: str, 
         "TPE": "Tree-Structured Parzen Estimator",
         "GPSAMPLER": "Gaussian Process-Based Algorithm",
         "RANDOM": "Random Search",
-        "SIMULATED_ANNEALING": "Simulated Annealing",
+        "SIMULATED_ANNEALING": r"$(1 + \lambda)$-ES (Ultralytics)",
         "BASELINE": "Baseline"
     }
 
     # Desired label order (including Overall)
-    label_order = ["Overall", "p100", "p99", "p90_98", "p70_90", "p50_70"]
+    label_order = ["Overall", "p50_70", "p70_90", "p90_98", "p99", "p100"]
     label_mapping = {
-        "p50_70": r"$[50, 70)\%$",
-        "p70_90": r"$[70, 90)\%$",
-        "p90_98": r"$[90, 98)\%$",
+        "p50_70": r"$(50, 70]\%$",
+        "p70_90": r"$(70, 90]\%$",
+        "p90_98": r"$(90, 98]\%$",
         "p99": r"$99\%$",
         "p100": r"$100\%$"
     }
@@ -1399,7 +1399,7 @@ def main():
             "results_root_folder": os.path.join(base_path, "GPSAMPLER", "detect"),
             "best_trial": os.path.join(base_path, "GPSAMPLER", "detect", "trial_46_training", "results.csv")
         },
-        "Simulated Annealing": {
+        r"$(1 + \lambda)$-ES (Ultralytics)": {
             "path": os.path.join(base_path, "SIMULATED_ANNEALING", base_name),
             "color": colors.get("SIMULATED_ANNEALING"),
             "results_root_folder": os.path.join(base_path, "SIMULATED_ANNEALING", "detect"),
