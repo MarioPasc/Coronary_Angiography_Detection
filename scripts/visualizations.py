@@ -1130,9 +1130,9 @@ def generate_boxplot(df: pd.DataFrame, colors:Dict[str, str], output_path: str, 
     # Desired label order (including Overall)
     label_order = ["Overall", "p50_70", "p70_90", "p90_98", "p99", "p100"]
     label_mapping = {
-        "p50_70": r"$(50, 70]\%$",
-        "p70_90": r"$(70, 90]\%$",
-        "p90_98": r"$(90, 98]\%$",
+        "p50_70": r"$[50, 70)\%$",
+        "p70_90": r"$[70, 90)\%$",
+        "p90_98": r"$[90, 98)\%$",
         "p99": r"$99\%$",
         "p100": r"$100\%$"
     }
