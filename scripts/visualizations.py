@@ -1104,7 +1104,7 @@ def aggregate_fold_data(root_folder: str) -> pd.DataFrame:
     df = pd.DataFrame(records)
     return df
 
-def generate_boxplot(df: pd.DataFrame, colors:Dict[str, str], output_path: str, output_format:str="svg"):
+def generate_boxplot(df: pd.DataFrame, colors:Dict[str, str], model_mapping: Dict[str, str], output_path: str, output_format:str="svg"):
     """
     Generates a boxplot for overall and label-specific F1-scores across models,
     using a predefined label and model order. Uses subplots() to allow customizing
@@ -1118,14 +1118,6 @@ def generate_boxplot(df: pd.DataFrame, colors:Dict[str, str], output_path: str, 
 
     # Desired model order
     model_order = ["TPE", "GPSAMPLER", "SIMULATED_ANNEALING", "BASELINE"]
-
-    model_mapping = {
-        "TPE": "Tree-Structured Parzen Estimator",
-        "GPSAMPLER": "Gaussian Process-Based Algorithm",
-        "RANDOM": "Random Search",
-        "SIMULATED_ANNEALING": r"$(1 + \lambda)$-ES (Ultralytics)",
-        "BASELINE": "Baseline"
-    }
 
     # Desired label order (including Overall)
     label_order = ["Overall", "p50_70", "p70_90", "p90_98", "p99", "p100"]
@@ -1387,24 +1379,32 @@ def main():
         #    "results_root_folder": os.path.join(base_path, "RANDOM", "detect"),
         #    "best_trial": os.path.join(base_path, "RANDOM", "detect", "trial_71_training", "results.csv")
         #},
-        "Tree-structured Parzen Estimator": {
+        "TPE": {
             "path": os.path.join(base_path, "TPE", base_name),
             "color": colors.get("TPE"), 
             "results_root_folder": os.path.join(base_path, "TPE", "detect"),
             "best_trial": os.path.join(base_path, "TPE", "detect", "trial_175_training", "results.csv")
         },
-        "Gaussian Process-Based Algorithm": {
+        "GP": {
             "path": os.path.join(base_path, "GPSAMPLER", base_name),
             "color": colors.get("GPSAMPLER"),
             "results_root_folder": os.path.join(base_path, "GPSAMPLER", "detect"),
             "best_trial": os.path.join(base_path, "GPSAMPLER", "detect", "trial_46_training", "results.csv")
         },
-        r"$(1 + \lambda)$-ES (Ultralytics)": {
+        "Ultralytics-ES": {
             "path": os.path.join(base_path, "SIMULATED_ANNEALING", base_name),
             "color": colors.get("SIMULATED_ANNEALING"),
             "results_root_folder": os.path.join(base_path, "SIMULATED_ANNEALING", "detect"),
             "best_trial": os.path.join(base_path, "SIMULATED_ANNEALING", "detect", "simulated_annealing105", "results.csv")
         },
+    }
+
+    model_mapping = {
+        "TPE": "TPE",
+        "GPSAMPLER": "GP",
+        "RANDOM": "Random Search",
+        "SIMULATED_ANNEALING": "Ultralytics-ES",
+        "BASELINE": "Baseline"
     }
 
     # Pipeline
@@ -1455,7 +1455,7 @@ def main():
 
     print("Plotting cross-validation performance results")
     aggregated_df = aggregate_fold_data(root_folder_cv)
-    generate_boxplot(df=aggregated_df, output_path=output_boxplot, colors=colors, output_format=image_format)
+    generate_boxplot(df=aggregated_df, output_path=output_boxplot, colors=colors, output_format=image_format, model_mapping=model_mapping)
     print("Generating cross-validation performance table")
     generate_latex_table(aggregated_df, output_tex)
 
