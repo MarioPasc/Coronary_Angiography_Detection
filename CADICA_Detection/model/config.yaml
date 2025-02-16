@@ -1,7 +1,0 @@
-path: /home/mariopasc/Python/Datasets/Coronario_Patient/CADICA_Detection_YOLO
-train: images/train  
-val: images/val  
-test:  images/test
-
-names:
-  0: lesion
