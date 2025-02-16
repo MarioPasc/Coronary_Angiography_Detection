@@ -3,6 +3,34 @@
 import os
 import json
 from typing import List, Dict, Tuple, Any
+import requests
+import zipfile
+
+
+def download_and_extract_arcade(download_url: str, extract_to: str) -> None:
+    """
+    Download the ARCADE dataset from the provided URL and extract it to the specified folder.
+
+    Args:
+        download_url (str): URL to download the arcade zip file.
+        extract_to (str): Directory where the dataset should be extracted.
+    """
+    local_zip: str = os.path.join(extract_to, "arcade_dataset.zip")
+    print(f"Downloading arcade dataset from {download_url} ...")
+    response = requests.get(download_url, stream=True)
+    response.raise_for_status()  # Catch HTTP errors
+    with open(local_zip, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+    print(f"Downloaded dataset to {local_zip}")
+
+    print(f"Extracting {local_zip} ...")
+    with zipfile.ZipFile(local_zip, "r") as zip_ref:
+        zip_ref.extractall(extract_to)
+    print(f"Extracted dataset to {extract_to}")
+
+    # Optionally, remove the zip file after extraction
+    os.remove(local_zip)
 
 
 def convert_bbox_yolo(
@@ -123,9 +151,9 @@ def process_arcade_annotation_file(
     return output_entries, unique_id_start
 
 
-def process_arcade_dataset(root_dir: str) -> Dict[str, Any]:
+def process_arcade_dataset(root_dir: str, task: str = "stenosis") -> Dict[str, Any]:
     """
-    Process the ARCADE dataset given its root directory.
+    Process the ARCADE dataset given its root directory and the desired task.
 
     The ARCADE dataset directory structure is as follows:
 
@@ -151,11 +179,14 @@ def process_arcade_dataset(root_dir: str) -> Dict[str, Any]:
                     images/
                     annotations/test.json
 
-    This function processes every split (train, val, test) for both modalities ("stenosis" and "syntax"),
-    merging all entries into one standardized JSON dictionary.
+    The "task" parameter determines which modality to process:
+      - If task == "stenosis": process only the "stenosis" folder.
+      - If task == "syntax": process only the "syntax" folder.
+      - If task == "both": process both modalities.
 
     Args:
         root_dir (str): Path to the ARCADE dataset root directory (e.g., "/home/mariopasc/Python/Datasets/arcade").
+        task (str, optional): Which task to process ("stenosis", "syntax", or "both"). Defaults to "stenosis".
 
     Returns:
         Dict[str, Any]: A dictionary with the standardized JSON structure:
@@ -169,8 +200,18 @@ def process_arcade_dataset(root_dir: str) -> Dict[str, Any]:
     """
     standard_dataset: Dict[str, Any] = {}
     unique_id_counter: int = 1
-    # Process both modalities.
-    for modality in ["stenosis", "syntax"]:
+
+    # Determine modalities to process based on the task parameter.
+    if task == "both":
+        modalities: List[str] = ["stenosis", "syntax"]
+    elif task in ["stenosis", "syntax"]:
+        modalities = [task]
+    else:
+        print("Invalid task provided; defaulting to 'stenosis'.")
+        modalities = ["stenosis"]
+
+    # Process the selected modalities and splits.
+    for modality in modalities:
         modality_dir = os.path.join(root_dir, modality)
         if not os.path.isdir(modality_dir):
             continue
@@ -192,10 +233,17 @@ def process_arcade_dataset(root_dir: str) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    # Example usage:
     # Set the root directory for the ARCADE dataset.
-    root_dir: str = "/home/mariopasc/Python/Datasets/arcade"
-    json_data: Dict[str, Any] = process_arcade_dataset(root_dir)
+    url: str = "https://zenodo.org/records/10390295/files/arcade.zip?download=1"
+    extract_folder: str = (
+        "/home/mariopasc/Python/Datasets"  # Adjusted folder path as required
+    )
+    # download_and_extract_arcade(download_url, extract_folder)
+
+    # 2. Process the dataset.
+    # Assuming the extracted structure is: extract_folder/arcade
+    dataset_root: str = os.path.join(extract_folder, "arcade")
+    json_data: Dict[str, Any] = process_arcade_dataset(dataset_root, task="stenosis")
     output_json_file: str = "./arcade_standardized.json"
     with open(output_json_file, "w") as f:
         json.dump(json_data, f, indent=4)
