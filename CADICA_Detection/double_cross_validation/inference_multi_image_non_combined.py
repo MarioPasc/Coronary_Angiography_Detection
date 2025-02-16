@@ -1,25 +1,18 @@
 #!/usr/bin/env python3
 # coding: utf-8
 """
-Multi-Image YOLOv8 Inference Script, extending the single-image approach.
+Multi-Image YOLOv8 Inference Script – Saving Each Inference Image Separately
 
-Given a list of dictionaries, where each dictionary has:
-  {
-    "fold_name": str,
-    "patient_id": str,
-    "video_id": str,
-    "frame_id": str
-  }
-
-For each dictionary (i.e., each image), we:
-  1. Find the matching row in <fold_name>/test.csv using substring "p{patient_id}_v{video_id}_{frame_id}".
+For each dictionary in the provided images_info list (with keys:
+  { "fold_name", "patient_id", "video_id", "frame_id" }):
+  1. Find the matching row in <fold_name>/test.csv using substring "p{patient_id}_{video_id}_{frame_id}".
   2. Draw the ground truth bounding boxes if available.
   3. Run inference using the four model weights (TPE, GP-BHO, Simulated_Annealing, Baseline).
-  4. Produce a subplot in a single figure that contains N rows × 5 columns:
-       [GroundTruth | TPE | GP-BHO | Simulated_Annealing | Baseline]
-     The top row has the 5 column labels. Each row is labeled with a. b. c. ... in the top-left corner.
-
-Finally, the resulting figure is saved to an output folder as a PDF.
+  4. Save separate PDF files for:
+       - Ground Truth (filename suffix "_GT")
+       - Each inference prediction (filenames include the corresponding model key)
+     The naming convention is: {fold}_{patient}_{video}_{frame}_{model}.pdf
+     (No title is added to the images.)
 """
 
 import os
@@ -27,12 +20,12 @@ import logging
 import pandas as pd
 import matplotlib
 
-matplotlib.use("Agg")  # Non-GUI backend for Matplotlib
+matplotlib.use("Agg")  # Use non-GUI backend for Matplotlib
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np
-import string
 from typing import Dict, Any, List, Tuple
+import string
 from typing_extensions import TypedDict
 
 try:
@@ -98,7 +91,6 @@ VISUALIZATION_PARAMS: Dict[str, Any] = {
     "color_mode": "class",
 }
 
-
 # ---------------------------------------------------------------------
 # TypedDict for fold→model weights
 # ---------------------------------------------------------------------
@@ -108,12 +100,10 @@ class WeightsPathMap(TypedDict):
     Simulated_Annealing: str
     Baseline: str
 
-
 class FoldWeightsMap(TypedDict):
     fold_1: WeightsPathMap
     fold_2: WeightsPathMap
     fold_3: WeightsPathMap
-
 
 # ---------------------------------------------------------------------
 # Helper Functions
@@ -133,7 +123,6 @@ def run_inference_on_image(
     results = model.predict(source=image_path, **inference_params)
     return results
 
-
 def draw_ground_truth_bboxes(image_path: str, groundtruth_path: str) -> np.ndarray:
     """
     Draw YOLO-format bounding boxes from `groundtruth_path` onto an image (BGR).
@@ -148,7 +137,6 @@ def draw_ground_truth_bboxes(image_path: str, groundtruth_path: str) -> np.ndarr
         logging.warning(f"Cannot load image: {image_path}")
         return np.zeros((512, 512, 3), dtype=np.uint8)
 
-    # If "nolesion", there's no bounding box to draw
     if groundtruth_path.lower() == "nolesion":
         return image_bgr
 
@@ -157,7 +145,6 @@ def draw_ground_truth_bboxes(image_path: str, groundtruth_path: str) -> np.ndarr
         return image_bgr
 
     img_h, img_w = image_bgr.shape[:2]
-
     with open(groundtruth_path, "r") as f:
         lines = f.readlines()
 
@@ -182,14 +169,11 @@ def draw_ground_truth_bboxes(image_path: str, groundtruth_path: str) -> np.ndarr
         x2 = int(x_c + w / 2)
         y2 = int(y_c + h / 2)
 
-        # If class=0 => label "lesion", else numeric
         label_text = "lesion" if cls_id == 0 else str(cls_id)
-
-        box_color = (255, 0, 0)  # BGR: Blue
+        box_color = (255, 0, 0)  # Blue in BGR
         thickness = 2
         cv2.rectangle(image_bgr, (x1, y1), (x2, y2), box_color, thickness=thickness)
 
-        # Label background
         label_bg_width = 10 + 9 * len(label_text)
         label_bg_height = 20
         label_rect_top = max(y1 - label_bg_height, 0)
@@ -202,7 +186,6 @@ def draw_ground_truth_bboxes(image_path: str, groundtruth_path: str) -> np.ndarr
             box_color,
             thickness=-1,
         )
-
         cv2.putText(
             image_bgr,
             label_text,
@@ -213,9 +196,7 @@ def draw_ground_truth_bboxes(image_path: str, groundtruth_path: str) -> np.ndarr
             thickness=1,
             lineType=cv2.LINE_AA,
         )
-
     return image_bgr
-
 
 def build_resources_dict(
     root_csv_folder: str, root_weights_folder: str
@@ -225,8 +206,8 @@ def build_resources_dict(
       1) fold_csv_paths: { "fold_1": <test.csv path>, "fold_2": ... }
       2) weights_map (FoldWeightsMap): nested dict of fold→{ TPE, GP_BHO, Simulated_Annealing, Baseline }
 
-    :param root_csv_folder: Base folder where fold_1/fold_2/fold_3 subfolders each contain test.csv
-    :param root_weights_folder: Base folder where your TPE/GP_BHO/Simulated_Annealing/Baseline model weights reside.
+    :param root_csv_folder: Base folder where fold_1/fold_2/fold_3 subfolders each contain test.csv.
+    :param root_weights_folder: Base folder where model weights reside.
     :return: (fold_csv_paths, weights_map)
     """
     FOLD_NAMES = ["fold_1", "fold_2", "fold_3"]
@@ -238,7 +219,7 @@ def build_resources_dict(
         "fold_3": {"TPE": "", "GP_BHO": "", "Simulated_Annealing": "", "Baseline": ""},
     }
 
-    # Find CSVs
+    # Find CSV files for each fold
     for fold in FOLD_NAMES:
         csv_path = os.path.join(root_csv_folder, fold, "test.csv")
         if os.path.isfile(csv_path):
@@ -246,7 +227,7 @@ def build_resources_dict(
         else:
             logging.warning(f"No CSV found for {fold}: {csv_path}")
 
-    # Find best.pt for each fold & model
+    # Find model weight files for each fold
     for idx, fold in enumerate(FOLD_NAMES, start=1):
         # TPE
         tpe_dir = f"TPE_outer_{idx}_inner_1"
@@ -274,88 +255,51 @@ def build_resources_dict(
 
     return fold_csv_paths, weights_map
 
-
-def multi_image_inference(
+# ---------------------------------------------------------------------
+# New Function: Save Each Inference Image Separately
+# ---------------------------------------------------------------------
+def multi_image_inference_separate(
     images_info: List[Dict[str, str]],
     fold_csv_map: Dict[str, str],
     weights_map: FoldWeightsMap,
     output_folder: str,
-    out_filename: str = "multi_inference_subplot.pdf",
 ) -> None:
     """
     Performs inference on multiple images (specified by a list of dictionaries),
-    each dictionary having { "fold_name", "patient_id", "video_id", "frame_id" }.
-
-    Creates a figure with N rows (N = len(images_info)) × 5 columns:
-      [GroundTruth | TPE | GP-BHO | Simulated_Annealing | Baseline]
-
-    The top row has the 5 column titles. Each row is labeled in the top-left corner as a., b., c., ...
-
-    :param images_info: List of dictionaries, each specifying an image to process.
-    :param fold_csv_map: Maps "fold_1", "fold_2", ... to their CSV path (e.g. test.csv).
-    :param weights_map: For each fold, paths to the 4 model weights.
-    :param output_folder: Where to save the resulting PDF subplot.
-    :param out_filename: Filename for the resulting PDF (default "multi_inference_subplot.pdf").
+    each having { "fold_name", "patient_id", "video_id", "frame_id" }.
+    For each image, this function saves separate PDF files for:
+      - Ground Truth (with drawn GT boxes, if available) as a file with suffix "GT"
+      - Inference predictions for each model (TPE, GP_BHO, Simulated_Annealing, Baseline)
+    The output filename format is:
+      {fold}_{patient}_{video}_{frame}_{model}.pdf
+    No title is added to any saved image.
+    
+    :param images_info: List of dictionaries specifying each image to process.
+    :param fold_csv_map: Dictionary mapping each fold to its CSV path.
+    :param weights_map: Nested dictionary with model weight paths for each fold.
+    :param output_folder: Directory where PDF files will be saved.
     """
-
+    os.makedirs(output_folder, exist_ok=True)
     MODEL_KEYS_IN_ORDER = ["TPE", "GP_BHO", "Simulated_Annealing", "Baseline"]
-    MODEL_DISPLAY_NAMES = {
-        "TPE": "Tree-structured Parzen Estimator",
-        "GP_BHO": "Gaussian Process-based Optimizer",
-        "Simulated_Annealing": r"$(1 + \lambda)$-ES (Ultralytics)",
-        "Baseline": "Baseline",
-    }
 
-    num_images = len(images_info)
-    if num_images == 0:
-        logging.error("No images specified in images_info.")
-        return
-
-    # Prepare subplots: N rows × 5 columns
-    fig, axes = plt.subplots(num_images, 5, figsize=(20, 4 * num_images))
-    # If there's only 1 image, axes is not a 2D array, so make it 2D for consistency
-    if num_images == 1:
-        axes = [axes]
-
-    # Column titles (only in row=0)
-    col_titles = [
-        "Ground Truth",
-        "Tree-structured Parzen Estimator",
-        "Gaussian Process-based Optimizer",
-        r"$(1 + \lambda)$-ES (Ultralytics)",
-        "Baseline",
-    ]
-
-    # For labeling rows: a., b., c., ...
-    subplot_labels = [f"{letter}." for letter in string.ascii_lowercase[:num_images]]
-
-    for i, info in enumerate(images_info):
+    for info in images_info:
         fold_name = info["fold_name"]
         patient_id = info["patient_id"]
         video_id = info["video_id"]
         frame_id = info["frame_id"]
 
-        # Retrieve CSV path
+        # Retrieve the CSV file for the given fold.
         csv_path = fold_csv_map.get(fold_name, "")
         if not csv_path or not os.path.isfile(csv_path):
-            logging.warning(f"CSV for fold '{fold_name}' not found. Row {i} skipped.")
-            # We still plot empty placeholders
-            for col in range(5):
-                axes[i][col].axis("off")
+            logging.warning(f"CSV for fold '{fold_name}' not found. Skipping image {patient_id}_{video_id}_{frame_id}.")
             continue
 
-        # Read the CSV, find row
+        # Read CSV and find the matching row.
         df = pd.read_csv(csv_path)
         search_str = f"{patient_id}_{video_id}_{frame_id}"
         subset = df[df["Frame_path"].str.contains(search_str, na=False)]
-
-        if len(subset) == 0:
-            logging.warning(
-                f"No entries found in {csv_path} for substring '{search_str}'. Row {i} skipped."
-            )
-            # We still plot empty placeholders
-            for col in range(5):
-                axes[i][col].axis("off")
+        if subset.empty:
+            logging.warning(f"No entries found in {csv_path} for substring '{search_str}'. Skipping image.")
             continue
 
         row = subset.iloc[0]
@@ -363,99 +307,65 @@ def multi_image_inference(
         groundtruth_path = row["Groundtruth_path"]
 
         if not os.path.isfile(image_path):
-            logging.warning(f"Image file not found: {image_path}. Row {i} skipped.")
-            for col in range(5):
-                axes[i][col].axis("off")
+            logging.warning(f"Image file not found: {image_path}. Skipping image.")
             continue
 
-        # Draw GT boxes
+        # -------------------------------
+        # Save Ground Truth Image
+        # -------------------------------
         gt_bgr = draw_ground_truth_bboxes(image_path, groundtruth_path)
+        gt_rgb = cv2.cvtColor(gt_bgr, cv2.COLOR_BGR2RGB)
+        gt_filename = f"{fold_name}_{patient_id}_{video_id}_{frame_id}_GT.pdf"
+        gt_out_path = os.path.join(output_folder, gt_filename)
+        fig, ax = plt.subplots()
+        ax.imshow(gt_rgb)
+        ax.axis("off")  # Remove axis and title
+        fig.savefig(gt_out_path, dpi=300, format="pdf", bbox_inches="tight")
+        plt.close(fig)
+        logging.info(f"Saved ground truth image to {gt_out_path}")
 
-        # ------------
-        # Column 0: GT
-        # ------------
-        img_rgb = cv2.cvtColor(gt_bgr, cv2.COLOR_BGR2RGB)
-        axes[i][0].imshow(img_rgb)
-        axes[i][0].axis("off")
-
-        # 4 columns for the 4 models
-        fold_model_paths = weights_map[fold_name]
-
-        for col_idx, model_key in enumerate(MODEL_KEYS_IN_ORDER, start=1):
+        # -------------------------------
+        # Save Inference Prediction Images
+        # -------------------------------
+        fold_model_paths = weights_map.get(fold_name, {})
+        for model_key in MODEL_KEYS_IN_ORDER:
             weight_path = fold_model_paths.get(model_key, "")
             if not weight_path or not os.path.isfile(weight_path):
-                logging.warning(
-                    f"Weight not found for {model_key} in {fold_name}. Skipping."
-                )
-                axes[i][col_idx].axis("off")
+                logging.warning(f"Weight not found for {model_key} in {fold_name}. Skipping inference for this model.")
                 continue
 
             results = run_inference_on_image(weight_path, image_path, INFERENCE_PARAMS)
             if not results or len(results) == 0:
-                logging.warning(f"No inference results for {model_key} in row {i}.")
-                axes[i][col_idx].axis("off")
+                logging.warning(f"No inference results for {model_key} on image {patient_id}_{video_id}_{frame_id}.")
                 continue
 
+            # Get annotated image with predictions
             annotated_rgb = results[0].plot(**VISUALIZATION_PARAMS)
-            axes[i][col_idx].imshow(annotated_rgb)
-            axes[i][col_idx].axis("off")
-
-    # Set column titles only on the first row
-    for col in range(5):
-        axes[0][col].set_title(col_titles[col], fontsize=16)
-
-    # Add subplot labels (a., b., c., ...) for each row in the leftmost column
-    # (The snippet you gave places labels in top-left corner by default.)
-    for row_idx in range(num_images):
-        ax = axes[row_idx][0]
-        ax.text(
-            -0.05,
-            1.05,
-            subplot_labels[row_idx],
-            transform=ax.transAxes,
-            fontsize=12,
-            # fontweight="bold",
-            va="top",
-            ha="left",
-            bbox=dict(facecolor="white", edgecolor="none", alpha=0.8),
-        )
-
-        # Optional: remove top-right spines, etc.
-        for col_idx in range(5):
-            axes[row_idx][col_idx].spines[["right", "top"]].set_visible(False)
-            axes[row_idx][col_idx].get_xaxis().tick_bottom()
-            axes[row_idx][col_idx].get_yaxis().tick_left()
-
-    fig.tight_layout()
-    os.makedirs(output_folder, exist_ok=True)
-    out_path = os.path.join(output_folder, out_filename)
-    fig.savefig(out_path, dpi=300, format="pdf", bbox_inches="tight")
-    plt.close(fig)
-
-    logging.info(f"Saved multi-image inference subplot to {out_path}")
-
+            pred_filename = f"{fold_name}_{patient_id}_{video_id}_{frame_id}_{model_key}.pdf"
+            pred_out_path = os.path.join(output_folder, pred_filename)
+            fig, ax = plt.subplots()
+            ax.imshow(annotated_rgb)
+            ax.axis("off")
+            fig.savefig(pred_out_path, dpi=300, format="pdf", bbox_inches="tight")
+            plt.close(fig)
+            logging.info(f"Saved prediction image for {model_key} to {pred_out_path}")
 
 def main():
     """
-    Example usage of multi_image_inference:
-      1. Build the fold_csv_map and weights_map from your known paths.
+    Example usage:
+      1. Build the fold_csv_map and weights_map from provided paths.
       2. Provide a list of dictionaries for images_info.
-      3. Save the resulting Nx5 subplot to your chosen output folder.
+      3. Save each resulting image (GT and predictions) as a separate PDF file.
     """
-
-    # Adjust these as needed
+    # Adjust these as needed.
     root_csv_folder = "/media/hddb/mario/data/double_cv_splits"
-    root_weights_folder = (
-        "/home/mariopascual/Projects/CADICA/CROSS_VALIDATION/runs/detect"
-    )
+    root_weights_folder = "/home/mariopascual/Projects/CADICA/CROSS_VALIDATION/runs/detect"
     output_folder = "/home/mariopascual/Projects/CADICA/CROSS_VALIDATION/inference/multi_image_inference"
 
-    # 1. Build dictionary resources
-    fold_csv_map, weights_map = build_resources_dict(
-        root_csv_folder, root_weights_folder
-    )
+    # 1. Build dictionary resources.
+    fold_csv_map, weights_map = build_resources_dict(root_csv_folder, root_weights_folder)
 
-    # 2. Suppose you want to run inference on a few frames:
+    # 2. Specify the images to process.
     images_to_process = [
         {
             "fold_name": "fold_1",
@@ -483,15 +393,13 @@ def main():
         },
     ]
 
-    # 3. Run multi-image inference and save the combined figure
-    multi_image_inference(
+    # 3. Run inference and save each result as a separate PDF.
+    multi_image_inference_separate(
         images_info=images_to_process,
         fold_csv_map=fold_csv_map,
         weights_map=weights_map,
         output_folder=output_folder,
-        out_filename="multi_inference_subplot.pdf",
     )
-
 
 if __name__ == "__main__":
     main()
