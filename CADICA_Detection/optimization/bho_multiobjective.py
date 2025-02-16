@@ -19,24 +19,25 @@ from datetime import datetime
 #                             LOGGING CONFIG                                  #
 ###############################################################################
 
+
 class TrialNumberFilter(logging.Filter):
     """
     A custom logging filter that adds a 'trial_number' attribute to logging records.
 
-    This filter checks if the 'trial_number' attribute is present in a logging record. 
-    If the attribute is not present, it assigns a default value of 'N/A'. This ensures 
+    This filter checks if the 'trial_number' attribute is present in a logging record.
+    If the attribute is not present, it assigns a default value of 'N/A'. This ensures
     that log messages can include the trial number, even if it hasn't been explicitly set.
 
     Methods
     -------
     filter(record)
-        Checks if the 'trial_number' attribute is in the logging record. 
+        Checks if the 'trial_number' attribute is in the logging record.
         If not, sets 'trial_number' to 'N/A' and returns True.
     """
 
     def filter(self, record):
         """
-        Checks if the 'trial_number' attribute is present in the logging record. 
+        Checks if the 'trial_number' attribute is present in the logging record.
         If it is not present, sets 'trial_number' to 'N/A'.
 
         Parameters
@@ -49,20 +50,24 @@ class TrialNumberFilter(logging.Filter):
         bool
             Always returns True, indicating that the record should be logged.
         """
-        if not hasattr(record, 'trial_number'):
-            record.trial_number = 'N/A'
+        if not hasattr(record, "trial_number"):
+            record.trial_number = "N/A"
         return True
+
 
 # Set up logging
 logger = logging.getLogger("BHOYOLO")
 logger.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(processName)s - %(levelname)s - Trial %(trial_number)s - %(message)s')
+formatter = logging.Formatter(
+    "%(asctime)s - %(processName)s - %(levelname)s - Trial %(trial_number)s - %(message)s"
+)
 
 # Create file handler
-fh = logging.FileHandler('log_bho_process.log')
+fh = logging.FileHandler("log_bho_process.log")
 fh.setFormatter(formatter)
 fh.addFilter(TrialNumberFilter())
 logger.addHandler(fh)
+
 
 ###############################################################################
 #                           GPU USAGE LOGGING                                 #
@@ -77,16 +82,20 @@ class NvidiaGPUUsageLogger:
 
     def log_metrics(self, epoch, trainer):
         """Logs GPU metrics, including device, to the accumulated data."""
-        model_device = next(trainer.model.parameters()).device  # Get the device dynamically
-        device_index = model_device.index if model_device != 'cpu' else None
-        
+        model_device = next(
+            trainer.model.parameters()
+        ).device  # Get the device dynamically
+        device_index = model_device.index if model_device != "cpu" else None
+
         # Fetch GPU metrics only if the device is a GPU
         if device_index is not None:
             nvidia_smi.nvmlInit()
             handle = nvidia_smi.nvmlDeviceGetHandleByIndex(device_index)
             util = nvidia_smi.nvmlDeviceGetUtilizationRates(handle)
             mem = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
-            temperature = nvidia_smi.nvmlDeviceGetTemperature(handle, nvidia_smi.NVML_TEMPERATURE_GPU)
+            temperature = nvidia_smi.nvmlDeviceGetTemperature(
+                handle, nvidia_smi.NVML_TEMPERATURE_GPU
+            )
             nvidia_smi.nvmlShutdown()
 
             metrics = {
@@ -94,11 +103,11 @@ class NvidiaGPUUsageLogger:
                 "device": f"cuda:{device_index}",
                 "epoch": epoch,
                 "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Current time
-                "memory_free": mem.free / 1024 ** 2,  # Memory in MB
-                "memory_total": mem.total / 1024 ** 2,  # Memory in MB
+                "memory_free": mem.free / 1024**2,  # Memory in MB
+                "memory_total": mem.total / 1024**2,  # Memory in MB
                 "gpu_utilization": util.gpu / 100.0,  # Utilization percentage
                 "memory_utilization": util.memory / 100.0,  # Utilization percentage
-                "temperature": temperature  # Temperature in Celsius
+                "temperature": temperature,  # Temperature in Celsius
             }
         else:
             # If using CPU, log minimal metrics
@@ -111,7 +120,7 @@ class NvidiaGPUUsageLogger:
                 "memory_total": None,
                 "gpu_utilization": None,
                 "memory_utilization": None,
-                "temperature": None
+                "temperature": None,
             }
 
         self.data.append(metrics)  # Append the metrics to the list
@@ -123,12 +132,13 @@ class NvidiaGPUUsageLogger:
         if not os.path.exists(self.csv_file):
             df.to_csv(self.csv_file, index=False)
         else:
-            df.to_csv(self.csv_file, mode='a', header=False, index=False)
+            df.to_csv(self.csv_file, mode="a", header=False, index=False)
 
 
 ###############################################################################
 #                             YOLO CALLBACKS                                  #
 ###############################################################################
+
 
 def create_gpu_monitoring_callbacks(trial, logger):
     """
@@ -159,69 +169,70 @@ def create_gpu_monitoring_callbacks(trial, logger):
 ###############################################################################
 
 DEFAULT_PARAMS = {
-    'data': None,  # This will be set dynamically in the class
-    'epochs': 100,
-    'patience': 20,
-    'batch': 16,  # Automatic batch size determination
-    'imgsz': 640,
-    'save': True,
-    'cache': False,
-    'device': None,
-    'workers': 8,
-    'project': None,
-    'name': "default_name",
-    'exist_ok': False,
-    'pretrained': True,
-    'verbose': True,
-    'seed': 42,
-    'deterministic': True,
-    'single_cls': True,
-    'rect': False,
-    'cos_lr': True,
-    'resume': False,
-    'amp': True,
-    'fraction': 1.0,
-    'profile': False,
-    'freeze': None,
-    'plots': True,
-    'optimizer': 'Adam',
-    'iou': 0.7,
-    'lr0': 0.01,
-    'lrf': 0.01,
-    'momentum': 0.937,
-    'weight_decay': 0.0005,
-    'warmup_epochs': 3,
-    'warmup_momentum': 0.8,
-    'warmup_bias_lr': 0.1,
-    'label_smoothing': 0.0,
-    'box': 7.5,
-    'cls': 0.5,
-    'dfl': 1.5,
-    'dropout': 0.0,
-    'val': True,
+    "data": None,  # This will be set dynamically in the class
+    "epochs": 100,
+    "patience": 20,
+    "batch": 16,  # Automatic batch size determination
+    "imgsz": 640,
+    "save": True,
+    "cache": False,
+    "device": None,
+    "workers": 8,
+    "project": None,
+    "name": "default_name",
+    "exist_ok": False,
+    "pretrained": True,
+    "verbose": True,
+    "seed": 42,
+    "deterministic": True,
+    "single_cls": True,
+    "rect": False,
+    "cos_lr": True,
+    "resume": False,
+    "amp": True,
+    "fraction": 1.0,
+    "profile": False,
+    "freeze": None,
+    "plots": True,
+    "optimizer": "Adam",
+    "iou": 0.7,
+    "lr0": 0.01,
+    "lrf": 0.01,
+    "momentum": 0.937,
+    "weight_decay": 0.0005,
+    "warmup_epochs": 3,
+    "warmup_momentum": 0.8,
+    "warmup_bias_lr": 0.1,
+    "label_smoothing": 0.0,
+    "box": 7.5,
+    "cls": 0.5,
+    "dfl": 1.5,
+    "dropout": 0.0,
+    "val": True,
     # Augmentation parameters
-    'hsv_h': 0.0,
-    'hsv_s': 0.0,
-    'hsv_v': 0.0,
-    'degrees': 0.0,
-    'translate': 0.0,
-    'scale': 0.0,
-    'shear': 0.0,
-    'perspective': 0.0,
-    'flipud': 0.0,
-    'fliplr': 0.0,
-    'mosaic': 0.0,
-    'mixup': 0.0,
-    'copy_paste': 0.0,
-    'erasing': 0.0,
-    'crop_fraction': 0.0,
-    'auto_augment': "",
-    'bgr': 0.0,
+    "hsv_h": 0.0,
+    "hsv_s": 0.0,
+    "hsv_v": 0.0,
+    "degrees": 0.0,
+    "translate": 0.0,
+    "scale": 0.0,
+    "shear": 0.0,
+    "perspective": 0.0,
+    "flipud": 0.0,
+    "fliplr": 0.0,
+    "mosaic": 0.0,
+    "mixup": 0.0,
+    "copy_paste": 0.0,
+    "erasing": 0.0,
+    "crop_fraction": 0.0,
+    "auto_augment": "",
+    "bgr": 0.0,
 }
 
 ###############################################################################
 #                          OPTUNA OPTIMIZATOR                                 #
 ###############################################################################
+
 
 def set_seed(seed: int = None) -> None:
     """
@@ -247,13 +258,14 @@ def set_seed(seed: int = None) -> None:
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+
 class BHOYOLO_Multiobjective:
     """
     A class for performing Bayesian Hyperparameter Optimization (BHO) on YOLO models.
 
-    This class uses Optuna to optimize hyperparameters for YOLO model training. It includes 
-    methods for setting up the YOLO training environment, extracting hyperparameters, and 
-    preparing for the optimization process. It also manages GPU resources efficiently and 
+    This class uses Optuna to optimize hyperparameters for YOLO model training. It includes
+    methods for setting up the YOLO training environment, extracting hyperparameters, and
+    preparing for the optimization process. It also manages GPU resources efficiently and
     provides an interface for saving results and generating visualizations.
 
     Attributes
@@ -304,10 +316,7 @@ class BHOYOLO_Multiobjective:
     """
 
     def __init__(
-        self,
-        config: Dict[str, Any],
-        gpu_lock=None,
-        available_gpus=None
+        self, config: Dict[str, Any], gpu_lock=None, available_gpus=None
     ) -> None:
         """
         Initializes the Bayesian Hyperparameter Optimization for YOLO model training.
@@ -329,40 +338,41 @@ class BHOYOLO_Multiobjective:
         YOLO model for hyperparameter optimization.
         """
         # Get storage from config
-        storage_path = config.get('storage', 'optuna_study.db')
+        storage_path = config.get("storage", "optuna_study.db")
         # Ensure the storage URL is correctly formatted
-        if not storage_path.startswith('sqlite:///'):
-            self.storage = f'sqlite:///{storage_path}'
+        if not storage_path.startswith("sqlite:///"):
+            self.storage = f"sqlite:///{storage_path}"
         else:
             self.storage = storage_path
-        self.study_name = config.get('study_name', 'optuna_study_default_name')
-        self.model: str = config.get('model', './yolov8lt.pt')
-        self.hyperparameters_config: Dict[str, Any] = config.get('hyperparameters', {})
+        self.study_name = config.get("study_name", "optuna_study_default_name")
+        self.model: str = config.get("model", "./yolov8lt.pt")
+        self.hyperparameters_config: Dict[str, Any] = config.get("hyperparameters", {})
         self.hyperparameters = self._prepare_hyperparameters()
-        self.yaml_path: str = config.get('data', '')
-        self.epochs: int = config.get('epochs', 100)
-        self.img_size: int = config.get('img_size', 512)
+        self.yaml_path: str = config.get("data", "")
+        self.epochs: int = config.get("epochs", 100)
+        self.img_size: int = config.get("img_size", 512)
         self.results: List[Dict[str, Any]] = []
-        self.n_trials: int = config.get('n_trials', 50)
-        self.save_plots: bool = config.get('save_plots', True)
+        self.n_trials: int = config.get("n_trials", 50)
+        self.save_plots: bool = config.get("save_plots", True)
 
         # Resource configuration
-        self.num_cpus: int = int(os.environ.get('SLURM_CPUS_PER_TASK', 1))
+        self.num_cpus: int = int(os.environ.get("SLURM_CPUS_PER_TASK", 1))
         self.num_gpus: int = torch.cuda.device_count()
-        self.available_gpus = available_gpus if available_gpus is not None else list(range(self.num_gpus))
+        self.available_gpus = (
+            available_gpus if available_gpus is not None else list(range(self.num_gpus))
+        )
         self.gpu_lock = gpu_lock if gpu_lock is not None else multiprocessing.Lock()
 
         # Set the device parameter based on GPU availability
         if torch.cuda.is_available() and self.num_gpus > 0:
-            self.device = 'cuda'
+            self.device = "cuda"
         else:
-            self.device = 'cpu'
+            self.device = "cpu"
 
         # Copy the default parameters and update device and workers
         self.default_params: Dict[str, Any] = DEFAULT_PARAMS.copy()
-        self.default_params['device'] = self.device
-        self.default_params['workers'] = min(4 * self.num_gpus, self.num_cpus)
-
+        self.default_params["device"] = self.device
+        self.default_params["workers"] = min(4 * self.num_gpus, self.num_cpus)
 
     def _prepare_hyperparameters(self) -> Dict[Tuple[str, str], Any]:
         """
@@ -386,13 +396,15 @@ class BHOYOLO_Multiobjective:
         hyperparameters: Dict[Tuple[str, str], Any] = {}
         # Iterate over the hyperparameters defined in the configuration
         for param_name, param_config in self.hyperparameters_config.items():
-            param_type: str = param_config.get('type')
+            param_type: str = param_config.get("type")
             # Check if the parameter type is valid
-            if param_type in ['loguniform', 'uniform', 'int', 'categorical']:
+            if param_type in ["loguniform", "uniform", "int", "categorical"]:
                 # Store the hyperparameter with its type and configuration
                 hyperparameters[(param_name, param_type)] = param_config
             else:
-                raise ValueError(f"Unknown hyperparameter type {param_type} for {param_name}")
+                raise ValueError(
+                    f"Unknown hyperparameter type {param_type} for {param_name}"
+                )
         return hyperparameters
 
     def _extract_hyperparameters(self, trial: optuna.Trial, logger) -> Dict[str, Any]:
@@ -426,20 +438,32 @@ class BHOYOLO_Multiobjective:
         logger.debug(f"Extracting hyperparameters for trial {trial.number}.")
 
         for (hyperparam, func_type), param_config in self.hyperparameters.items():
-            low = param_config.get('low')
-            high = param_config.get('high')
+            low = param_config.get("low")
+            high = param_config.get("high")
             if func_type == "loguniform":
-                final_hyperparam[hyperparam] = trial.suggest_float(hyperparam, low, high, log=True)
+                final_hyperparam[hyperparam] = trial.suggest_float(
+                    hyperparam, low, high, log=True
+                )
             elif func_type == "uniform":
-                final_hyperparam[hyperparam] = trial.suggest_float(hyperparam, low, high)
+                final_hyperparam[hyperparam] = trial.suggest_float(
+                    hyperparam, low, high
+                )
             elif func_type == "int":
-                final_hyperparam[hyperparam] = trial.suggest_int(hyperparam, int(low), int(high))
+                final_hyperparam[hyperparam] = trial.suggest_int(
+                    hyperparam, int(low), int(high)
+                )
             elif func_type == "categorical":
-                choices = param_config['choices']
-                final_hyperparam[hyperparam] = trial.suggest_categorical(hyperparam, choices)
+                choices = param_config["choices"]
+                final_hyperparam[hyperparam] = trial.suggest_categorical(
+                    hyperparam, choices
+                )
             else:
-                logger.error(f"Unknown function type {func_type} for hyperparameter {hyperparam}")
-                raise ValueError(f"Unknown function type {func_type} for hyperparameter {hyperparam}")
+                logger.error(
+                    f"Unknown function type {func_type} for hyperparameter {hyperparam}"
+                )
+                raise ValueError(
+                    f"Unknown function type {func_type} for hyperparameter {hyperparam}"
+                )
         return final_hyperparam
 
     def _train_model(self, trial: optuna.Trial) -> float:
@@ -486,7 +510,7 @@ class BHOYOLO_Multiobjective:
         logger = logging.getLogger("BHOYOLO")
 
         # Create a LoggerAdapter to inject 'trial_number' into log messages
-        logger = logging.LoggerAdapter(logger, {'trial_number': trial.number})
+        logger = logging.LoggerAdapter(logger, {"trial_number": trial.number})
 
         logger.info(f"Starting training for trial {trial.number}.")
 
@@ -509,104 +533,129 @@ class BHOYOLO_Multiobjective:
         with self.gpu_lock:
             if self.available_gpus:
                 gpu_id = self.available_gpus.pop(0)
-                assigned_device = f'cuda:{gpu_id}'
-                trial.set_user_attr('gpu_id', gpu_id)
+                assigned_device = f"cuda:{gpu_id}"
+                trial.set_user_attr("gpu_id", gpu_id)
                 logger.info(f"Assigned GPU {gpu_id} to trial {trial.number}")
-                params['device'] = assigned_device
+                params["device"] = assigned_device
             else:
-                assigned_device = 'cpu'
+                assigned_device = "cpu"
                 gpu_id = None
-                params['device'] = 'cpu'
+                params["device"] = "cpu"
                 logger.info(f"No GPUs available, trial {trial.number} will run on CPU")
 
         # Log the assigned device
         logger.info(f"Assigned device for trial {trial.number}: {assigned_device}")
 
         # Verify the device availability
-        if assigned_device != 'cpu' and not torch.cuda.is_available():
-            logger.error(f"CUDA is not available. Trial {trial.number} will run on CPU instead.")
-            assigned_device = 'cpu'
+        if assigned_device != "cpu" and not torch.cuda.is_available():
+            logger.error(
+                f"CUDA is not available. Trial {trial.number} will run on CPU instead."
+            )
+            assigned_device = "cpu"
             gpu_id = None
 
         try:
             # Update parameters with configuration settings
-            params['data'] = self.yaml_path
-            params['epochs'] = self.epochs
-            params['imgsz'] = self.img_size
-            params['val'] = True  # Ensure validation is performed
-            params['verbose'] = False  # Reduce verbosity if needed
+            params["data"] = self.yaml_path
+            params["epochs"] = self.epochs
+            params["imgsz"] = self.img_size
+            params["val"] = True  # Ensure validation is performed
+            params["verbose"] = False  # Reduce verbosity if needed
 
             # Set unique name for each trial
-            params['name'] = f"trial_{trial.number}_training"
+            params["name"] = f"trial_{trial.number}_training"
 
             # Initialize the YOLO model
             model = YOLO(self.model)
             model.model.to(assigned_device)  # Explicitly move model to the assigned GPU
-            
+
             # GPU usage callbacks
-            on_train_epoch_start, on_train_epoch_end, on_train_end = create_gpu_monitoring_callbacks(trial, logger)
+            on_train_epoch_start, on_train_epoch_end, on_train_end = (
+                create_gpu_monitoring_callbacks(trial, logger)
+            )
 
             # Add the callbacks to the YOLO model
             model.add_callback("on_train_epoch_start", on_train_epoch_start)
             model.add_callback("on_train_epoch_end", on_train_epoch_end)
             model.add_callback("on_train_end", on_train_end)
 
-
             # Verify that model parameters are on the correct device
             model_device = next(model.model.parameters()).device
             logger.info(f"Model parameters are on device: {model_device}")
 
             # Record memory before training
-            if assigned_device != 'cpu':
-                memory_allocated_before = torch.cuda.memory_allocated(device=assigned_device)
-                memory_reserved_before = torch.cuda.memory_reserved(device=assigned_device)
+            if assigned_device != "cpu":
+                memory_allocated_before = torch.cuda.memory_allocated(
+                    device=assigned_device
+                )
+                memory_reserved_before = torch.cuda.memory_reserved(
+                    device=assigned_device
+                )
             else:
                 logging.info("Model assigned to cpu")
                 memory_allocated_before = 0
                 memory_reserved_before = 0
-            logger.info(f"Memory allocated before training for trial {trial.number}: {memory_allocated_before/ 1e6} MB")
-            logger.info(f"Memory reserved before training for trial {trial.number}: {memory_reserved_before/ 1e6} MB")
+            logger.info(
+                f"Memory allocated before training for trial {trial.number}: {memory_allocated_before/ 1e6} MB"
+            )
+            logger.info(
+                f"Memory reserved before training for trial {trial.number}: {memory_reserved_before/ 1e6} MB"
+            )
 
             # Log the device used by the model
             logger.info(f"Model device for trial {trial.number}: {model.device}")
 
             # Verify that model parameters are on the correct device
             model_device = next(model.model.parameters()).device
-            logger.info(f"Model parameters are on device (before training): {model_device}")
+            logger.info(
+                f"Model parameters are on device (before training): {model_device}"
+            )
 
             # Train the model using the merged hyperparameters
             model.train(**params)
 
             # Check if the model's device has changed after training
             post_train_device = next(model.model.parameters()).device
-            logger.info(f"Model parameters are on device (after training): {post_train_device}")
-
+            logger.info(
+                f"Model parameters are on device (after training): {post_train_device}"
+            )
 
             # Access the actual batch size used
             actual_batch_size = model.trainer.batch_size
-            logger.info(f"Actual batch size used for trial {trial.number}: {actual_batch_size}")
+            logger.info(
+                f"Actual batch size used for trial {trial.number}: {actual_batch_size}"
+            )
 
             # Retrieve relevant metrics after training completes
             metrics = model.metrics
 
             # Access metrics directly from attributes
-            precision_b = metrics.box.mp     # Mean Precision
-            recall_b = metrics.box.mr        # Mean Recall
-            map_50_b = metrics.box.map50     # mAP@50
-            map_50_95 = metrics.box.map      # mAP@50-95
-            f1_score = (2*precision_b*recall_b) / (precision_b + recall_b) # f1-score
-
+            precision_b = metrics.box.mp  # Mean Precision
+            recall_b = metrics.box.mr  # Mean Recall
+            map_50_b = metrics.box.map50  # mAP@50
+            map_50_95 = metrics.box.map  # mAP@50-95
+            f1_score = (2 * precision_b * recall_b) / (
+                precision_b + recall_b
+            )  # f1-score
 
             # Record memory after training
-            if assigned_device != 'cpu':
-                memory_allocated_after = torch.cuda.memory_allocated(device=assigned_device)
-                memory_reserved_after = torch.cuda.memory_reserved(device=assigned_device)
+            if assigned_device != "cpu":
+                memory_allocated_after = torch.cuda.memory_allocated(
+                    device=assigned_device
+                )
+                memory_reserved_after = torch.cuda.memory_reserved(
+                    device=assigned_device
+                )
             else:
                 logging.info("Model assigned to cpu")
                 memory_allocated_after = 0
                 memory_reserved_after = 0
-            logger.info(f"Memory allocated after training for trial {trial.number}: {memory_allocated_after / 1e6} MB")
-            logger.info(f"Memory reserved after training for trial {trial.number}: {memory_reserved_after/ 1e6} MB")
+            logger.info(
+                f"Memory allocated after training for trial {trial.number}: {memory_allocated_after / 1e6} MB"
+            )
+            logger.info(
+                f"Memory reserved after training for trial {trial.number}: {memory_reserved_after/ 1e6} MB"
+            )
 
             # Calculate execution time
             end_time = time.time()
@@ -614,36 +663,36 @@ class BHOYOLO_Multiobjective:
             logger.info(f"Trial {trial.number} completed in {elapsed_time:.2f} seconds")
 
             # Save metrics to the trial object
-            trial.set_user_attr('precision', precision_b)
-            trial.set_user_attr('recall', recall_b)
-            trial.set_user_attr('f1_score', f1_score)
-            trial.set_user_attr('mAP50', map_50_b)
-            trial.set_user_attr('mAP50-95', map_50_95)
-            trial.set_user_attr('batch_size', actual_batch_size)
-            trial.set_user_attr('seed', seed)
-            trial.set_user_attr('execution_time', elapsed_time)
-            trial.set_user_attr('memory_allocated_before', memory_allocated_before)
-            trial.set_user_attr('memory_reserved_before', memory_reserved_before)
-            trial.set_user_attr('memory_allocated_after', memory_allocated_after)
-            trial.set_user_attr('memory_reserved_after', memory_reserved_after)
+            trial.set_user_attr("precision", precision_b)
+            trial.set_user_attr("recall", recall_b)
+            trial.set_user_attr("f1_score", f1_score)
+            trial.set_user_attr("mAP50", map_50_b)
+            trial.set_user_attr("mAP50-95", map_50_95)
+            trial.set_user_attr("batch_size", actual_batch_size)
+            trial.set_user_attr("seed", seed)
+            trial.set_user_attr("execution_time", elapsed_time)
+            trial.set_user_attr("memory_allocated_before", memory_allocated_before)
+            trial.set_user_attr("memory_reserved_before", memory_reserved_before)
+            trial.set_user_attr("memory_allocated_after", memory_allocated_after)
+            trial.set_user_attr("memory_reserved_after", memory_reserved_after)
 
             # Save the current hyperparameters and metrics in the results list
             trial_results = {
                 **hyperparams,
-                'precision': precision_b,
-                'recall': recall_b,
-                'f1_score':f1_score,
-                'mAP50': map_50_b,
-                'mAP50-95': map_50_95,
-                'trial_number': trial.number,
-                'seed': seed,
-                'gpu_id': gpu_id if assigned_device != 'cpu' else 'cpu',
-                'batch_size': actual_batch_size,
-                'execution_time': elapsed_time,
-                'memory_allocated_before': memory_allocated_before,
-                'memory_reserved_before': memory_reserved_before,
-                'memory_allocated_after': memory_allocated_after,
-                'memory_reserved_after': memory_reserved_after
+                "precision": precision_b,
+                "recall": recall_b,
+                "f1_score": f1_score,
+                "mAP50": map_50_b,
+                "mAP50-95": map_50_95,
+                "trial_number": trial.number,
+                "seed": seed,
+                "gpu_id": gpu_id if assigned_device != "cpu" else "cpu",
+                "batch_size": actual_batch_size,
+                "execution_time": elapsed_time,
+                "memory_allocated_before": memory_allocated_before,
+                "memory_reserved_before": memory_reserved_before,
+                "memory_allocated_after": memory_allocated_after,
+                "memory_reserved_after": memory_reserved_after,
             }
             self.results.append(trial_results)
 
@@ -652,7 +701,9 @@ class BHOYOLO_Multiobjective:
 
         except Exception as e:
             # Log any other exceptions that occurred during training
-            logger.error(f"An error occurred during training of trial {trial.number}: {e}")
+            logger.error(
+                f"An error occurred during training of trial {trial.number}: {e}"
+            )
             logger.error(traceback.format_exc())
             raise e  # Re-raise exception to be caught by Optuna
 
@@ -667,21 +718,20 @@ class BHOYOLO_Multiobjective:
             torch.cuda.empty_cache()
             gc.collect()
 
-
     def optimize(self) -> None:
         """
         Description
         --------------------------
         Starts the hyperparameter optimization process using Optuna.
-        
+
         References
         --------------------------
         TPESampler:
-            BERGSTRA, James, et al. Algorithms for hyper-parameter optimization. 
+            BERGSTRA, James, et al. Algorithms for hyper-parameter optimization.
             Advances in neural information processing systems, 2011, vol. 24.
             https://proceedings.neurips.cc/paper_files/paper/2011/file/86e8f7ab32cfd12577bc2619bc635690-Paper.pdf
 
-            BERGSTRA, James; YAMINS, Dan; COX, David D. Making a science of model search. 
+            BERGSTRA, James; YAMINS, Dan; COX, David D. Making a science of model search.
             arXiv preprint arXiv:1209.5111, 2012.
             https://arxiv.org/abs/1209.5111
         """
@@ -694,12 +744,13 @@ class BHOYOLO_Multiobjective:
         # Get the name of each GPU
         for i in range(torch.cuda.device_count()):
             logger.info(f"GPU {i}: {torch.cuda.get_device_name(i)}")
-        logger.info("Current device (no optimization executed): %s", torch.cuda.current_device())
+        logger.info(
+            "Current device (no optimization executed): %s", torch.cuda.current_device()
+        )
 
         # Set up Optuna SQLite storage
         storage = optuna.storages.RDBStorage(
-            url=self.storage,
-            engine_kwargs={"connect_args": {"timeout": 10}}
+            url=self.storage, engine_kwargs={"connect_args": {"timeout": 10}}
         )
 
         # Define the sampler
@@ -714,7 +765,7 @@ class BHOYOLO_Multiobjective:
             group=True,
             warn_independent_sampling=True,
             constant_liar=True,
-            seed=42
+            seed=42,
         )
 
         study = optuna.create_study(
@@ -722,7 +773,7 @@ class BHOYOLO_Multiobjective:
             directions=["maximize", "maximize"],
             storage=storage,
             load_if_exists=True,
-            sampler=sampler
+            sampler=sampler,
         )
 
         n_initial_trials: int = 1
@@ -731,10 +782,12 @@ class BHOYOLO_Multiobjective:
 
         logger.info(f"Running {n_initial_trials} initial trials sequentially.")
         try:
-            study.optimize(self._train_model,
-                           n_trials=n_initial_trials,
-                           n_jobs=1,
-                           gc_after_trial=True)
+            study.optimize(
+                self._train_model,
+                n_trials=n_initial_trials,
+                n_jobs=1,
+                gc_after_trial=True,
+            )
         except Exception as e:
             logger.error(f"An error occurred during the initial sequential trials: {e}")
             logger.error(traceback.format_exc())
@@ -742,19 +795,22 @@ class BHOYOLO_Multiobjective:
 
         if n_parallel_trials > 0:
             n_jobs: int = min(self.num_gpus, n_parallel_trials)
-            logger.info(f"Running {n_parallel_trials} trials in parallel with {n_jobs} jobs.")
+            logger.info(
+                f"Running {n_parallel_trials} trials in parallel with {n_jobs} jobs."
+            )
             try:
-                study.optimize(self._train_model,
-                               n_trials=n_parallel_trials,
-                               n_jobs=n_jobs,
-                               gc_after_trial=True)
+                study.optimize(
+                    self._train_model,
+                    n_trials=n_parallel_trials,
+                    n_jobs=n_jobs,
+                    gc_after_trial=True,
+                )
             except Exception as e:
                 logger.error(f"An error occurred during the parallel trials: {e}")
                 logger.error(traceback.format_exc())
                 raise e
         else:
             logger.info("No parallel trials to run.")
-
 
         # Save results
         self._save_results_to_csv(study)
@@ -784,8 +840,10 @@ class BHOYOLO_Multiobjective:
         - The CSV file is created in the current working directory.
         - The method logs a message indicating that the results have been saved successfully.
         """
-        df: pd.DataFrame = study.trials_dataframe(attrs=('number', 'value', 'params', 'state', 'user_attrs'))
-        df.to_csv('hyperparameter_optimization_results.csv', index=False)
+        df: pd.DataFrame = study.trials_dataframe(
+            attrs=("number", "value", "params", "state", "user_attrs")
+        )
+        df.to_csv("hyperparameter_optimization_results.csv", index=False)
         logger = logging.getLogger("BHOYOLO")
         logger.info("Results saved to hyperparameter_optimization_results.csv")
 
@@ -802,7 +860,7 @@ class BHOYOLO_Multiobjective:
         -----------
         This method creates several visualization plots using Optuna's visualization module to help
         analyze the hyperparameter optimization process. The following plots are generated and saved:
-        
+
         - **Contour Plot**: Visualizes the objective value as a function of two hyperparameters.
         - **Parallel Coordinates Plot**: Shows the relationship between hyperparameters and the
         objective value.
@@ -823,6 +881,7 @@ class BHOYOLO_Multiobjective:
         logger.info("Generating visualization plots.")
         try:
             import optuna.visualization as vis
+
             # Contour plot for 2D hyperparameter space exploration
             contour_fig = vis.plot_contour(study)
             contour_fig.write_image("contour_plot.png")
@@ -848,6 +907,7 @@ class BHOYOLO_Multiobjective:
             logger.error(f"An error occurred while generating visualizations: {e}")
             logger.error(traceback.format_exc())
 
+
 def main():
     """
     The main entry point for running the Bayesian Hyperparameter Optimization for the YOLO model.
@@ -867,7 +927,7 @@ def main():
     ------
     Exception
         If an error occurs during the execution, it is logged and re-raised.
-    
+
     Notes
     -----
     - The configuration file should be in YAML format and include all necessary parameters.
@@ -876,7 +936,7 @@ def main():
     """
     try:
         # Read configuration from YAML file
-        with open('./bho_config.yaml', 'r') as f:
+        with open("./bho_config.yaml", "r") as f:
             config = yaml.safe_load(f)
         logger = logging.getLogger("BHOYOLO")
         logger.info("Configuration file loaded successfully.")
@@ -887,7 +947,9 @@ def main():
         available_gpus = manager.list(range(torch.cuda.device_count()))
 
         # Instantiate the BHOYOLO class, passing shared variables
-        bho_yolo = BHOYOLO_Multiobjective(config, gpu_lock=gpu_lock, available_gpus=available_gpus)
+        bho_yolo = BHOYOLO_Multiobjective(
+            config, gpu_lock=gpu_lock, available_gpus=available_gpus
+        )
 
         # Run optimization
         bho_yolo.optimize()
@@ -897,6 +959,7 @@ def main():
         logger.error(f"An error occurred during execution: {e}")
         logger.error(traceback.format_exc())
         raise e
+
 
 if __name__ == "__main__":
     main()

@@ -6,39 +6,29 @@ from .data_loader import (
     run_getSelectedFrames,
     run_getGroundtruthFiles,
     run_extractLesionLabels,
-    run_saveToCsv
+    run_saveToCsv,
 )
 
 from .holdout import (
     run_cleanGroundTruthFileDatasetField,
     run_filterByLabels,
     run_saveSplit,
-    run_splitData
+    run_splitData,
 )
 
-from .undersampling import (
-    run_loadDataSplits,
-    run_undersampling
-)
+from .undersampling import run_loadDataSplits, run_undersampling
 
-from .augmentation import (
-    run_augmentData,
-    run_loadDataAugmentation,
-    Augmentor
-)
+from .augmentation import run_augmentData, run_loadDataAugmentation, Augmentor
 
-from .formatting import (
-    run_generateDataset
-)
+from .formatting import run_generateDataset
 
-from .utils import (
-    run_compute_augmentation_counts
-)
+from .utils import run_compute_augmentation_counts
 
-# Mostly modules needed for typing 
+# Mostly modules needed for typing
 from typing import Optional, Union, List, Dict, Tuple
 import os
-import pandas as pd
+import pandas as pd  # type: ignore
+
 
 class DatasetTools:
     """
@@ -49,58 +39,59 @@ class DatasetTools:
     # data_loader.py tools
 
     @staticmethod
-    def downloadCADICA(destination_folder: str, 
-                   url: str = "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/p9bpx9ctcv-2.zip",
-                   filename: Optional[str] = "CADICA_Dataset.zip") -> Union[str, os.PathLike]:
+    def downloadCADICA(
+        destination_folder: str,
+        url: str = "https://prod-dcd-datasets-cache-zipfiles.s3.eu-west-1.amazonaws.com/p9bpx9ctcv-2.zip",
+        filename: Optional[str] = "CADICA_Dataset.zip",
+    ) -> Union[str, os.PathLike]:
         """
         Description
         -------------
         Downloads a dataset zip file from the specified URL and extracts it to the destination folder.
-        
+
         Args
         -------------
             destination_folder (str): Path to the folder where the dataset should be extracted.
             url (str): URL of the dataset zip file.
             filename (Optional[str]): Name of the zip file to be saved locally.
-            
+
         Raises
         -------------
             Union[str, os.PathLike]: Destination folder passed by the user.
             Exception: If the download or extraction fails.
-        
+
         References
         -------------
-        Jiménez-Partinen, Ariadna; Molina-Cabello, 
-        Miguel A.; Thurnhofer-Hemsi, Karl; Palomo, Esteban; 
-        Rodríguez-Capitán, Jorge; Molina-Ramos, Ana I.; 
-        Jiménez-Navarro, Manuel (2024), 
-        “CADICA: a new dataset for coronary artery disease”, 
+        Jiménez-Partinen, Ariadna; Molina-Cabello,
+        Miguel A.; Thurnhofer-Hemsi, Karl; Palomo, Esteban;
+        Rodríguez-Capitán, Jorge; Molina-Ramos, Ana I.;
+        Jiménez-Navarro, Manuel (2024),
+        “CADICA: a new dataset for coronary artery disease”,
         Mendeley Data, V2, doi: 10.17632/p9bpx9ctcv.2
         """
-        return run_downloadCADICA(destination_folder = destination_folder, 
-                                  url = url, 
-                                  filename = filename)
+        return run_downloadCADICA(
+            destination_folder=destination_folder, url=url, filename=filename
+        )
 
     @staticmethod
     def getFilePaths(patientPath: str, fileName: str) -> List[str]:
         """
         Reads file paths from a specified file and returns them as a list of strings.
-        
+
         Args
         -------------
         patientPath : str
             The directory path where the file is located.
         fileName : str
             The name of the file to read.
-            
+
         Returns
         -------------
         List[str]
             A list of strings, each representing a file path extracted from the file.
         """
-        return run_getFilePaths(patientPath = patientPath, 
-                                fileName = fileName)
-    
+        return run_getFilePaths(patientPath=patientPath, fileName=fileName)
+
     @staticmethod
     def getSelectedFrames(videoPath: str, patient: str, video: str) -> List[str]:
         """
@@ -120,9 +111,7 @@ class DatasetTools:
         List[str]
             A list of file paths for the selected frames associated with the specified video.
         """
-        return run_getSelectedFrames(videoPath = videoPath, 
-                                     patient = patient, 
-                                     video = video)
+        return run_getSelectedFrames(videoPath=videoPath, patient=patient, video=video)
 
     @staticmethod
     def getGroundtruthFiles(videoPath: str, lesionVideos: List[str]) -> Dict[str, str]:
@@ -141,11 +130,10 @@ class DatasetTools:
         Dict[str, str]
             A dictionary where each key is a frame identifier, and each value is the path to the ground truth file.
         """
-        return run_getGroundtruthFiles(videoPath = videoPath, 
-                                       lesionVideos = lesionVideos)
+        return run_getGroundtruthFiles(videoPath=videoPath, lesionVideos=lesionVideos)
 
     @staticmethod
-    def extractLesionLabel(groundtruthFile: str) -> Optional[str]:
+    def extractLesionLabel(groundtruthFile: str) -> List[str]:
         """
         Extracts the lesion label from a ground truth file if available.
 
@@ -159,7 +147,7 @@ class DatasetTools:
         Optional[str]
             The lesion label extracted from the file, or None if no label is found.
         """
-        return run_extractLesionLabels(groundtruthFile = groundtruthFile)
+        return run_extractLesionLabels(groundtruthFile=groundtruthFile)
 
     @staticmethod
     def saveToCsv(df: pd.DataFrame, outputCsvPath: str) -> None:
@@ -177,27 +165,26 @@ class DatasetTools:
         -------------
         None
         """
-        return run_saveToCsv(df = df, 
-                             outputCsvPath = outputCsvPath)
-    
+        return run_saveToCsv(df=df, outputCsvPath=outputCsvPath)
+
     # holdout.py tools
 
     @staticmethod
     def cleanGroundTruthFileDatasetField(csv_path: str) -> pd.DataFrame:
         """
         Loads the dataset CSV and fills missing 'GroundTruthFile' values with 'nolesion'.
-        
+
         Args
         -------------
         csv_path : str
             Path to the CSV file containing the dataset.
-            
+
         Returns
         -------------
         pd.DataFrame
             A DataFrame loaded from the CSV with missing 'GroundTruthFile' values filled.
         """
-        return run_cleanGroundTruthFileDatasetField(csv_path = csv_path)
+        return run_cleanGroundTruthFileDatasetField(csv_path=csv_path)
 
     @staticmethod
     def filterByLabels(df: pd.DataFrame, labels: List[str]) -> pd.DataFrame:
@@ -216,10 +203,15 @@ class DatasetTools:
         pd.DataFrame
             A filtered DataFrame containing only the specified lesion labels and non-lesion samples.
         """
-        return run_filterByLabels(df = df, labels_to_remove = labels)
+        return run_filterByLabels(df=df, labels_to_remove=labels)
 
     @staticmethod
-    def splitData(filtered_df: pd.DataFrame, val_size: float, test_size: float, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def splitData(
+        filtered_df: pd.DataFrame,
+        val_size: float,
+        test_size: float,
+        random_state: int = 42,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
         Splits the dataset into training, validation, and testing sets based on unique video samples.
 
@@ -239,10 +231,12 @@ class DatasetTools:
         Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
             DataFrames for training, validation, and testing sets, respectively.
         """
-        return run_splitData(filtered_df = filtered_df, 
-                             val_size = val_size, 
-                             test_size = test_size, 
-                             random_state = random_state)
+        return run_splitData(
+            filtered_df=filtered_df,
+            val_size=val_size,
+            test_size=test_size,
+            random_state=random_state,
+        )
 
     @staticmethod
     def saveSplit(df: pd.DataFrame, output_path: str, split_name: str) -> None:
@@ -262,31 +256,34 @@ class DatasetTools:
         -------------
         None
         """
-        return run_saveSplit(df = df, 
-                             output_path = output_path, 
-                             split_name = split_name)
-    
+        return run_saveSplit(df=df, output_path=output_path, split_name=split_name)
+
     # undersampling.py tools
 
     @staticmethod
     def loadDataSplits(holdout_path: str) -> pd.DataFrame:
         """
         Loads the train, val, and test splits from CSV files and concatenates them into a single DataFrame.
-        
+
         Args
         -------------
         holdout_path : str
             Path to the folder containing train.csv, val.csv, and test.csv files.
-        
+
         Returns
         -------------
         pd.DataFrame
             A concatenated DataFrame containing data from all three splits.
         """
-        return run_loadDataSplits(holdout_path = holdout_path)
+        return run_loadDataSplits(holdout_path=holdout_path)
 
     @staticmethod
-    def undersampling(holdout_path: str, class_dict: Dict[str, list], deleted_images_path: str, freezed_classes: List[str]) -> pd.DataFrame:
+    def undersampling(
+        holdout_path: str,
+        class_dict: Dict[str, list],
+        deleted_images_path: str,
+        freezed_classes: List[str],
+    ) -> pd.DataFrame:
         """
         Applies undersampling to the train, val, and test splits based on the specified class distribution.
 
@@ -302,53 +299,67 @@ class DatasetTools:
         pd.DataFrame
             Concatenated DataFrame of all splits after undersampling.
         """
-        return run_undersampling(holdout_path = holdout_path, 
-                                 class_dict = class_dict,
-                                 deleted_images_path=deleted_images_path,
-                                 freezed_classes=freezed_classes)
-    
+        return run_undersampling(
+            holdout_path=holdout_path,
+            class_dict=class_dict,
+            deleted_images_path=deleted_images_path,
+            freezed_classes=freezed_classes,
+        )
+
     # augmentation.py tools
 
     @staticmethod
-    def loadDataAugmentation(train_path: str, val_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def loadDataAugmentation(
+        train_path: str, val_path: str
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Loads training and validation datasets from CSV files.
-        
+
         Args
         -------------
         train_path : str
             Path to the training dataset CSV.
         val_path : str
             Path to the validation dataset CSV.
-        
+
         Returns
         -------------
         Tuple[pd.DataFrame, pd.DataFrame]
             DataFrames for the training and validation datasets.
         """
-        return run_loadDataAugmentation(train_path = train_path, 
-                                        val_path = val_path)
-
-    def return_augmentor(base_output_path: str, 
-                         train_augmentation_counts_csv: str,
-                         val_augmentation_counts_csv: str,
-                         augmented_nolesion_images_train: int,
-                         augmented_nolesion_images_val: int,
-                         seed: int = 42
-                         ) -> Augmentor:
-        return Augmentor(base_output_path=base_output_path,
-                         train_augmentation_counts_csv=train_augmentation_counts_csv,
-                         val_augmentation_counts_csv=val_augmentation_counts_csv,
-                         augmented_nolesion_images_train=augmented_nolesion_images_train,
-                         augmented_nolesion_images_val=augmented_nolesion_images_val,
-                         seed=seed)
+        return run_loadDataAugmentation(train_path=train_path, val_path=val_path)
 
     @staticmethod
-    def augmentData(train_df: pd.DataFrame, val_df: pd.DataFrame, base_output_path: str,
-                    augmented_lesion_images: int, augmented_nolesion_images: int, ignore_top_n: int = 0, seed:int = 42) -> None:
+    def return_augmentor(
+        base_output_path: str,
+        train_augmentation_counts_csv: str,
+        val_augmentation_counts_csv: str,
+        augmented_nolesion_images_train: int,
+        augmented_nolesion_images_val: int,
+        seed: int = 42,
+    ) -> Augmentor:
+        return Augmentor(
+            base_output_path=base_output_path,
+            train_augmentation_counts_csv=train_augmentation_counts_csv,
+            val_augmentation_counts_csv=val_augmentation_counts_csv,
+            augmented_nolesion_images_train=augmented_nolesion_images_train,
+            augmented_nolesion_images_val=augmented_nolesion_images_val,
+            seed=seed,
+        )
+
+    @staticmethod
+    def augmentData(
+        train_df: pd.DataFrame,
+        val_df: pd.DataFrame,
+        base_output_path: str,
+        augmented_lesion_images: int,
+        augmented_nolesion_images: int,
+        ignore_top_n: int = 0,
+        seed: int = 42,
+    ) -> None:
         """
         Augments training and validation datasets by applying various augmentations to both lesion and no-lesion images.
-        
+
         Args
         -------------
         train_df : pd.DataFrame
@@ -363,22 +374,26 @@ class DatasetTools:
             Number of augmented no-lesion images to generate.
         ignore_top_n : int, optional
             Number of most common lesion classes to ignore for augmentation.
-            
+
         Returns
         -------------
         None
         """
-        return run_augmentData(train_df = train_df,
-                               val_df = val_df,
-                               base_output_path = base_output_path,
-                               augmented_lesion_images = augmented_lesion_images,
-                               augmented_nolesion_images = augmented_nolesion_images,
-                               ignore_top_n = ignore_top_n,
-                               seed = seed)
+        return run_augmentData(
+            train_df=train_df,
+            val_df=val_df,
+            base_output_path=base_output_path,
+            augmented_lesion_images=augmented_lesion_images,
+            augmented_nolesion_images=augmented_nolesion_images,
+            ignore_top_n=ignore_top_n,
+            seed=seed,
+        )
 
     # formatting.py tools
-
-    def generateYOLODataset(train_csv: str, val_csv: str, test_csv: str, dataset_dir: str) -> None:
+    @staticmethod
+    def generateYOLODataset(
+        train_csv: str, val_csv: str, test_csv: str, dataset_dir: str
+    ) -> None:
         """
         Generate the YOLO dataset by copying files to the appropriate directories.
 
@@ -397,13 +412,20 @@ class DatasetTools:
         -------------
         None
         """
-        return run_generateDataset(train_csv = train_csv,
-                                   val_csv = val_csv,
-                                   test_csv = test_csv,
-                                   dataset_dir = dataset_dir)
-    
-    # utils.py
-    def compute_augmentation_counts(csv_path: str, labels_to_exclude: list, total_images_to_augment: int, output_csv_path: str) -> None:
+        return run_generateDataset(
+            train_csv=train_csv,
+            val_csv=val_csv,
+            test_csv=test_csv,
+            dataset_dir=dataset_dir,
+        )
+
+    @staticmethod
+    def compute_augmentation_counts(
+        csv_path: str,
+        labels_to_exclude: list,
+        total_images_to_augment: int,
+        output_csv_path: str,
+    ) -> None:
         """
         Computes the number of augmented images needed per label to balance the dataset.
 
@@ -422,7 +444,9 @@ class DatasetTools:
         --------
         None
         """
-        return run_compute_augmentation_counts(csv_path=csv_path,
-                                               labels_to_exclude=labels_to_exclude,
-                                               total_images_to_augment=total_images_to_augment,
-                                               output_csv_path=output_csv_path) 
+        return run_compute_augmentation_counts(
+            csv_path=csv_path,
+            labels_to_exclude=labels_to_exclude,
+            total_images_to_augment=total_images_to_augment,
+            output_csv_path=output_csv_path,
+        )

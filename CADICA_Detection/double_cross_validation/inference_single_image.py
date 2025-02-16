@@ -22,7 +22,8 @@ import os
 import logging
 import pandas as pd
 import matplotlib
-matplotlib.use('Agg')  # Non-GUI backend for Matplotlib
+
+matplotlib.use("Agg")  # Non-GUI backend for Matplotlib
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np
@@ -38,59 +39,60 @@ except ImportError as e:
 # Logging Setup
 # ---------------------------------------------------------------------
 logging.basicConfig(
-    filename='single_image_inference.log',
+    filename="single_image_inference.log",
     level=logging.INFO,
-    format='%(asctime)s:%(levelname)s:%(message)s'
+    format="%(asctime)s:%(levelname)s:%(message)s",
 )
 
 # ---------------------------------------------------------------------
 # YOLO Inference Config
 # ---------------------------------------------------------------------
 INFERENCE_PARAMS: Dict[str, Any] = {
-    'conf': 0.25,
-    'iou': 0.5,
-    'imgsz': 512,
-    'half': False,
-    'device': "cuda:0",
-    'max_det': 300,
-    'vid_stride': 1,
-    'stream_buffer': False,
-    'visualize': False,
-    'augment': False,
-    'agnostic_nms': False,
-    'classes': None,
-    'retina_masks': False,
-    'embed': None,
-    'project': None,
-    'name': None,
-    'show': False,
-    'save': False,
-    'save_frames': False,
-    'save_txt': False,
-    'save_conf': False,
-    'save_crop': False,
-    'show_labels': True,
-    'show_conf': True,
-    'show_boxes': True,
-    'line_width': None,
+    "conf": 0.25,
+    "iou": 0.5,
+    "imgsz": 512,
+    "half": False,
+    "device": "cuda:0",
+    "max_det": 300,
+    "vid_stride": 1,
+    "stream_buffer": False,
+    "visualize": False,
+    "augment": False,
+    "agnostic_nms": False,
+    "classes": None,
+    "retina_masks": False,
+    "embed": None,
+    "project": None,
+    "name": None,
+    "show": False,
+    "save": False,
+    "save_frames": False,
+    "save_txt": False,
+    "save_conf": False,
+    "save_crop": False,
+    "show_labels": True,
+    "show_conf": True,
+    "show_boxes": True,
+    "line_width": None,
 }
 
 VISUALIZATION_PARAMS: Dict[str, Any] = {
-    'conf': True,
-    'line_width': 1,
-    'font_size': 12,
-    'font': 'Helvetica.ttf',
-    'pil': False,
-    'img': None,
-    'im_gpu': None,
-    'kpt_radius': 3,
-    'kpt_line': True,
-    'labels': True,
-    'boxes': True,
-    'probs': False,
-    'show': False,
-    'color_mode': 'class',
+    "conf": True,
+    "line_width": 1,
+    "font_size": 12,
+    "font": "Helvetica.ttf",
+    "pil": False,
+    "img": None,
+    "im_gpu": None,
+    "kpt_radius": 3,
+    "kpt_line": True,
+    "labels": True,
+    "boxes": True,
+    "probs": False,
+    "show": False,
+    "color_mode": "class",
 }
+
 
 # ---------------------------------------------------------------------
 # TypedDict for fold→model weights
@@ -100,6 +102,7 @@ class WeightsPathMap(TypedDict):
     GP_BHO: str
     Simulated_Annealing: str
     Baseline: str
+
 
 class FoldWeightsMap(TypedDict):
     fold_1: WeightsPathMap
@@ -111,19 +114,15 @@ class FoldWeightsMap(TypedDict):
 # Helper Functions
 # ---------------------------------------------------------------------
 def run_inference_on_image(
-    model_path: str,
-    image_path: str,
-    inference_params: Dict[str, Any]
+    model_path: str, image_path: str, inference_params: Dict[str, Any]
 ) -> Any:
     """Runs YOLO inference on a single image and returns the result."""
     model = YOLO(model_path)
     results = model.predict(source=image_path, **inference_params)
     return results
 
-def draw_ground_truth_bboxes(
-    image_path: str,
-    groundtruth_path: str
-) -> np.ndarray:
+
+def draw_ground_truth_bboxes(image_path: str, groundtruth_path: str) -> np.ndarray:
     """
     Draw YOLO-format bounding boxes onto an image (BGR).
     If groundtruth_path == 'nolesion' or does not exist, return the original image.
@@ -143,7 +142,7 @@ def draw_ground_truth_bboxes(
 
     img_h, img_w = image_bgr.shape[:2]
 
-    with open(groundtruth_path, 'r') as f:
+    with open(groundtruth_path, "r") as f:
         lines = f.readlines()
 
     for line in lines:
@@ -162,10 +161,10 @@ def draw_ground_truth_bboxes(
             logging.warning(f"Skipping invalid GT line: {line.strip()}")
             continue
 
-        x1 = int(x_c - w/2)
-        y1 = int(y_c - h/2)
-        x2 = int(x_c + w/2)
-        y2 = int(y_c + h/2)
+        x1 = int(x_c - w / 2)
+        y1 = int(y_c - h / 2)
+        x2 = int(x_c + w / 2)
+        y2 = int(y_c + h / 2)
 
         # If class=0 => label "lesion", else numeric
         label_text = "lesion" if cls_id == 0 else str(cls_id)
@@ -175,7 +174,7 @@ def draw_ground_truth_bboxes(
         cv2.rectangle(image_bgr, (x1, y1), (x2, y2), box_color, thickness=thickness)
 
         # Label background
-        label_bg_width = 10 + 9*len(label_text)
+        label_bg_width = 10 + 9 * len(label_text)
         label_bg_height = 20
         label_rect_top = max(y1 - label_bg_height, 0)
         label_rect_bottom = y1 if (y1 - label_bg_height) > 0 else (y1 + label_bg_height)
@@ -184,35 +183,40 @@ def draw_ground_truth_bboxes(
             image_bgr,
             (x1, label_rect_top),
             (x1 + label_bg_width, label_rect_bottom),
-            box_color, thickness=-1
+            box_color,
+            thickness=-1,
         )
 
         cv2.putText(
-            image_bgr, label_text,
+            image_bgr,
+            label_text,
             (x1 + 5, label_rect_bottom - 5),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255),
-            thickness=1, lineType=cv2.LINE_AA
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            thickness=1,
+            lineType=cv2.LINE_AA,
         )
 
     return image_bgr
 
-def create_1row_subplots(
-    images_bgr: List[np.ndarray],
-    titles: List[str]
-) -> Any:
+
+def create_1row_subplots(images_bgr: List[np.ndarray], titles: List[str]) -> Any:
     """Given a list of BGR images and titles, produce a 1-row Matplotlib figure (RGB display)."""
     n = len(images_bgr)
-    fig, axes = plt.subplots(1, n, figsize=(6*n, 6))
+    fig, axes = plt.subplots(1, n, figsize=(6 * n, 6))
 
     if n == 1:
         axes = [axes]
 
     for ax, img_bgr, title in zip(axes, images_bgr, titles):
         # Convert to RGB for matplotlib
-        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB) if img_bgr is not None else None
+        img_rgb = (
+            cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB) if img_bgr is not None else None
+        )
         ax.imshow(img_rgb)
         ax.set_title(title, fontsize=14)
-        ax.axis('off')
+        ax.axis("off")
 
     fig.tight_layout()
     return fig
@@ -222,8 +226,7 @@ def create_1row_subplots(
 # Resources-building (Optional, If You Already Have a Folding Setup)
 # ---------------------------------------------------------------------
 def build_resources_dict(
-    root_csv_folder: str,
-    root_weights_folder: str
+    root_csv_folder: str, root_weights_folder: str
 ) -> Tuple[Dict[str, str], FoldWeightsMap]:
     """
     Creates a dictionary: { "fold_1": <csv_path>, ... }
@@ -285,7 +288,7 @@ def run_single_image_inference(
     frame_id: str,
     fold_csv_map: Dict[str, str],
     weights_map: FoldWeightsMap,
-    output_folder: str
+    output_folder: str,
 ):
     """
     1. Load fold_name's test.csv.
@@ -343,7 +346,9 @@ def run_single_image_inference(
     for model_key, weight_path in model_paths.items():
         if not weight_path or not os.path.isfile(weight_path):
             # Not all folds have all model weights, or you might have empty placeholders
-            logging.warning(f"Skipping {model_key} in {fold_name} - weight file missing.")
+            logging.warning(
+                f"Skipping {model_key} in {fold_name} - weight file missing."
+            )
             continue
 
         results = run_inference_on_image(weight_path, image_path, INFERENCE_PARAMS)
@@ -360,7 +365,9 @@ def run_single_image_inference(
 
     if len(subplot_images) == 1:
         # Means we got only the GT image, no model results
-        logging.warning("No model predictions to display. Possibly all weights missing?")
+        logging.warning(
+            "No model predictions to display. Possibly all weights missing?"
+        )
         return
 
     # 5. Create subplot and save
@@ -371,7 +378,7 @@ def run_single_image_inference(
     os.makedirs(output_folder, exist_ok=True)
     out_path = os.path.join(output_folder, out_filename)
 
-    fig.savefig(out_path, dpi=300, format='pdf', bbox_inches='tight')
+    fig.savefig(out_path, dpi=300, format="pdf", bbox_inches="tight")
     plt.close(fig)
 
     logging.info(f"Saved single-image inference subplot to {out_path}")
@@ -389,7 +396,9 @@ def main():
     """
     # Adjust these as needed:
     root_csv_folder = "/media/hddb/mario/data/double_cv_splits"
-    root_weights_folder = "/home/mariopascual/Projects/CADICA/CROSS_VALIDATION/runs/detect"
+    root_weights_folder = (
+        "/home/mariopascual/Projects/CADICA/CROSS_VALIDATION/runs/detect"
+    )
     output_folder = "/home/mariopascual/Projects/CADICA/CROSS_VALIDATION/inference/single_image_inference"
 
     # We'll demonstrate picking fold_1, plus p13, v5, 00026
@@ -399,7 +408,9 @@ def main():
     frame_id = "00026"  # from your example p13_v5_00026
 
     # 1. Build dictionary resources
-    fold_csv_map, weights_map = build_resources_dict(root_csv_folder, root_weights_folder)
+    fold_csv_map, weights_map = build_resources_dict(
+        root_csv_folder, root_weights_folder
+    )
 
     # 2. Perform single image inference
     run_single_image_inference(
@@ -409,7 +420,7 @@ def main():
         frame_id=frame_id,
         fold_csv_map=fold_csv_map,
         weights_map=weights_map,
-        output_folder=output_folder
+        output_folder=output_folder,
     )
 
 

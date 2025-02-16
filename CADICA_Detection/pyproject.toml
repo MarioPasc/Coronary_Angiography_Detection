@@ -30,6 +30,7 @@ dependencies = [
   "natsort",
   "Scienceplots",
   "cmaes",
+  "pandas",
 ]
 description = ""
 name = "CADICA_Detection"
