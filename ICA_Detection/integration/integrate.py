@@ -63,7 +63,11 @@ def integrate_datasets(datasets: List[str], root_dirs: Dict[str, str], arcade_ta
     return {"Standard_dataset": combined_entries}
 
 if __name__ == "__main__":
-    # Example usage of the integration function.
+    # You can download the datasets manually from:
+    # - KEMEROV: https://data.mendeley.com/datasets/ydrm75xywg/2
+    # - ARCADE: https://zenodo.org/records/10390295 
+    # - CADICA: https://data.mendeley.com/datasets/p9bpx9ctcv/2 
+    
     # Define the list of datasets to integrate.
     datasets_to_process = ["CADICA", "ARCADE", "KEMEROVO"]
     
