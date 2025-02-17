@@ -1,6 +1,5 @@
 # ica_yolo_detection/integration/integrate.py
 
-import os
 import json
 from typing import List, Dict, Any
 
@@ -19,8 +18,8 @@ def integrate_datasets(datasets: List[str], root_dirs: Dict[str, str], arcade_ta
         root_dirs (Dict[str, str]): Mapping from dataset name to its root directory.
             For example:
                 {
-                    "CADICA": "/home/mariopasc/Python/Datasets/CADICA/CADICA",
-                    "ARCADE": "/home/mariopasc/Python/Datasets/arcade",  # ARCADE processing appends "ARCADE" internally.
+                    "CADICA": "/home/mario/Python/Datasets",
+                    "ARCADE": "/home/mario/Python/Datasets", 
                     "KEMEROVO": "/home/mario/Python/Datasets"
                 }
         arcade_task (str, optional): For ARCADE, which task to process ("stenosis", "syntax", or "both"). Defaults to "stenosis".
