@@ -102,26 +102,25 @@ def parse_bounding_boxes(annotation_file_path: str) -> List[Dict[str, Any]]:
 
 
 def process_video(
-    video_dir: str, patient_id: str, unique_id_start: int, lesion_flag: bool
-) -> Tuple[Dict[str, Any], int]:
+    video_dir: str, patient_id: str, lesion_flag: bool
+) -> Dict[str, Any]:
     """
     Process a single video directory for a given patient.
 
     It reads the selected frames file, locates the corresponding image files in the 'input'
     folder, and (if available and lesion_flag is True) the annotation files in the 'groundtruth' folder.
-    Each entry is assigned a new unique id using the format "cadica_{number}".
-
+    The unique id for each image is constructed using the dataset name, patient, video, and frame:
+        "cadica_{patient}_{video}_{frame}"
     The function also converts the CADICA pixel bounding box coordinates (x, y, w, h) into YOLO
     normalized coordinates (x_center, y_center, width, height) using the image's resolution.
 
     Args:
         video_dir (str): Path to the video directory (e.g., ".../p11/v10").
         patient_id (str): The patient folder name (e.g., "p11").
-        unique_id_start (int): The starting integer for unique id assignment.
         lesion_flag (bool): True if this video has lesion annotations; False if it's a control video.
 
     Returns:
-        Tuple[Dict[str, Any], int]: A tuple where the first element is a dict of JSON entries and the second is the updated unique_id counter.
+        Dict[str, Any]: A dictionary mapping unique ids to JSON entries for this video.
     """
     entries: Dict[str, Any] = {}
     video_id: str = os.path.basename(video_dir)
@@ -133,21 +132,27 @@ def process_video(
     selected_frames: List[str] = read_selected_frames(selected_frames_file)
     if not selected_frames:
         print(f"No selected frames found in {selected_frames_file}")
-        return entries, unique_id_start
+        return entries
 
     input_dir: str = os.path.join(video_dir, "input")
     groundtruth_dir: str = os.path.join(video_dir, "groundtruth")
     has_groundtruth: bool = os.path.isdir(groundtruth_dir)
 
     for frame in selected_frames:
-        # The selected frame already contains the full identifier (e.g., "p1_v1_00026")
-        image_filename: str = f"{frame}.png"
+        # Construct the full image filename.
+        # If the selected frame does not already include patient and video info,
+        # then combine them. Otherwise, assume it's in the format "p{patient}_v{video}_{frame}".
+        if frame.startswith(patient_id + "_" + video_id + "_"):
+            full_frame: str = frame
+        else:
+            full_frame = f"{patient_id}_{video_id}_{frame}"
+        image_filename: str = f"{full_frame}.png"
         image_path: str = os.path.join(input_dir, image_filename)
         if not os.path.exists(image_path):
             print(f"Image file not found: {image_path}")
             continue
 
-        # Open image to get its resolution
+        # Open image to get its resolution.
         try:
             with Image.open(image_path) as img:
                 img_width, img_height = img.size
@@ -155,13 +160,13 @@ def process_video(
             print(f"Error opening image {image_path}: {e}")
             continue
 
-        unique_id: str = f"cadica_{unique_id_start}"
-        unique_id_start += 1
+        # Construct unique id using dataset, patient, video and frame.
+        unique_id: str = f"cadica_{full_frame}"
 
         # Parse bounding boxes (in pixel coordinates) if lesion annotations are expected.
         bboxes: List[Dict[str, Any]] = []
         if lesion_flag and has_groundtruth:
-            annotation_filename: str = f"{frame}.txt"
+            annotation_filename: str = f"{full_frame}.txt"
             annotation_path: str = os.path.join(groundtruth_dir, annotation_filename)
             bboxes = parse_bounding_boxes(annotation_path)
 
@@ -208,8 +213,8 @@ def process_video(
             "annotations": annotations,
         }
         entries[unique_id] = entry
-
-    return entries, unique_id_start
+    
+    return entries
 
 
 def process_cadica_dataset(root_dir: str) -> Dict[str, Any]:
@@ -235,8 +240,8 @@ def process_cadica_dataset(root_dir: str) -> Dict[str, Any]:
         Dict[str, Any]: A dictionary with the standardized JSON structure:
             {
               "Standard_dataset": {
-                  "cadica_1": { ... },
-                  "cadica_2": { ... },
+                  "cadica_p11_v10_00026": { ... },
+                  "cadica_p11_v10_00027": { ... },
                   ...
               }
             }
@@ -246,8 +251,6 @@ def process_cadica_dataset(root_dir: str) -> Dict[str, Any]:
     if not os.path.isdir(selected_videos_dir):
         print(f"Selected videos directory not found in {root_dir}")
         return {"Standard_dataset": standard_dataset}
-
-    unique_id_counter: int = 1
 
     # Iterate over patient directories.
     for patient in os.listdir(selected_videos_dir):
@@ -293,9 +296,7 @@ def process_cadica_dataset(root_dir: str) -> Dict[str, Any]:
                 )
                 continue
 
-            entries, unique_id_counter = process_video(
-                video_dir, patient, unique_id_counter, lesion_flag
-            )
+            entries = process_video(video_dir, patient, lesion_flag)
             standard_dataset.update(entries)
 
     return {"Standard_dataset": standard_dataset}
@@ -307,14 +308,12 @@ if __name__ == "__main__":
     download_url: str = (
         "https://data.mendeley.com/public-files/datasets/p9bpx9ctcv/files/3d00fcc4-e555-47e8-bf7d-fa39aa4bf56e/file_downloaded"
     )
-    extract_folder: str = (
-        "/home/mariopasc/Python/Datasets"  # Adjusted folder path as required
-    )
+    extract_folder: str = "/home/mario/Python/Datasets"  # Adjusted folder path as required
     # download_and_extract_cadica(download_url, extract_folder)
 
     # 2. Process the dataset.
     # Assuming the extracted structure is: extract_folder/CADICA/CADICA/
-    dataset_root: str = os.path.join(extract_folder, "CADICA", "CADICA")
+    dataset_root: str = os.path.join(extract_folder, "CADICA")
     json_data: Dict[str, Any] = process_cadica_dataset(dataset_root)
 
     # 3. Save the standardized JSON to a file.
