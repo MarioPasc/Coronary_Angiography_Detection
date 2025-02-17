@@ -3,7 +3,33 @@
 import os
 import json
 from typing import List, Dict, Tuple, Any
+import requests
+import zipfile
 
+def download_and_extract_arcade(download_url: str, extract_to: str) -> None:
+    """
+    Download the arcade dataset from the provided URL and extract it to the specified folder.
+
+    Args:
+        download_url (str): URL to download the arcade zip file.
+        extract_to (str): Directory where the dataset should be extracted.
+    """
+    local_zip: str = os.path.join(extract_to, "arcade_dataset.zip")
+    print(f"Downloading arcade dataset from {download_url} ...")
+    response = requests.get(download_url, stream=True)
+    response.raise_for_status()  # Catch HTTP errors
+    with open(local_zip, "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+    print(f"Downloaded dataset to {local_zip}")
+
+    print(f"Extracting {local_zip} ...")
+    with zipfile.ZipFile(local_zip, "r") as zip_ref:
+        zip_ref.extractall(extract_to)
+    print(f"Extracted dataset to {extract_to}")
+    os.rename(src=os.path.join(extract_to, "arcade"), dst=os.path.join(extract_to, "ARCADE"))
+    # Optionally, remove the zip file after extraction
+    os.remove(local_zip)
 
 def convert_bbox_yolo(
     x: float, y: float, w: float, h: float, img_width: float, img_height: float
@@ -167,6 +193,7 @@ def process_arcade_dataset(root_dir: str) -> Dict[str, Any]:
              }
            }
     """
+    root_dir: str = os.path.join(extract_folder, "ARCADE")
     standard_dataset: Dict[str, Any] = {}
     unique_id_counter: int = 1
     # Process both modalities.
@@ -192,10 +219,18 @@ def process_arcade_dataset(root_dir: str) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    # Example usage:
+    # 1. Download and extract the dataset.
+    download_url: str = (
+       "https://zenodo.org/records/10390295/files/arcade.zip?download=1"
+    )
+    extract_folder: str = (
+        "/home/mariopasc/Python/Datasets"  # Adjusted folder path as required
+    )
+    # download_and_extract_arcade(download_url, extract_folder)
+
+    # 2. Process the dataset.    
     # Set the root directory for the ARCADE dataset.
-    root_dir: str = "/home/mariopasc/Python/Datasets/arcade"
-    json_data: Dict[str, Any] = process_arcade_dataset(root_dir)
+    json_data: Dict[str, Any] = process_arcade_dataset(root_dir=extract_folder)
     output_json_file: str = "./arcade_standardized.json"
     with open(output_json_file, "w") as f:
         json.dump(json_data, f, indent=4)
