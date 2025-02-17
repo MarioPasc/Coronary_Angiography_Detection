@@ -3,6 +3,7 @@
 
 This module is designed to standardize, process, and integrate multiple coronary artery disease (CAD) image datasets into one unified JSON file. The goal is to harmonize the annotations and image metadata from diverse sources—each with its own structure—into a common format that can be easily consumed for training detection models (e.g., using YOLO) or further analysis.
 
+---
 ## Overview
 
 The integration module processes the following datasets:
