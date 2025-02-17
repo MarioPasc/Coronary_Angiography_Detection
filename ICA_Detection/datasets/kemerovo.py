@@ -147,15 +147,18 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
       - Read the XML file to obtain image filename, resolution, and object annotations.
       - Convert each bounding box from [xmin, ymin, xmax, ymax] (pixel format) into YOLO normalized coordinates.
       - Build an "annotations" dictionary with a "name" (ending with ".txt") and keys "bbox1", "bbox2", ...
-      - Set the "lesion" flag to True if there is at least one bounding box, False otherwise.
-      - Create an entry with new standardized ID "kemerovo_{number}".
+      - Set the "lesion" flag to True (as annotations are expected for each image).
+      - Create an entry with a new standardized ID using the image filename. The filename follows the structure:
+            14_{patient}_{video}_{frame}
+        The unique id is then constructed as:
+            kemerovo_p{patient}_v{video}_{frame.zfill(5)}
     
     Returns:
         Dict[str, Any]: A dictionary with the standardized JSON structure:
            {
              "Standard_dataset": {
-                 "kemerovo_1": { ... },
-                 "kemerovo_2": { ... },
+                 "kemerovo_p002_v5_00016": { ... },
+                 "kemerovo_pXXX_vYYY_ZZZZZ": { ... },
                  ...
              }
            }
@@ -166,8 +169,7 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
         print(f"Dataset folder not found: {dataset_dir}")
         return {"Standard_dataset": standard_dataset}
     
-    unique_id_counter: int = 1
-    # Iterate over files in the dataset folder; process each XML file.
+    # Iterate over XML files in the dataset folder.
     for file in os.listdir(dataset_dir):
         if file.lower().endswith(".xml"):
             xml_path: str = os.path.join(dataset_dir, file)
@@ -176,12 +178,22 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
                 continue
 
             # Determine corresponding image file (assume same base name, with .bmp extension)
-            base_name: str = os.path.splitext(file)[0]
+            base_name: str = os.path.splitext(file)[0]  # e.g., "14_002_5_0016"
             image_filename: str = f"{base_name}.bmp"
             image_path: str = os.path.join(dataset_dir, image_filename)
             if not os.path.exists(image_path):
                 print(f"Image file not found for {xml_path}: {image_path}")
                 continue
+
+            # Extract parts from the filename (expected: 14_{patient}_{video}_{frame})
+            parts = base_name.split("_")
+            if len(parts) < 4:
+                print(f"Filename {base_name} does not follow expected pattern.")
+                continue
+            patient: str = parts[1]
+            video: str = parts[2]
+            frame: str = parts[3]
+            std_id: str = f"kemerovo_p{patient}_v{video}_{frame.zfill(5)}"
 
             # Convert each bounding box to YOLO format.
             transformed_bboxes: List[Dict[str, Any]] = []
@@ -197,13 +209,12 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
                 conv_bbox["label"] = bbox["label"]
                 transformed_bboxes.append(conv_bbox)
             # Build the annotations dictionary.
-            std_id: str = f"kemerovo_{unique_id_counter}"
             annotations_dict: Dict[str, Any] = {"name": f"{std_id}.txt"}
             for idx, t_bbox in enumerate(transformed_bboxes, start=1):
                 annotations_dict[f"bbox{idx}"] = t_bbox
 
-            # Lesion flag is True if at least one bounding box is present.
-            lesion_flag: bool = True 
+            # For KEMEROVO, we assume a lesion is always present if an XML exists.
+            lesion_flag: bool = True
 
             entry: Dict[str, Any] = {
                 "id": std_id,
@@ -219,22 +230,19 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
                 "annotations": annotations_dict
             }
             standard_dataset[std_id] = entry
-            unique_id_counter += 1
 
     return {"Standard_dataset": standard_dataset}
 
 if __name__ == "__main__":
-    # 1. Download and extract the dataset.
+    # Example usage:
+    # 1. Download, extract, and clean up the dataset.
     download_url: str = (
        "https://data.mendeley.com/public-files/datasets/ydrm75xywg/files/61f788d6-65ce-4265-a23a-5ba16931d18b/file_downloaded"
     )
-    extract_folder: str = (
-        "/home/mario/Python/Datasets"  # Adjusted folder path as required
-    )
+    extract_folder: str = "/home/mario/Python/Datasets"  # Adjust as required.
     # download_and_extract_kemerovo(download_url, extract_folder)
 
-    # 2. Process the dataset.    
-    # Set the root directory for the ARCADE dataset.
+    # 2. Process the dataset.
     json_data: Dict[str, Any] = process_kemerovo_dataset(root_dir=extract_folder)
     output_json_file: str = "./kemerovo_standardized.json"
     with open(output_json_file, "w") as f:
