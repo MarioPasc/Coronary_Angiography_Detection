@@ -1,6 +1,4 @@
-[submodule "CADICA_Detection/external/ultralytics"]
-	path = CADICA_Detection/external/ultralytics
-	url = https://github.com/MarioPasc/ultralytics
 [submodule "ICA_Detection/external/ultralytics"]
 	path = ICA_Detection/external/ultralytics
 	url = https://github.com/MarioPasc/ultralytics
+	branch = main
