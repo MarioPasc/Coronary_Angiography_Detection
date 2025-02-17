@@ -39,7 +39,7 @@ def download_and_extract_arcade(download_url: str, extract_to: str) -> None:
         os.rename(extracted_folder, arcade_folder)
         print(f"Renamed folder to {arcade_folder}")
     else:
-        print(f"Expected folder 'Stenosis detection' not found in {extract_to}")
+        print(f"Expected folder 'arcade' not found in {extract_to}")
 
 def convert_bbox_yolo(x: float, y: float, w: float, h: float, img_width: float, img_height: float) -> Dict[str, float]:
     """
@@ -65,7 +65,7 @@ def convert_bbox_yolo(x: float, y: float, w: float, h: float, img_width: float, 
         "height": h / img_height
     }
 
-def process_arcade_annotation_file(annot_file: str, images_folder: str, unique_id_start: int) -> Tuple[Dict[str, Any], int]:
+def process_arcade_annotation_file(annot_file: str, images_folder: str, split: str, unique_id_counter: int) -> Tuple[Dict[str, Any], int]:
     """
     Process a single ARCADE annotation JSON file.
     
@@ -75,17 +75,23 @@ def process_arcade_annotation_file(annot_file: str, images_folder: str, unique_i
       - "annotations": list of annotation dictionaries (each with "id", "image_id", "category_id", "bbox", etc.).
     
     For each image, we find its matching annotations (if any), convert each bounding box from pixel XYWH to YOLO normalized format,
-    and create a standardized entry.
+    and create a standardized entry. Here, the original image file name is always a number (e.g., "98.png"). That number is
+    used as the patient, video, and frame. The unique id is built as:
+    
+        arcade_{split}_p{num}_v{num}_{frame}
+    
+    with the frame padded to 5 digits.
     
     Args:
         annot_file (str): Path to the ARCADE annotation JSON file.
         images_folder (str): Path to the folder containing the image files.
-        unique_id_start (int): Starting counter for standardized image IDs.
+        split (str): The current split ("train", "val", or "test").
+        unique_id_counter (int): Starting counter (unused in unique id generation here).
     
     Returns:
         Tuple[Dict[str, Any], int]: A tuple containing:
-           - A dictionary mapping standardized IDs (e.g., "arcade_1") to JSON entries.
-           - The updated unique_id counter.
+           - A dictionary mapping standardized IDs (e.g., "arcade_train_p98_v98_00098") to JSON entries.
+           - The (unchanged) unique_id_counter.
     """
     with open(annot_file, "r") as f:
         data = json.load(f)
@@ -105,40 +111,40 @@ def process_arcade_annotation_file(annot_file: str, images_folder: str, unique_i
     
     output_entries: Dict[str, Any] = {}
     for img in images_list:
-        img_id = img["id"]
-        file_name = img["file_name"]
-        img_width = img["width"]
-        img_height = img["height"]
-        image_path = os.path.join(images_folder, file_name)
+        file_name: str = img["file_name"]  # e.g., "98.png"
+        num: str = os.path.splitext(file_name)[0]  # e.g., "98"
+        # Create unique id as: arcade_{split}_p{num}_v{num}_{frame} with frame padded to 5 digits.
+        unique_id: str = f"arcade/{split}_p{num}_v{num}_{num.zfill(5)}"
+        
+        img_width: float = img["width"]
+        img_height: float = img["height"]
+        image_path: str = os.path.join(images_folder, file_name)
         
         # Get matching annotations (if any).
-        annots: List[Dict[str, Any]] = image_to_annots.get(img_id, [])
+        annots: List[Dict[str, Any]] = image_to_annots.get(img["id"], [])
         
         # Build the annotations dictionary.
-        ann_dict: Dict[str, Any] = {"name": f"arcade_{unique_id_start}.txt"}
-        bbox_count = 1
+        ann_dict: Dict[str, Any] = {"name": f"{unique_id}.txt"}
+        bbox_count: int = 1
         for a in annots:
-            bbox = a.get("bbox", [])  # bbox in [x, y, w, h] format
+            bbox: List[float] = a.get("bbox", [])
             if len(bbox) < 4:
                 continue
-            converted = convert_bbox_yolo(bbox[0], bbox[1], bbox[2], bbox[3], img_width, img_height)
-            # Look up the category name using the category_id.
+            converted: Dict[str, float] = convert_bbox_yolo(bbox[0], bbox[1], bbox[2], bbox[3], img_width, img_height)
             category_id = a.get("category_id")
-            label = cat_mapping.get(category_id, str(category_id))
+            label: str = cat_mapping.get(category_id, str(category_id))
             converted["label"] = label
             ann_dict[f"bbox{bbox_count}"] = converted
             bbox_count += 1
         
-        # If there is at least one bounding box, mark lesion as True.
-        lesion_flag = True if bbox_count > 1 else False
+        lesion_flag: bool = True if bbox_count > 1 else False
         
-        std_id = f"arcade_{unique_id_start}"
-        entry = {
-            "id": std_id,
+        entry: Dict[str, Any] = {
+            "id": unique_id,
             "dataset_origin": "arcade",
             "lesion": lesion_flag,
             "image": {
-                "name": f"{std_id}.png",
+                "name": f"{unique_id}.png",
                 "route": image_path,
                 "original_name": file_name,
                 "height": img_height,
@@ -146,10 +152,8 @@ def process_arcade_annotation_file(annot_file: str, images_folder: str, unique_i
             },
             "annotations": ann_dict
         }
-        output_entries[std_id] = entry
-        unique_id_start += 1
-        
-    return output_entries, unique_id_start
+        output_entries[unique_id] = entry
+    return output_entries, unique_id_counter
 
 def process_arcade_dataset(root_dir: str, task: str = "stenosis") -> Dict[str, Any]:
     """
@@ -184,6 +188,10 @@ def process_arcade_dataset(root_dir: str, task: str = "stenosis") -> Dict[str, A
       - If task == "syntax": process only the "syntax" folder.
       - If task == "both": process both modalities.
     
+    For each image, the unique id is built as:
+        arcade_{split}_p{num}_v{num}_{frame}
+    with frame always 5 digits.
+    
     Args:
         root_dir (str): Path to the ARCADE dataset root directory (e.g., "/home/mariopasc/Python/Datasets/arcade").
         task (str, optional): Which task to process ("stenosis", "syntax", or "both"). Defaults to "stenosis".
@@ -192,8 +200,8 @@ def process_arcade_dataset(root_dir: str, task: str = "stenosis") -> Dict[str, A
         Dict[str, Any]: A dictionary with the standardized JSON structure:
            {
              "Standard_dataset": {
-                 "arcade_1": { ... },
-                 "arcade_2": { ... },
+                 "arcade_train_p98_v98_00098": { ... },
+                 "arcade_val_p123_v123_00123": { ... },
                  ...
              }
            }
@@ -202,7 +210,6 @@ def process_arcade_dataset(root_dir: str, task: str = "stenosis") -> Dict[str, A
     standard_dataset: Dict[str, Any] = {}
     unique_id_counter: int = 1
 
-    # Determine modalities to process based on the task parameter.
     if task == "both":
         modalities: List[str] = ["stenosis", "syntax"]
     elif task in ["stenosis", "syntax"]:
@@ -211,39 +218,34 @@ def process_arcade_dataset(root_dir: str, task: str = "stenosis") -> Dict[str, A
         print("Invalid task provided; defaulting to 'stenosis'.")
         modalities = ["stenosis"]
 
-    # Process the selected modalities and splits.
     for modality in modalities:
-        modality_dir = os.path.join(root_dir, modality)
+        modality_dir: str = os.path.join(root_dir, modality)
         if not os.path.isdir(modality_dir):
             continue
         for split in ["train", "val", "test"]:
-            split_dir = os.path.join(modality_dir, split)
+            split_dir: str = os.path.join(modality_dir, split)
             if not os.path.isdir(split_dir):
                 continue
-            images_folder = os.path.join(split_dir, "images")
-            annotations_folder = os.path.join(split_dir, "annotations")
-            annot_file = os.path.join(annotations_folder, f"{split}.json")
+            images_folder: str = os.path.join(split_dir, "images")
+            annotations_folder: str = os.path.join(split_dir, "annotations")
+            annot_file: str = os.path.join(annotations_folder, f"{split}.json")
             if not os.path.exists(annot_file):
                 print(f"Annotation file not found: {annot_file}")
                 continue
-            entries, unique_id_counter = process_arcade_annotation_file(annot_file, images_folder, unique_id_counter)
+            entries, unique_id_counter = process_arcade_annotation_file(annot_file, images_folder, split, unique_id_counter)
             standard_dataset.update(entries)
     return {"Standard_dataset": standard_dataset}
 
 if __name__ == "__main__":
+    # Example usage:
     # 1. Download and extract the dataset.
     download_url: str = (
        "https://data.mendeley.com/public-files/datasets/ydrm75xywg/files/61f788d6-65ce-4265-a23a-5ba16931d18b/file_downloaded"
     )
-    extract_folder: str = (
-        "/home/mario/Python/Datasets"  # Adjusted folder path as required
-    )
-    # download_and_extract_kemerovo(download_url, extract_folder)
+    extract_folder: str = "/home/mario/Python/Datasets"  # Adjusted folder path as required
+    # download_and_extract_arcade(download_url, extract_folder)
 
-    # 2. Process the dataset.  
-    # Set the root directory for the ARCADE dataset.
-    root_dir: str = "/home/mariopasc/Python/Datasets/arcade"
-    # Change the task parameter as needed: "stenosis", "syntax", or "both"
+    # 2. Process the dataset.
     json_data: Dict[str, Any] = process_arcade_dataset(extract_folder, task="stenosis")
     output_json_file: str = "arcade_standardized.json"
     with open(output_json_file, "w") as f:
