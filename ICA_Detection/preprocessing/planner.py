@@ -8,34 +8,37 @@ from typing import Dict, Any
 def create_preprocessing_plan(data: Dict[str, Any], plan_steps: Dict[str, Any]) -> Dict[str, Any]:
     """
     Iterate through the standardized JSON dataset and add preprocessing instructions for each image
-    based on the provided plan steps. The plan_steps dictionary may include:
+    based on the provided plan steps. The plan_steps dictionary may include keys such as:
     
     {
       "resolution_standarization": {"desired_X": int, "desired_Y": int, "method": str},
       "dtype_standarization": {"desired_dtype": str},
-      "format_standarization": {"desired_format": str}
+      "format_standarization": {"desired_format": str},
+      "filtering_smoothing_equalization": {"window_size": int, "sigma": float}
     }
     
     For each image:
-      - If its resolution (width/height) does not match desired_X/desired_Y, add a 
+      - If its resolution (width/height) does not match the desired values, add a 
         "resolution_standarization" tag.
-      - If its data type does not match desired_dtype (determined by reading the image from the route),
+      - If its data type does not match the desired dtype (determined by reading the image from its route),
         add a "dtype_standarization" tag.
-      - If its file format (derived from "original_name") does not match the desired_format,
+      - If its file format (derived from "original_name") does not match the desired format,
         add a "format_standarization" tag.
+      - Finally, unconditionally add the "filtering_smoothing_equalization" tag with the provided parameters.
     
     Args:
         data (Dict[str, Any]): The standardized JSON dataset.
         plan_steps (Dict[str, Any]): The desired preprocessing steps and parameters.
     
     Returns:
-        Dict[str, Any]: The updated dataset with a "preprocessing_plan" field added where necessary.
+        Dict[str, Any]: The updated dataset with a new "preprocessing_plan" field added to each entry where needed.
     """
     dataset = data.get("Standard_dataset", {})
     for uid, entry in dataset.items():
         plan: Dict[str, Any] = entry.get("preprocessing_plan", {})
         img_info = entry.get("image", {})
-        # --- Resolution check ---
+        
+        # Resolution check.
         res_plan = plan_steps.get("resolution_standarization")
         if res_plan:
             desired_X = res_plan.get("desired_X")
@@ -49,7 +52,8 @@ def create_preprocessing_plan(data: Dict[str, Any], plan_steps: Dict[str, Any]) 
                     "desired_Y": desired_Y,
                     "method": method
                 }
-        # --- Dtype check ---
+        
+        # Dtype check.
         dtype_plan = plan_steps.get("dtype_standarization")
         if dtype_plan:
             desired_dtype = dtype_plan.get("desired_dtype")
@@ -67,7 +71,8 @@ def create_preprocessing_plan(data: Dict[str, Any], plan_steps: Dict[str, Any]) 
                     print(f"Warning: Unable to read image at {image_path} for dtype check.")
             else:
                 print(f"Warning: Image path {image_path} does not exist.")
-        # --- Format check ---
+        
+        # Format check.
         format_plan = plan_steps.get("format_standarization")
         if format_plan:
             desired_format = format_plan.get("desired_format").lower()
@@ -79,6 +84,15 @@ def create_preprocessing_plan(data: Dict[str, Any], plan_steps: Dict[str, Any]) 
                     "original_format": original_format,
                     "desired_format": desired_format
                 }
+        
+        # Filtering Smoothing Equalization is applied to all images if specified.
+        fse_plan = plan_steps.get("filtering_smoothing_equalization")
+        if fse_plan:
+            plan["filtering_smoothing_equalization"] = {
+                "window_size": fse_plan.get("window_size"),
+                "sigma": fse_plan.get("sigma")
+            }
+        
         if plan:
             entry["preprocessing_plan"] = plan
     return data
@@ -91,10 +105,12 @@ if __name__ == "__main__":
     with open(input_json, "r") as f:
         data = json.load(f)
     
+    # Define all preprocessing steps in a single plan.
     plan_steps = {
-        "resolution_standarization": {"desired_X": 1000, "desired_Y": 1000, "method": "bilinear"},
+        "resolution_standarization": {"desired_X": 512, "desired_Y": 512, "method": "bilinear"},
         "dtype_standarization": {"desired_dtype": "uint8"},
-        "format_standarization": {"desired_format": "png"}
+        "format_standarization": {"desired_format": "png"},
+        "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0}
     }
     
     planned_data = create_preprocessing_plan(data, plan_steps)
