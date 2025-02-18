@@ -2,7 +2,7 @@
 
 import cv2
 import numpy as np
-import math
+from lowpass import apply_lowpass
 
 def filtering_smoothing_equalization(image: np.ndarray, window_size: int, sigma: float) -> np.ndarray:
     """
@@ -31,17 +31,7 @@ def filtering_smoothing_equalization(image: np.ndarray, window_size: int, sigma:
         np.ndarray: The enhanced image after Gaussian smoothing and histogram equalization.
     """
     # --- Step 1: Gaussian Smoothing ---
-    c = window_size // 2
-    # Create a Gaussian kernel.
-    kernel = np.zeros((window_size, window_size), dtype=np.float32)
-    for i in range(window_size):
-        for j in range(window_size):
-            kernel[i, j] = (1 / (2 * math.pi * sigma**2)) * math.exp(-(((i - c)**2 + (j - c)**2) / (2 * sigma**2)))
-    kernel_sum = np.sum(kernel)
-    if kernel_sum != 0:
-        kernel /= kernel_sum
-
-    smoothed = cv2.filter2D(image, -1, kernel)
+    smoothed = apply_lowpass(image=image, window_size=window_size, sigma=sigma)
     
     # --- Step 2: Histogram Equalization ---
     # Assume image pixel range is 0-255.
