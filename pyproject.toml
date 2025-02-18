@@ -32,6 +32,7 @@ dependencies = [
   "cmaes",
   "pandas",
   "types-requests",
+  "types-PyYAML",
 ]
 description = ""
 name = "ICA_Detection"

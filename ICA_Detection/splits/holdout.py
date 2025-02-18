@@ -188,7 +188,7 @@ def create_holdout_split(
 
 if __name__ == "__main__":
     input_root = "/home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION"
-    splits_dict = {"train": 0.6, "val": 0.2, "test": 0.2}
+    splits_dict = {"train": 0.7, "val": 0.3, "test": 0.0}
     output_root = "/home/mariopasc/Python/Datasets/COMBINED/YOLO_ICA_DETECTION"
     yaml_filename = "yolo_ica_detection.yaml"
 
