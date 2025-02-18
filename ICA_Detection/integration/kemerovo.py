@@ -7,12 +7,14 @@ import zipfile
 import json
 from typing import List, Dict, Tuple, Any, Optional
 import xml.etree.ElementTree as ET
+import cv2
+
 
 def download_and_extract_kemerovo(download_url: str, extract_to: str) -> None:
     """
     Download the KEMEROVO dataset zip file from the provided URL, extract it to the specified folder,
     rename the extracted folder "Stenosis detection" to "KEMEROVO", and remove extraneous files/folders.
-    
+
     Args:
         download_url (str): URL to download the KEMEROVO zip file.
         extract_to (str): Directory where the dataset should be extracted.
@@ -47,11 +49,12 @@ def download_and_extract_kemerovo(download_url: str, extract_to: str) -> None:
     # Remove extraneous files and folders from KEMEROVO directory.
     cleanup_kemerovo_folder(kemerovo_folder)
 
+
 def cleanup_kemerovo_folder(kemerovo_path: str) -> None:
     """
     Remove extraneous files and folders from the KEMEROVO directory.
     Only keep the "dataset" folder; delete any other files or folders.
-    
+
     Args:
         kemerovo_path (str): Path to the KEMEROVO folder.
     """
@@ -65,11 +68,18 @@ def cleanup_kemerovo_folder(kemerovo_path: str) -> None:
                 shutil.rmtree(item_path)
                 print(f"Removed directory: {item_path}")
 
-def convert_bbox_to_yolo(xmin: float, ymin: float, xmax: float, ymax: float,
-                         img_width: float, img_height: float) -> Dict[str, float]:
+
+def convert_bbox_to_yolo(
+    xmin: float,
+    ymin: float,
+    xmax: float,
+    ymax: float,
+    img_width: float,
+    img_height: float,
+) -> Dict[str, float]:
     """
     Convert bounding box from Pascal VOC format (xmin, ymin, xmax, ymax) to YOLO normalized format.
-    
+
     Args:
         xmin (float): x-coordinate of the left side.
         ymin (float): y-coordinate of the top side.
@@ -77,7 +87,7 @@ def convert_bbox_to_yolo(xmin: float, ymin: float, xmax: float, ymax: float,
         ymax (float): y-coordinate of the bottom side.
         img_width (float): width of the image in pixels.
         img_height (float): height of the image in pixels.
-    
+
     Returns:
         Dict[str, float]: A dictionary with keys "x_center", "y_center", "width", "height" (all normalized).
     """
@@ -89,60 +99,59 @@ def convert_bbox_to_yolo(xmin: float, ymin: float, xmax: float, ymax: float,
         "x_center": x_center,
         "y_center": y_center,
         "width": box_width / img_width,
-        "height": box_height / img_height
+        "height": box_height / img_height,
     }
 
-def parse_voc_xml(xml_file: str) -> Tuple[Optional[str], Optional[int], Optional[int], List[Dict[str, Any]]]:
-    """
-    Parse a Pascal VOC XML file to extract image filename, image size, and bounding box annotations.
-    
-    Args:
-        xml_file (str): Path to the XML file.
-    
-    Returns:
-        Tuple containing:
-         - filename (str): The image filename as in the XML.
-         - img_width (int): Width of the image.
-         - img_height (int): Height of the image.
-         - bboxes (List[Dict[str, Any]]): A list of bounding boxes, each a dictionary with keys:
-             "xmin", "ymin", "xmax", "ymax", and "label" (from the <name> tag).
-         If parsing fails, returns (None, None, None, []).
-    """
+
+def parse_voc_xml(
+    xml_file: str, image_path: str
+) -> Tuple[Optional[str], Optional[int], Optional[int], List[Dict[str, Any]]]:
     try:
         tree = ET.parse(xml_file)
         root = tree.getroot()
-        filename: str = root.find("filename").text
+
+        filename = root.find("filename").text
         size_elem = root.find("size")
-        img_width: int = int(size_elem.find("width").text)
-        img_height: int = int(size_elem.find("height").text)
-        bboxes: List[Dict[str, Any]] = []
+        xml_width = int(size_elem.find("width").text)
+        xml_height = int(size_elem.find("height").text)
+
+        actual_img = cv2.imread(image_path)
+        if actual_img is not None:
+            h, w = actual_img.shape[:2]
+            if (xml_width != w) or (xml_height != h):
+                print(f"Warning: mismatch in {xml_file}")
+
+        bboxes = []
         for obj in root.findall("object"):
-            label: str = obj.find("name").text
+            label = obj.find("name").text
             bndbox = obj.find("bndbox")
-            xmin: float = float(bndbox.find("xmin").text)
-            ymin: float = float(bndbox.find("ymin").text)
-            xmax: float = float(bndbox.find("xmax").text)
-            ymax: float = float(bndbox.find("ymax").text)
-            bboxes.append({
-                "xmin": xmin,
-                "ymin": ymin,
-                "xmax": xmax,
-                "ymax": ymax,
-                "label": label
-            })
-        return filename, img_width, img_height, bboxes
+            xmin = float(bndbox.find("xmin").text)
+            ymin = float(bndbox.find("ymin").text)
+            xmax = float(bndbox.find("xmax").text)
+            ymax = float(bndbox.find("ymax").text)
+
+            # In well-formed Pascal VOC, xmin < xmax, ymin < ymax
+            # If there's a chance of corruption, you could sort them or clamp them
+            # e.g. xmin, xmax = sorted((xmin, xmax)) and likewise for y
+
+            bboxes.append(
+                {"xmin": xmin, "ymin": ymin, "xmax": xmax, "ymax": ymax, "label": label}
+            )
+
+        return filename, xml_width, xml_height, bboxes
     except Exception as e:
         print(f"Error parsing XML file {xml_file}: {e}")
         return None, None, None, []
 
+
 def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
     """
     Process the KEMEROVO dataset and generate a standardized JSON structure.
-    
+
     The KEMEROVO dataset is expected to be located at:
         root_dir/KEMEROVO/dataset/
     Each image has a corresponding annotation in Pascal VOC XML format.
-    
+
     For each image:
       - Read the XML file to obtain image filename, resolution, and object annotations.
       - Convert each bounding box from [xmin, ymin, xmax, ymax] (pixel format) into YOLO normalized coordinates.
@@ -152,7 +161,7 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
             14_{patient}_{video}_{frame}
         The unique id is then constructed as:
             kemerovo_p{patient}_v{video}_{frame.zfill(5)}
-    
+
     Returns:
         Dict[str, Any]: A dictionary with the standardized JSON structure:
            {
@@ -168,14 +177,11 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
     if not os.path.isdir(dataset_dir):
         print(f"Dataset folder not found: {dataset_dir}")
         return {"Standard_dataset": standard_dataset}
-    
+
     # Iterate over XML files in the dataset folder.
     for file in os.listdir(dataset_dir):
         if file.lower().endswith(".xml"):
             xml_path: str = os.path.join(dataset_dir, file)
-            filename, img_width, img_height, bboxes = parse_voc_xml(xml_path)
-            if filename is None:
-                continue
 
             # Determine corresponding image file (assume same base name, with .bmp extension)
             base_name: str = os.path.splitext(file)[0]  # e.g., "14_002_5_0016"
@@ -183,6 +189,12 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
             image_path: str = os.path.join(dataset_dir, image_filename)
             if not os.path.exists(image_path):
                 print(f"Image file not found for {xml_path}: {image_path}")
+                continue
+
+            filename, img_width, img_height, bboxes = parse_voc_xml(
+                xml_path, image_path
+            )
+            if filename is None:
                 continue
 
             # Extract parts from the filename (expected: 14_{patient}_{video}_{frame})
@@ -204,7 +216,7 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
                     bbox["xmax"],
                     bbox["ymax"],
                     img_width,
-                    img_height
+                    img_height,
                 )
                 conv_bbox["label"] = bbox["label"]
                 transformed_bboxes.append(conv_bbox)
@@ -225,19 +237,20 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
                     "route": image_path,
                     "original_name": image_filename,
                     "height": img_height,
-                    "width": img_width
+                    "width": img_width,
                 },
-                "annotations": annotations_dict
+                "annotations": annotations_dict,
             }
             standard_dataset[std_id] = entry
 
     return {"Standard_dataset": standard_dataset}
 
+
 if __name__ == "__main__":
     # Example usage:
     # 1. Download, extract, and clean up the dataset.
     download_url: str = (
-       "https://data.mendeley.com/public-files/datasets/ydrm75xywg/files/61f788d6-65ce-4265-a23a-5ba16931d18b/file_downloaded"
+        "https://data.mendeley.com/public-files/datasets/ydrm75xywg/files/61f788d6-65ce-4265-a23a-5ba16931d18b/file_downloaded"
     )
     extract_folder: str = "/home/mario/Python/Datasets"  # Adjust as required.
     # download_and_extract_kemerovo(download_url, extract_folder)
