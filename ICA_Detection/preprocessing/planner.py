@@ -38,21 +38,19 @@ def create_preprocessing_plan(data: Dict[str, Any], plan_steps: Dict[str, Any]) 
         plan: Dict[str, Any] = entry.get("preprocessing_plan", {})
         img_info = entry.get("image", {})
         
-        # Resolution check.
-        res_plan = plan_steps.get("resolution_standarization")
-        if res_plan:
-            desired_X = res_plan.get("desired_X")
-            desired_Y = res_plan.get("desired_Y")
-            method = res_plan.get("method")
-            current_X = img_info.get("width")
-            current_Y = img_info.get("height")
-            if current_X != desired_X or current_Y != desired_Y:
-                plan["resolution_standarization"] = {
-                    "desired_X": desired_X,
-                    "desired_Y": desired_Y,
-                    "method": method
+        # Format check.
+        format_plan = plan_steps.get("format_standarization")
+        if format_plan:
+            desired_format = format_plan.get("desired_format").lower()
+            original_name = img_info.get("original_name", "")
+            _, ext = os.path.splitext(original_name)
+            original_format = ext.lstrip(".").lower()
+            if original_format != desired_format:
+                plan["format_standarization"] = {
+                    "original_format": original_format,
+                    "desired_format": desired_format
                 }
-        
+                
         # Dtype check.
         dtype_plan = plan_steps.get("dtype_standarization")
         if dtype_plan:
@@ -71,18 +69,20 @@ def create_preprocessing_plan(data: Dict[str, Any], plan_steps: Dict[str, Any]) 
                     print(f"Warning: Unable to read image at {image_path} for dtype check.")
             else:
                 print(f"Warning: Image path {image_path} does not exist.")
-        
-        # Format check.
-        format_plan = plan_steps.get("format_standarization")
-        if format_plan:
-            desired_format = format_plan.get("desired_format").lower()
-            original_name = img_info.get("original_name", "")
-            _, ext = os.path.splitext(original_name)
-            original_format = ext.lstrip(".").lower()
-            if original_format != desired_format:
-                plan["format_standarization"] = {
-                    "original_format": original_format,
-                    "desired_format": desired_format
+                
+        # Resolution check.
+        res_plan = plan_steps.get("resolution_standarization")
+        if res_plan:
+            desired_X = res_plan.get("desired_X")
+            desired_Y = res_plan.get("desired_Y")
+            method = res_plan.get("method")
+            current_X = img_info.get("width")
+            current_Y = img_info.get("height")
+            if current_X != desired_X or current_Y != desired_Y:
+                plan["resolution_standarization"] = {
+                    "desired_X": desired_X,
+                    "desired_Y": desired_Y,
+                    "method": method
                 }
         
         # Filtering Smoothing Equalization is applied to all images if specified.

@@ -114,7 +114,7 @@ def process_arcade_annotation_file(annot_file: str, images_folder: str, split: s
         file_name: str = img["file_name"]  # e.g., "98.png"
         num: str = os.path.splitext(file_name)[0]  # e.g., "98"
         # Create unique id as: arcade_{split}_p{num}_v{num}_{frame} with frame padded to 5 digits.
-        unique_id: str = f"arcade/{split}_p{num}_v{num}_{num.zfill(5)}"
+        unique_id: str = f"arcade{split}_p{num}_v{num}_{num.zfill(5)}"
         
         img_width: float = img["width"]
         img_height: float = img["height"]

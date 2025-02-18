@@ -2,6 +2,7 @@
 
 import json
 from typing import Any, Dict, List
+import os
 
 # Import the integration function from the integration module.
 from ICA_Detection.integration.integrate import integrate_datasets
@@ -64,6 +65,11 @@ if __name__ == "__main__":
     # Define the list of datasets to integrate.
     datasets_to_process = ["CADICA", "ARCADE", "KEMEROVO"]
     
+    # Define standard folder to output results
+    output_base_folder = "/home/mario/Python/Datasets/COMBINED"
+    output_combined_json = os.path.join(output_base_folder, "combined_standardized.json")
+    output_planned_json = os.path.join(output_base_folder, "planned_standardized.json")
+
     # Provide a mapping from dataset names to the required root directories.
     # Note: For CADICA and ARCADE, use the root folders expected by their processing functions.
     root_dirs = {
@@ -79,29 +85,26 @@ if __name__ == "__main__":
     final_json: Dict[str, Any] = DatasetGenerator.integrate_datasets(datasets_to_process, root_dirs, arcade_task=arcade_task)
     
     # Save the combined JSON to a file.
-    output_file = "combined_standardized.json"
-    with open(output_file, "w") as f:
+    with open(output_combined_json, "w") as f:
         json.dump(final_json, f, indent=4)
-    print(f"Combined standardized JSON saved to {output_file}")
+    print(f"Combined standardized JSON saved to {output_combined_json}")
     
     # --- Preprocessing Planning Step ---
-    input_json = "combined_standardized.json"
-    output_planned = "planned_standardized.json"
     
-    with open(input_json, "r") as f:
+    with open(output_combined_json, "r") as f:
         data = json.load(f)
     
     # Define all preprocessing steps in a single plan.
     plan_steps = {
-        "resolution_standarization": {"desired_X": 512, "desired_Y": 512, "method": "bilinear"},
-        "dtype_standarization": {"desired_dtype": "uint8"},
         "format_standarization": {"desired_format": "png"},
-        "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0}
+        "dtype_standarization": {"desired_dtype": "uint8"},
+        "resolution_standarization": {"desired_X": 512, "desired_Y": 512, "method": "bilinear"},
+        #"filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0}
     }
     
     print("Creating preprocessing plan...")
     planned_data = DatasetGenerator.create_preprocessing_plan(data, plan_steps)
     
-    with open(output_planned, "w") as f:
+    with open(output_planned_json, "w") as f:
         json.dump(planned_data, f, indent=4)
-    print(f"Preprocessing plan saved to {output_planned}")
+    print(f"Preprocessing plan saved to {output_planned_json}")

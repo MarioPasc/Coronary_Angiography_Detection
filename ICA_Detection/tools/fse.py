@@ -2,7 +2,7 @@
 
 import cv2
 import numpy as np
-from lowpass import apply_lowpass
+from ICA_Detection.tools.lowpass import apply_lowpass
 
 def filtering_smoothing_equalization(image: np.ndarray, window_size: int, sigma: float) -> np.ndarray:
     """
