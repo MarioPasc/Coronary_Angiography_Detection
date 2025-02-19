@@ -4,9 +4,11 @@ import os
 import sys
 import json
 import random
+import shutil
+import argparse
 import math
 from typing import Dict, List
-
+import numpy as np
 
 def validate_splits(splits: Dict[str, float]) -> bool:
     """
@@ -21,15 +23,11 @@ def validate_splits(splits: Dict[str, float]) -> bool:
         return False
     return True
 
-
 def get_image_files(folder: str) -> List[str]:
     """
     Return a sorted list of image filenames (only files) in the given folder.
     """
-    return sorted(
-        [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
-    )
-
+    return sorted([f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))])
 
 def group_by_patient(file_list: List[str]) -> Dict[str, List[str]]:
     """
@@ -44,20 +42,16 @@ def group_by_patient(file_list: List[str]) -> Dict[str, List[str]]:
     """
     groups: Dict[str, List[str]] = {}
     for filename in file_list:
-        # Remove extension and split by underscore.
         base, _ = os.path.splitext(filename)
         parts = base.split("_")
         if len(parts) < 4:
             print(f"Skipping file with unexpected format: {filename}")
             continue
-        patient_key = f"{parts[0]}_{parts[1]}"
+        patient_key = f"{parts[0].lower()}_{parts[1].lower()}"
         groups.setdefault(patient_key, []).append(filename)
     return groups
 
-
-def create_symbolic_links(
-    file_list: List[str], src_folder: str, dest_folder: str
-) -> None:
+def create_symbolic_links(file_list: List[str], src_folder: str, dest_folder: str) -> None:
     """
     Create symbolic links in dest_folder for each file in file_list located in src_folder.
     Overwrites any existing links.
@@ -69,25 +63,28 @@ def create_symbolic_links(
             os.remove(dst)
         os.symlink(src, dst)
 
-
 def create_holdout_split(
     input_root: str,
     splits: Dict[str, float],
     output_root: str,
+    include_datasets: List[str] = None,
     splits_info_filename: str = "splits_info.json",
-    yaml_filename: str = "dataset.yaml",
+    yaml_filename: str = "dataset.yaml"
 ) -> None:
     """
     Create a holdout split at the dataset-patient level. All images from the same patient (as defined by
     {dataset}_{patient}) are assigned to the same split.
-
+    
+    Only files whose filename begins with one of the specified dataset prefixes (case-insensitive) are included.
+    
     Inputs:
       1. input_root: Folder with subfolders "images" and "labels" (all images/labels are in YOLO format).
       2. splits: Dictionary with split names and percentages, e.g., {"train": 0.6, "val": 0.2, "test": 0.2}.
          Must contain at least two splits and sum to 1.
-
+      3. include_datasets: List of dataset names to include (e.g., ["CADICA", "KEMEROVO"]). If None, all files are used.
+    
     The function creates the following structure in output_root:
-
+    
         output_root/
             images/
                 train/
@@ -99,7 +96,7 @@ def create_holdout_split(
                 test/
             dataset.yaml
             splits_info.json   # JSON file with assigned patients per split.
-
+    
     The dataset.yaml file includes the absolute path, relative image folder paths, and class names.
     """
     if not validate_splits(splits):
@@ -114,12 +111,27 @@ def create_holdout_split(
 
     # List all image files.
     all_files = get_image_files(in_images)
+    # If include_datasets is specified, filter files.
+    if include_datasets:
+        allowed_prefixes = [ds.lower() for ds in include_datasets]
+        if "ARCADE" in include_datasets:
+            allowed_prefixes.append("arcadetrain")
+            allowed_prefixes.append("arcadeval")
+            allowed_prefixes.append("arcadetest")
+
+        filtered_files = []
+        for f in all_files:
+            base, _ = os.path.splitext(f)
+            parts = base.split("_")
+            if parts and parts[0].lower() in allowed_prefixes:
+                filtered_files.append(f)
+        all_files = filtered_files
     # Group by patient.
     patient_groups = group_by_patient(all_files)
     all_patients = list(patient_groups.keys())
     random.shuffle(all_patients)
     n_patients = len(all_patients)
-    print(f"Total patient groups: {n_patients}")
+    print(f"Total patient groups after filtering: {n_patients}")
 
     # Compute number of patients per split.
     split_assignments = {}
@@ -129,7 +141,6 @@ def create_holdout_split(
         split_assignments[split_name] = all_patients[start : start + count]
         start += count
     if start < n_patients:
-        # Add remaining patients to the last split.
         last_split = list(splits.keys())[-1]
         split_assignments[last_split].extend(all_patients[start:])
 
@@ -150,17 +161,12 @@ def create_holdout_split(
         split_lbl_out = os.path.join(out_labels_root, split_name)
         os.makedirs(split_img_out, exist_ok=True)
         os.makedirs(split_lbl_out, exist_ok=True)
-
         for patient in patients:
-            # For each patient group, determine dataset name.
+            # Patient key is already in the format "{dataset}_{patient}".
             dataset_name, _ = patient.split("_", 1)
-            # Record this patient under the appropriate dataset.
             splits_info[split_name].setdefault(dataset_name, []).append(patient)
-            # Get all image files for this patient.
             patient_files = patient_groups[patient]
-            # Create symbolic links for each file.
             create_symbolic_links(patient_files, in_images, split_img_out)
-            # For labels, assume the label file has same base name with .txt extension.
             label_files = [os.path.splitext(f)[0] + ".txt" for f in patient_files]
             create_symbolic_links(label_files, in_labels, split_lbl_out)
         print(f"Created split '{split_name}' with {len(patients)} patient groups.")
@@ -186,10 +192,11 @@ def create_holdout_split(
     print(f"Splits info JSON saved to {splits_info_path}")
 
 
+
 if __name__ == "__main__":
-    input_root = "/home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION"
+    input_root = "/home/mario/Python/Datasets/COMBINED/ICA_DETECTION"
     splits_dict = {"train": 0.7, "val": 0.3, "test": 0.0}
-    output_root = "/home/mariopasc/Python/Datasets/COMBINED/YOLO_ICA_DETECTION"
+    output_root = "/home/mario/Python/Datasets/COMBINED/YOLO_ICA_DETECTION"
     yaml_filename = "yolo_ica_detection.yaml"
 
     create_holdout_split(
@@ -198,4 +205,5 @@ if __name__ == "__main__":
         output_root,
         yaml_filename=yaml_filename,
         splits_info_filename="splits_info.json",
+        include_datasets=["ARCADE"]
     )
