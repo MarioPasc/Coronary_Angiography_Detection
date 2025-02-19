@@ -111,7 +111,7 @@ class Detection_YOLO:
                 imgsz=self.args.get("imgsz"),
                 batch=self.args.get("batch"),
                 iou=self.args.get("iou"),
-                conf=0.01,
+                conf=0.001,
                 plots=True,
                 split=split,
             )
@@ -126,24 +126,9 @@ class Detection_YOLO:
 
 
 if __name__ == "__main__":
-    logging.info("Starting YOLO training and validation process.")
-    import argparse
+    yaml_file = ""
+    split = "val"
 
-    parser = argparse.ArgumentParser(
-        description="Train and validate YOLO model using YAML configuration."
-    )
-    parser.add_argument(
-        "--args_yaml",
-        required=True,
-        help="Path to YAML file with training configuration.",
-    )
-    parser.add_argument(
-        "--val_split",
-        default="val",
-        help="Data split to use for validation (e.g., 'train', 'val', 'test').",
-    )
-    args = parser.parse_args()
-
-    detector = Detection_YOLO(args_yaml=args.args_yaml)
+    detector = Detection_YOLO(args_yaml=yaml_file)
     detector.train()
-    detector.val(split=args.val_split)
+    detector.val(split=split)
