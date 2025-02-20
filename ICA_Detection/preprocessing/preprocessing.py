@@ -13,6 +13,7 @@ from ICA_Detection.tools.format_standarization import apply_format_standarizatio
 from ICA_Detection.tools.dtype_standarization import apply_dtype_standarization
 from ICA_Detection.tools.resolution import apply_resolution
 from ICA_Detection.tools.fse import filtering_smoothing_equalization
+from ICA_Detection.tools.bbox_translation import common_to_yolo
 
 
 def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None:
@@ -49,7 +50,8 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
     labels_out = os.path.join(out_dir, "labels")
     os.makedirs(images_out, exist_ok=True)
     os.makedirs(labels_out, exist_ok=True)
-
+    labels_yolo_out = os.path.join(out_dir, "labels_yolo")
+    os.makedirs(labels_yolo_out, exist_ok=True)
     # Load the planned JSON.
     with open(json_path, "r") as f:
         data = json.load(f)
@@ -119,10 +121,6 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             desired_Y = res_plan.get("desired_Y")
             method = res_plan.get("method")
 
-            # Retrieve original dimensions before resizing.
-            orig_width = img_info.get("width")
-            orig_height = img_info.get("height")
-
             new_img_path = current_img_path  # Overwrite in place.
             ret = apply_resolution(
                 current_img_path, new_img_path, desired_X, desired_Y, method
@@ -130,9 +128,6 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             if ret is None:
                 print(f"Error resizing image for {uid}.")
                 continue
-            # Update image dimensions in JSON.
-            img_info["width"] = desired_X
-            img_info["height"] = desired_Y
 
         # --- Step 4: Filtering Smoothing Equalization ---
         if (
@@ -150,21 +145,39 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             cv2.imwrite(current_img_path, enhanced)
 
         # --- Save Annotations ---
-        # Save label file only for images with lesion=True.
+        # Only create a label file if lesion is True.
         if entry.get("lesion", False):
             annotations = entry.get("annotations", {})
             lines = []
-            # For each bounding box, write a line in YOLO format:
-            # "stenosis x_center y_center width height"
+            # For each bbox in the annotations (assumed to be in common format),
+            # convert it to YOLO normalized format using the final image dimensions.
             for key, bbox in annotations.items():
                 if key == "name":
                     continue
-                line = f"0 {bbox.get('x_center')} {bbox.get('y_center')} {bbox.get('width')} {bbox.get('height')}"
+
+                # Retrieve original dimensions before resizing.
+                orig_width = img_info.get("width")
+                orig_height = img_info.get("height")
+
+                yolo_bbox = common_to_yolo(bbox, orig_width, orig_height)
+                # Write a line: class_id x_center y_center width height.
+                # Here, class_id is hard-coded to 0.
+                line = f"0 {yolo_bbox['x_center']} {yolo_bbox['y_center']} {yolo_bbox['width']} {yolo_bbox['height']}"
                 lines.append(line)
             label_filename = annotations.get("name", f"{uid}.txt")
+            # Save default labels file.
             label_out_path = os.path.join(labels_out, label_filename)
             with open(label_out_path, "w") as f:
                 f.write("\n".join(lines))
+            # --- Additional Label Formats ---
+            labels_formats = entry.get("preprocessing_plan", {}).get(
+                "labels_formats", {}
+            )
+            if labels_formats.get("YOLO", False):
+                label_yolo_out_path = os.path.join(labels_yolo_out, label_filename)
+                with open(label_yolo_out_path, "w") as f:
+                    f.write("\n".join(lines))
+    print("All images processed.")
 
 
 if __name__ == "__main__":
@@ -177,7 +190,8 @@ if __name__ == "__main__":
             "desired_Y": 512,
             "method": "bilinear",
         },
-        # "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0}
+        # "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
+        "labels_formats": {"YOLO": True},
     }
 
     output_base_folder = "/home/mariopasc/Python/Datasets/COMBINED"

@@ -98,6 +98,13 @@ def create_preprocessing_plan(
                 "sigma": fse_plan.get("sigma"),
             }
 
+        # Ensure a labels_formats entry exists.
+        if "labels_formats" in plan_steps:
+            plan["labels_formats"] = plan_steps["labels_formats"]
+        else:
+            # Default: produce YOLO labels.
+            plan["labels_formats"] = {"YOLO": True}
+
         if plan:
             entry["preprocessing_plan"] = plan
     return data
@@ -121,8 +128,8 @@ if __name__ == "__main__":
         "dtype_standarization": {"desired_dtype": "uint8"},
         "format_standarization": {"desired_format": "png"},
         "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
+        "labels_formats": {"YOLO": True},  # New key for additional label generation.
     }
-
     planned_data = create_preprocessing_plan(data, plan_steps)
 
     with open(output_json, "w") as f:

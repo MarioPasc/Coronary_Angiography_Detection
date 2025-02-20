@@ -8,10 +8,13 @@ from ICA_Detection.integration.arcade import process_arcade_dataset
 from ICA_Detection.integration.cadica import process_cadica_dataset
 from ICA_Detection.integration.kemerovo import process_kemerovo_dataset
 
-def integrate_datasets(datasets: List[str], root_dirs: Dict[str, str], arcade_task: str = "stenosis") -> Dict[str, Any]:
+
+def integrate_datasets(
+    datasets: List[str], root_dirs: Dict[str, str], arcade_task: str = "stenosis"
+) -> Dict[str, Any]:
     """
     Integrate standardized JSON outputs from multiple datasets.
-    
+
     Args:
         datasets (List[str]): List of dataset names to process. Valid names are
             "CADICA", "ARCADE", and "KEMEROVO". For example: ["CADICA", "ARCADE", "KEMEROVO"].
@@ -19,13 +22,13 @@ def integrate_datasets(datasets: List[str], root_dirs: Dict[str, str], arcade_ta
             For example:
                 {
                     "CADICA": "/home/mario/Python/Datasets",
-                    "ARCADE": "/home/mario/Python/Datasets", 
+                    "ARCADE": "/home/mario/Python/Datasets",
                     "KEMEROVO": "/home/mario/Python/Datasets"
                 }
         arcade_task (str, optional): For ARCADE, which task to process ("stenosis", "syntax", or "both"). Defaults to "stenosis".
-    
+
     Returns:
-        Dict[str, Any]: A combined JSON dictionary with a top-level key "Standard_dataset" 
+        Dict[str, Any]: A combined JSON dictionary with a top-level key "Standard_dataset"
         that contains entries from all selected datasets.
     """
     combined_entries: Dict[str, Any] = {}
@@ -59,32 +62,35 @@ def integrate_datasets(datasets: List[str], root_dirs: Dict[str, str], arcade_ta
             combined_entries.update(data.get("Standard_dataset", {}))
         else:
             print(f"Dataset '{ds}' not recognized. Skipping.")
-    
+
     return {"Standard_dataset": combined_entries}
+
 
 if __name__ == "__main__":
     # You can download the datasets manually from:
     # - KEMEROV: https://data.mendeley.com/datasets/ydrm75xywg/2
-    # - ARCADE: https://zenodo.org/records/10390295 
-    # - CADICA: https://data.mendeley.com/datasets/p9bpx9ctcv/2 
-    
+    # - ARCADE: https://zenodo.org/records/10390295
+    # - CADICA: https://data.mendeley.com/datasets/p9bpx9ctcv/2
+
     # Define the list of datasets to integrate.
     datasets_to_process = ["CADICA", "ARCADE", "KEMEROVO"]
-    
+
     # Provide a mapping from dataset names to the required root directories.
     # Note: For CADICA and ARCADE, use the root folders expected by their processing functions.
     root_dirs = {
-        "CADICA": "/home/mario/Python/Datasets",
-        "ARCADE": "/home/mario/Python/Datasets",  
-        "KEMEROVO": "/home/mario/Python/Datasets"
+        "CADICA": "/home/mariopasc/Python/Datasets",
+        "ARCADE": "/home/mariopasc/Python/Datasets",
+        "KEMEROVO": "/home/mariopasc/Python/Datasets",
     }
-    
+
     # Optionally, specify the ARCADE task ("stenosis", "syntax", or "both").
     arcade_task = "stenosis"
-    
+
     # Integrate the selected datasets.
-    final_json: Dict[str, Any] = integrate_datasets(datasets_to_process, root_dirs, arcade_task=arcade_task)
-    
+    final_json: Dict[str, Any] = integrate_datasets(
+        datasets_to_process, root_dirs, arcade_task=arcade_task
+    )
+
     # Save the combined JSON to a file.
     output_file = "combined_standardized.json"
     with open(output_file, "w") as f:

@@ -129,14 +129,15 @@ if __name__ == "__main__":
     with open(output_combined_json, "r") as f:
         data = json.load(f)
     plan_steps = {
-        "format_standarization": {"desired_format": "png"},
-        "dtype_standarization": {"desired_dtype": "uint8"},
         "resolution_standarization": {
             "desired_X": 512,
             "desired_Y": 512,
             "method": "bilinear",
         },
-        # "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0}
+        "dtype_standarization": {"desired_dtype": "uint8"},
+        "format_standarization": {"desired_format": "png"},
+        # "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
+        "labels_formats": {"YOLO": True},  # New key for additional label generation.
     }
     print("Creating preprocessing plan...")
     planned_data = DatasetGenerator.create_preprocessing_plan(data, plan_steps)
