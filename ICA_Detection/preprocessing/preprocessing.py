@@ -45,14 +45,15 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
                                   Default order is:
                                   ["format_standarization", "dtype_standarization", "resolution_standarization", "filtering_smoothing_equalization"]
     """
-    # Create output structure.
+    # Create output structure
     images_out = os.path.join(out_dir, "images")
     labels_out = os.path.join(out_dir, "labels")
+    labels_yolo_out = os.path.join(out_dir, "labels_yolo")
     os.makedirs(images_out, exist_ok=True)
     os.makedirs(labels_out, exist_ok=True)
-    labels_yolo_out = os.path.join(out_dir, "labels_yolo")
     os.makedirs(labels_yolo_out, exist_ok=True)
-    # Load the planned JSON.
+
+    # Load the planned JSON
     with open(json_path, "r") as f:
         data = json.load(f)
 
@@ -70,7 +71,7 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             print(f"Skipping {uid}: original image path not found.")
             continue
 
-        # Define working filename: we use PNG for all processed images.
+        # Define working filename: we use PNG for all processed images
         working_filename = f"{uid}.png"
         working_img_path = os.path.join(images_out, working_filename)
 
@@ -92,6 +93,10 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
                 continue
         else:
             shutil.copy2(orig_img_path, working_img_path)
+
+        # Rename 'route' to 'original_route' and introduce 'dataset_route'
+        img_info["original_route"] = img_info.pop("route")
+        img_info["dataset_route"] = working_img_path
 
         current_img_path = working_img_path
 
@@ -121,7 +126,7 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             desired_Y = res_plan.get("desired_Y")
             method = res_plan.get("method")
 
-            new_img_path = current_img_path  # Overwrite in place.
+            new_img_path = current_img_path  # Overwrite in place
             ret = apply_resolution(
                 current_img_path, new_img_path, desired_X, desired_Y, method
             )
@@ -145,39 +150,53 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             cv2.imwrite(current_img_path, enhanced)
 
         # --- Save Annotations ---
-        # Only create a label file if lesion is True.
         if entry.get("lesion", False):
             annotations = entry.get("annotations", {})
+            label_filename = annotations.get("name", f"{uid}.txt")
+
             lines = []
-            # For each bbox in the annotations (assumed to be in common format),
-            # convert it to YOLO normalized format using the final image dimensions.
             for key, bbox in annotations.items():
                 if key == "name":
                     continue
-
-                # Retrieve original dimensions before resizing.
-                orig_width = img_info.get("width")
-                orig_height = img_info.get("height")
-
-                yolo_bbox = common_to_yolo(bbox, orig_width, orig_height)
-                # Write a line: class_id x_center y_center width height.
-                # Here, class_id is hard-coded to 0.
-                line = f"0 {yolo_bbox['x_center']} {yolo_bbox['y_center']} {yolo_bbox['width']} {yolo_bbox['height']}"
+                xmin = bbox["xmin"]
+                ymin = bbox["ymin"]
+                xmax = bbox["xmax"]
+                ymax = bbox["ymax"]
+                line = f"0 {xmin} {ymin} {xmax} {ymax}"
                 lines.append(line)
-            label_filename = annotations.get("name", f"{uid}.txt")
-            # Save default labels file.
+
+            # Save default labels file
             label_out_path = os.path.join(labels_out, label_filename)
             with open(label_out_path, "w") as f:
                 f.write("\n".join(lines))
+
             # --- Additional Label Formats ---
             labels_formats = entry.get("preprocessing_plan", {}).get(
                 "labels_formats", {}
             )
             if labels_formats.get("YOLO", False):
                 label_yolo_out_path = os.path.join(labels_yolo_out, label_filename)
+                lines = []
+                for key, bbox in annotations.items():
+                    if key == "name":
+                        continue
+                    orig_width = img_info.get("width")
+                    orig_height = img_info.get("height")
+                    yolo_bbox = common_to_yolo(bbox, orig_width, orig_height)
+                    line = f"0 {yolo_bbox['x_center']} {yolo_bbox['y_center']} {yolo_bbox['width']} {yolo_bbox['height']}"
+                    lines.append(line)
+
                 with open(label_yolo_out_path, "w") as f:
                     f.write("\n".join(lines))
-    print("All images processed.")
+
+    # --------------------------------
+    # After processing all, save JSON:
+    # --------------------------------
+    processed_json_path = os.path.join(out_dir, "processed.json")
+    with open(processed_json_path, "w") as f:
+        json.dump(data, f, indent=2)
+
+    print(f"All images processed. Updated JSON saved to: {processed_json_path}")
 
 
 if __name__ == "__main__":
