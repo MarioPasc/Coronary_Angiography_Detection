@@ -101,19 +101,29 @@ if __name__ == "__main__":
     # - ARCADE: https://zenodo.org/records/10390295
     # - CADICA: https://data.mendeley.com/datasets/p9bpx9ctcv/2
 
-    datasets_to_process = ["CADICA", "ARCADE", "KEMEROVO"]
-    output_base_folder = "/home/mario/Python/Datasets/COMBINED"
+    # datasets_to_process = ["CADICA", "ARCADE", "KEMEROVO"]
+    datasets_to_process = ["CADICA"]
+
+    output_base_folder = "/media/hddb/mario/data/COMBINED"
     os.makedirs(output_base_folder, exist_ok=True)
     output_combined_json = os.path.join(
         output_base_folder, "combined_standardized.json"
     )
     output_planned_json = os.path.join(output_base_folder, "planned_standardized.json")
 
-    root_dirs = {
+    root_dirs_local = {
         "CADICA": "/home/mario/Python/Datasets",
         "ARCADE": "/home/mario/Python/Datasets",
         "KEMEROVO": "/home/mario/Python/Datasets",
     }
+
+    root_dirs = {
+        "CADICA": "/media/hddb/mario/data/COMBINED",
+        "ARCADE": "/media/hddb/mario/data/COMBINED",
+        "KEMEROVO": "/media/hddb/mario/data/COMBINED",
+    }
+
+    
 
     arcade_task = "stenosis"
 
@@ -136,7 +146,8 @@ if __name__ == "__main__":
         },
         "dtype_standarization": {"desired_dtype": "uint8"},
         "format_standarization": {"desired_format": "png"},
-        # "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
+        "clahe":  {"window_size": 5, "sigma": 1.0, "clipLimit": 3.0, "tileGridSize": (8,8)},
+        "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
         "labels_formats": {"YOLO": True},  # New key for additional label generation.
     }
     print("Creating preprocessing plan...")

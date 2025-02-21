@@ -3,7 +3,7 @@
 import time
 import logging
 import os
-from ultralytics import YOLO  # or adjust this import based on your project structure
+from ICA_Detection.external.ultralytics.ultralytics import YOLO  # or adjust this import based on your project structure
 from typing import Dict, Any
 
 # Configure logging to file and console

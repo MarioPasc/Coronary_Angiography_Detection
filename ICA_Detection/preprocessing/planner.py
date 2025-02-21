@@ -90,6 +90,16 @@ def create_preprocessing_plan(
                     "method": method,
                 }
 
+        # CLAHE methodology
+        fse_plan = plan_steps.get("clahe")
+        if fse_plan:
+            plan["clahe"] = {
+                "window_size": fse_plan.get("window_size"),
+                "sigma": fse_plan.get("sigma"),
+                "clipLimit": fse_plan.get("clipLimit"),
+                "tileGridSize": fse_plan.get("tileGridSize")
+            }
+
         # Filtering Smoothing Equalization is applied to all images if specified.
         fse_plan = plan_steps.get("filtering_smoothing_equalization")
         if fse_plan:
@@ -127,6 +137,7 @@ if __name__ == "__main__":
         },
         "dtype_standarization": {"desired_dtype": "uint8"},
         "format_standarization": {"desired_format": "png"},
+        "clahe":  {"window_size": 5, "sigma": 1.0, "clipLimit": 2.0, "tileGridSize": (8,8)},
         "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
         "labels_formats": {"YOLO": True},  # New key for additional label generation.
     }

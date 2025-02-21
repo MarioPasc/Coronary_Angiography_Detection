@@ -5,7 +5,7 @@ import numpy as np
 import math
 from typing import Any
 
-def apply_lowpass(image: np.ndarray, window_size: int, sigma: float) -> np.ndarray:
+def apply_lowpass(image: np.ndarray, window_size:int = 5, sigma: float = 1.0, border_type: int = cv2.BORDER_CONSTANT) -> np.ndarray:
     """
     Apply a Gaussian low-pass filter (smoothing) to the input image.
     
@@ -28,7 +28,7 @@ def apply_lowpass(image: np.ndarray, window_size: int, sigma: float) -> np.ndarr
         for j in range(window_size):
             kernel[i, j] = (1 / (2 * math.pi * sigma**2)) * math.exp(-(((i - c)**2 + (j - c)**2) / (2 * sigma**2)))
     kernel /= np.sum(kernel)
-    smoothed = cv2.filter2D(image, -1, kernel)
+    smoothed = cv2.filter2D(image, -1, kernel, borderType=border_type)
     return smoothed
 
 if __name__ == "__main__":

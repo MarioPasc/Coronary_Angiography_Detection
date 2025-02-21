@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from ICA_Detection.tools.lowpass import apply_lowpass
 
-def filtering_smoothing_equalization(image: np.ndarray, window_size: int, sigma: float) -> np.ndarray:
+def filtering_smoothing_equalization(image: np.ndarray, window_size: int = 5, sigma: float=1.0) -> np.ndarray:
     """
     Apply Filtering Smoothing Equalization to a grayscale image.
     

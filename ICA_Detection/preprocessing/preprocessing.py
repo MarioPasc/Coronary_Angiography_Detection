@@ -13,6 +13,7 @@ from ICA_Detection.tools.format_standarization import apply_format_standarizatio
 from ICA_Detection.tools.dtype_standarization import apply_dtype_standarization
 from ICA_Detection.tools.resolution import apply_resolution
 from ICA_Detection.tools.fse import filtering_smoothing_equalization
+from ICA_Detection.tools.clahe import clahe_enhancement
 from ICA_Detection.tools.bbox_translation import common_to_yolo, rescale_bbox
 
 
@@ -149,7 +150,24 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
                 updated_bbox = rescale_bbox(bbox, old_width, old_height, desired_X, desired_Y)
                 annotations[key] = updated_bbox
 
-        # --- Step 4: Filtering Smoothing Equalization ---
+        # --- CLAHE ---
+        if (
+            "clahe" in entry.get("clahe", {})
+            and "clahe" in steps_order
+        ):
+            fse_plan = entry["preprocessing_plan"]["clahe"]
+            window_size = fse_plan.get("window_size")
+            sigma = fse_plan.get("sigma")
+            clipLimit = fse_plan.get("clipLimit")
+            tileGridSize = fse_plan.get("tileGridSize")
+            img = cv2.imread(current_img_path, cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                print(f"Error reading image for FSE for {uid}.")
+                continue
+            enhanced = clahe_enhancement(img, window_size, sigma, clipLimit, tileGridSize)
+            cv2.imwrite(current_img_path, enhanced)
+
+        # --- Filtering Smoothing Equalization ---
         if (
             "filtering_smoothing_equalization" in entry.get("preprocessing_plan", {})
             and "filtering_smoothing_equalization" in steps_order
@@ -224,7 +242,8 @@ if __name__ == "__main__":
             "desired_Y": 512,
             "method": "bilinear",
         },
-        # "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
+        "clahe":  {"window_size": 5, "sigma": 1.0, "clipLimit": 2.0, "tileGridSize": (8,8)},
+        "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
         "labels_formats": {"YOLO": True},
     }
 
