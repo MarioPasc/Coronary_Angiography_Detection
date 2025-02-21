@@ -3,7 +3,9 @@
 import time
 import logging
 import os
-from ICA_Detection.external.ultralytics.ultralytics import YOLO  # or adjust this import based on your project structure
+from ICA_Detection.external.ultralytics.ultralytics import (
+    YOLO,
+)  # or adjust this import based on your project structure
 from typing import Dict, Any
 
 # Configure logging to file and console
@@ -55,8 +57,19 @@ class Detection_YOLO:
             self.name = self.args.get("name", "ateroesclerosis_training")
             self.save_dir = self.args.get("save_dir", None)
             # Remove keys that are not meant for training.
-            excluded_keys = {"model", "data", "device", "name", "save_dir", "task", "mode", "time"}
-            self.train_params = {k: v for k, v in self.args.items() if k not in excluded_keys}
+            excluded_keys = {
+                "model",
+                "data",
+                "device",
+                "name",
+                "save_dir",
+                "task",
+                "mode",
+                "time",
+            }
+            self.train_params = {
+                k: v for k, v in self.args.items() if k not in excluded_keys
+            }
             self.train_params["data"] = self.data_yaml  # Ensure 'data' is included.
             # Initialize YOLO model.
             self.model = YOLO(model=self.model_path)
@@ -81,7 +94,7 @@ class Detection_YOLO:
         total_time = time.time() - start_time
         logging.info("Total training time: %.2f seconds", total_time)
 
-    def val(self, split: str) -> None:
+    def val(self, split: str):
         """
         Validate the YOLO model on the specified data split.
         Measures and logs the total validation time.
@@ -93,7 +106,7 @@ class Detection_YOLO:
         logging.info("Starting validation on split: %s", split)
         try:
             # Pass additional parameters if necessary.
-            self.model.val(
+            results = self.model.val(
                 data=self.data_yaml,
                 imgsz=self.args.get("imgsz", 640),
                 batch=self.args.get("batch", 16),
@@ -101,14 +114,17 @@ class Detection_YOLO:
                 conf=0.001,
                 plots=True,
                 split=split,
-                name=self.args.get("name", "ICA")
+                name=self.args.get("name", "ICA"),
             )
             logging.info("Validation completed successfully on split: %s", split)
+            return results
         except Exception as e:
             logging.error("Validation error: %s", e)
             raise
         total_time = time.time() - start_time
-        logging.info("Total validation time on split '%s': %.2f seconds", split, total_time)
+        logging.info(
+            "Total validation time on split '%s': %.2f seconds", split, total_time
+        )
 
 
 if __name__ == "__main__":
@@ -156,10 +172,10 @@ if __name__ == "__main__":
         "mixup": 0.0,
         "copy_paste": 0.0,
         "copy_paste_mode": "flip",
-        "auto_augment": '',
+        "auto_augment": "",
         "erasing": 0.0,
         "crop_fraction": 0.0,
-        "save_dir": "/home/mariopascual/Projects/CADICA/ICA_DETECTION/base_dataset_run"
+        "save_dir": "/home/mariopascual/Projects/CADICA/ICA_DETECTION/base_dataset_run",
     }
     split = "val"
 

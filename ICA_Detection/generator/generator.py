@@ -1,4 +1,4 @@
-# ica_yolo_detection/generator.py
+# ICA_Detection/generator/generator.py
 
 import json
 import os
@@ -123,8 +123,6 @@ if __name__ == "__main__":
         "KEMEROVO": "/media/hddb/mario/data/COMBINED",
     }
 
-    
-
     arcade_task = "stenosis"
 
     print("Integrating datasets...")
@@ -146,7 +144,12 @@ if __name__ == "__main__":
         },
         "dtype_standarization": {"desired_dtype": "uint8"},
         "format_standarization": {"desired_format": "png"},
-        "clahe":  {"window_size": 5, "sigma": 1.0, "clipLimit": 3.0, "tileGridSize": (8,8)},
+        "clahe": {
+            "window_size": 5,
+            "sigma": 1.0,
+            "clipLimit": 3.0,
+            "tileGridSize": (8, 8),
+        },
         "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
         "labels_formats": {"YOLO": True},  # New key for additional label generation.
     }

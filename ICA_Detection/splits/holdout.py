@@ -1,4 +1,4 @@
-# ica_yolo_detection/splits/holdout.py
+# ICA_Detection/splits/holdout.py
 
 import os
 import sys
@@ -9,6 +9,7 @@ import argparse
 import math
 from typing import Dict, List
 import numpy as np
+
 
 def validate_splits(splits: Dict[str, float]) -> bool:
     """
@@ -23,11 +24,15 @@ def validate_splits(splits: Dict[str, float]) -> bool:
         return False
     return True
 
+
 def get_image_files(folder: str) -> List[str]:
     """
     Return a sorted list of image filenames (only files) in the given folder.
     """
-    return sorted([f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))])
+    return sorted(
+        [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
+    )
+
 
 def group_by_patient(file_list: List[str]) -> Dict[str, List[str]]:
     """
@@ -51,7 +56,10 @@ def group_by_patient(file_list: List[str]) -> Dict[str, List[str]]:
         groups.setdefault(patient_key, []).append(filename)
     return groups
 
-def create_symbolic_links(file_list: List[str], src_folder: str, dest_folder: str) -> None:
+
+def create_symbolic_links(
+    file_list: List[str], src_folder: str, dest_folder: str
+) -> None:
     """
     Create symbolic links in dest_folder for each file in file_list located in src_folder.
     Overwrites any existing links.
@@ -63,28 +71,29 @@ def create_symbolic_links(file_list: List[str], src_folder: str, dest_folder: st
             os.remove(dst)
         os.symlink(src, dst)
 
+
 def create_holdout_split(
     input_root: str,
     splits: Dict[str, float],
     output_root: str,
     include_datasets: List[str] = None,
     splits_info_filename: str = "splits_info.json",
-    yaml_filename: str = "dataset.yaml"
+    yaml_filename: str = "dataset.yaml",
 ) -> None:
     """
     Create a holdout split at the dataset-patient level. All images from the same patient (as defined by
     {dataset}_{patient}) are assigned to the same split.
-    
+
     Only files whose filename begins with one of the specified dataset prefixes (case-insensitive) are included.
-    
+
     Inputs:
       1. input_root: Folder with subfolders "images" and "labels" (all images/labels are in YOLO format).
       2. splits: Dictionary with split names and percentages, e.g., {"train": 0.6, "val": 0.2, "test": 0.2}.
          Must contain at least two splits and sum to 1.
       3. include_datasets: List of dataset names to include (e.g., ["CADICA", "KEMEROVO"]). If None, all files are used.
-    
+
     The function creates the following structure in output_root:
-    
+
         output_root/
             images/
                 train/
@@ -96,7 +105,7 @@ def create_holdout_split(
                 test/
             dataset.yaml
             splits_info.json   # JSON file with assigned patients per split.
-    
+
     The dataset.yaml file includes the absolute path, relative image folder paths, and class names.
     """
     if not validate_splits(splits):
@@ -192,7 +201,6 @@ def create_holdout_split(
     print(f"Splits info JSON saved to {splits_info_path}")
 
 
-
 if __name__ == "__main__":
     input_root = "/media/hddb/mario/data/COMBINED/ICA_DETECTION"
     splits_dict = {"train": 0.7, "val": 0.3, "test": 0.0}
@@ -205,5 +213,5 @@ if __name__ == "__main__":
         output_root,
         yaml_filename=yaml_filename,
         splits_info_filename="splits_info.json",
-        include_datasets=["CADICA"]
+        include_datasets=["CADICA"],
     )
