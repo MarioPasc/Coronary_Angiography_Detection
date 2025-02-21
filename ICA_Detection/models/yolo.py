@@ -116,7 +116,7 @@ if __name__ == "__main__":
     config = {
         "task": "detect",
         "mode": "train",
-        "model": "/home/mariopascual/Projects/CADICA/ICA_DETECTION",
+        "model": "/home/mariopascual/Projects/CADICA/ICA_DETECTION/yolov8l.pt",
         "data": "/media/hddb/mario/data/COMBINED/yolo_ica_detection.yaml",
         "epochs": 100,
         "batch": 8,
