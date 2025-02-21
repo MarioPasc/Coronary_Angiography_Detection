@@ -16,7 +16,7 @@ other formats (e.g., normalized YOLO format) when needed.
 """
 
 from typing import Dict, Any
-
+import numpy as np
 
 def cadica_to_common(bbox: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -107,6 +107,29 @@ def common_to_yolo(
         "label": bbox["label"],
     }
 
+def rescale_bbox(bbox, orig_width, orig_height, new_width, new_height):
+    """
+    Rescale a Pascal VOC bounding box given the old and new image dimensions.
+    
+    Args:
+        bbox (dict): Bounding box with keys "xmin", "ymin", "xmax", "ymax".
+        orig_width (int): Original image width.
+        orig_height (int): Original image height.
+        new_width (int): New image width.
+        new_height (int): New image height.
+    
+    Returns:
+        dict: New bounding box with updated coordinates.
+    """
+    scale_x = new_width / orig_width
+    scale_y = new_height / orig_height
+    return {
+        "xmin": np.round(bbox["xmin"] * scale_x, 0),
+        "ymin": np.round(bbox["ymin"] * scale_y, 0),
+        "xmax": np.round(bbox["xmax"] * scale_x, 0),
+        "ymax": np.round(bbox["ymax"] * scale_y, 0),
+        "label": bbox.get("label", "")
+    }
 
 if __name__ == "__main__":
     # Example usage:

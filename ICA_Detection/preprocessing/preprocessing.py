@@ -13,7 +13,7 @@ from ICA_Detection.tools.format_standarization import apply_format_standarizatio
 from ICA_Detection.tools.dtype_standarization import apply_dtype_standarization
 from ICA_Detection.tools.resolution import apply_resolution
 from ICA_Detection.tools.fse import filtering_smoothing_equalization
-from ICA_Detection.tools.bbox_translation import common_to_yolo
+from ICA_Detection.tools.bbox_translation import common_to_yolo, rescale_bbox
 
 
 def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None:
@@ -133,6 +133,21 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             if ret is None:
                 print(f"Error resizing image for {uid}.")
                 continue
+            # --- Update JSON with new image resolution and bounding boxes ---
+            # Save old dimensions
+            old_width = img_info.get("width")
+            old_height = img_info.get("height")
+            # Update image info with new resolution
+            img_info["width"] = desired_X
+            img_info["height"] = desired_Y
+            
+            # Update the bounding box coordinates in the JSON (keeping Pascal VOC format)
+            annotations = entry.get("annotations", {})
+            for key, bbox in annotations.items():
+                if key == "name":
+                    continue
+                updated_bbox = rescale_bbox(bbox, old_width, old_height, desired_X, desired_Y)
+                annotations[key] = updated_bbox
 
         # --- Step 4: Filtering Smoothing Equalization ---
         if (

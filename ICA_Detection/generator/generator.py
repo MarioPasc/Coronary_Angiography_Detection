@@ -102,7 +102,7 @@ if __name__ == "__main__":
     # - CADICA: https://data.mendeley.com/datasets/p9bpx9ctcv/2
 
     datasets_to_process = ["CADICA", "ARCADE", "KEMEROVO"]
-    output_base_folder = "/home/mariopasc/Python/Datasets/COMBINED"
+    output_base_folder = "/home/mario/Python/Datasets/COMBINED"
     os.makedirs(output_base_folder, exist_ok=True)
     output_combined_json = os.path.join(
         output_base_folder, "combined_standardized.json"
@@ -110,9 +110,9 @@ if __name__ == "__main__":
     output_planned_json = os.path.join(output_base_folder, "planned_standardized.json")
 
     root_dirs = {
-        "CADICA": "/home/mariopasc/Python/Datasets",
-        "ARCADE": "/home/mariopasc/Python/Datasets",
-        "KEMEROVO": "/home/mariopasc/Python/Datasets",
+        "CADICA": "/home/mario/Python/Datasets",
+        "ARCADE": "/home/mario/Python/Datasets",
+        "KEMEROVO": "/home/mario/Python/Datasets",
     }
 
     arcade_task = "stenosis"

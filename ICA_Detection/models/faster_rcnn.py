@@ -113,7 +113,6 @@ class FasterRCNNDataset(Dataset):
         target["image_id"] = torch.tensor([idx])
 
         # If there are no boxes, this shape is (0,)
-        # so we handle area carefully:
         if boxes_tensor.shape[0] == 0:
             # Negative example: no bounding boxes
             area = torch.tensor([], dtype=torch.float32)
