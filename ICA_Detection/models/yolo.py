@@ -116,7 +116,7 @@ if __name__ == "__main__":
     config = {
         "task": "detect",
         "mode": "train",
-        "model": "/home/mariopascual/Projects/CADICA/ICA_DETECTION/yolov8l.pt",
+        "model": "/home/mariopascual/Projects/CADICA/ICA_DETECTION",
         "data": "/media/hddb/mario/data/COMBINED/yolo_ica_detection.yaml",
         "epochs": 100,
         "batch": 8,
@@ -141,6 +141,24 @@ if __name__ == "__main__":
         "augment": False,
         "device": "cuda:0",
         "name": "ICA_detection",
+        "hsv_h": 0.0,
+        "hsv_s": 0.0,
+        "hsv_v": 0.0,
+        "degrees": 0.0,
+        "translate": 0.0,
+        "scale": 0.0,
+        "shear": 0.0,
+        "perspective": 0.0,
+        "flipud": 0.0,
+        "fliplr": 0.0,
+        "bgr": 0.0,
+        "mosaic": 0.0,
+        "mixup": 0.0,
+        "copy_paste": 0.0,
+        "copy_paste_mode": "flip",
+        "auto_augment": '',
+        "erasing": 0.0,
+        "crop_fraction": 0.0,
         "save_dir": "/home/mariopascual/Projects/CADICA/ICA_DETECTION/base_dataset_run"
     }
     split = "val"

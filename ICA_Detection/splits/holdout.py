@@ -194,9 +194,9 @@ def create_holdout_split(
 
 
 if __name__ == "__main__":
-    input_root = "/home/mario/Python/Datasets/COMBINED/ICA_DETECTION"
+    input_root = "/media/hddb/mario/data/COMBINED/ICA_DETECTION"
     splits_dict = {"train": 0.7, "val": 0.3, "test": 0.0}
-    output_root = "/home/mario/Python/Datasets/COMBINED/YOLO_ICA_DETECTION"
+    output_root = "/media/hddb/mario/data/COMBINED/YOLO_ICA_DETECTION"
     yaml_filename = "yolo_ica_detection.yaml"
 
     create_holdout_split(
@@ -205,5 +205,5 @@ if __name__ == "__main__":
         output_root,
         yaml_filename=yaml_filename,
         splits_info_filename="splits_info.json",
-        include_datasets=["ARCADE"]
+        include_datasets=["CADICA"]
     )
