@@ -36,8 +36,6 @@ import random
 from pathlib import Path
 from typing import List, Dict, Any
 
-# Adjust these imports according to your actual package structure:
-# (Below, we assume your local structure matches the snippet paths you provided.)
 try:
     from ICA_Detection.generator.generator import DatasetGenerator
     from ICA_Detection.splits.holdout import create_holdout_split
@@ -72,12 +70,12 @@ SPLITS_DICT = {"train": 0.7, "val": 0.3, "test": 0.0}
 YOLO_CONFIG = {
     "task": "detect",
     "mode": "train",
-    "model": "/home/mariopascual/Projects/CADICA/ICA_DETECTION/yolov8l.pt",  # Adjust if needed
+    "model": "/home/mariopascual/Projects/CADICA/ICA_DETECTION/Execution/yolov8l.pt",  # Adjust if needed
     "epochs": 100,
     "batch": 8,
     "imgsz": 512,
     "save": True,
-    "save_period": 1,
+    "save_period": -1,
     "pretrained": True,
     "optimizer": "RAdam",
     "iou": 0.5,
@@ -113,7 +111,6 @@ YOLO_CONFIG = {
     "auto_augment": "",
     "erasing": 0.0,
     "crop_fraction": 0.0,
-    # We'll override the "data" and "name" and "save_dir" fields dynamically at runtime.
 }
 
 # Preprocessing plans
@@ -300,6 +297,9 @@ def create_splits_and_train(
 
     # 3) Validate on the best checkpoint
     best_ckpt = os.path.join(run_dir, experiment_name, "weights", "best.pt")
+    os.rename(
+        src=os.path.join(run_dir, "train"), dst=os.path.join(run_dir, experiment_name)
+    )
     logger.info(f"Validating with best checkpoint: {best_ckpt}")
 
     # Overwrite the model path for validation
@@ -318,40 +318,26 @@ def create_splits_and_train(
     val_detector = Detection_YOLO(yolo_val_config)
     # the .val() method in the snippet doesn't return anything, so let's modify it here:
     # We'll call the underlying ultralytics YOLO directly to capture metrics:
-    val_results = val_detector.val(split="val")
+    metrics = val_detector.val(split="val")
+
+    shutil.move(
+        src=os.path.join(run_dir, experiment_name + "2"),
+        dst=os.path.join(run_dir, experiment_name),
+    )
 
     # 4) Collect metrics
-    # The YOLO 'val()' method (Ultralytics 8.x) typically returns a 'Metrics' object.
-    # We can extract relevant fields (maps, precision, recall, etc.) from it.
-    # If that doesn't work, you may need to parse them from val_results.box, etc.
-    metrics_dict = {}
-    if hasattr(val_results, "metrics") and val_results.metrics is not None:
-        # Try to extract standard fields
-        m = val_results.metrics  # a dict or object with numeric fields
-        # The actual attribute names can differ by version. Adjust as needed.
-        metrics_dict["precision"] = float(getattr(m, "precision", 0.0))
-        metrics_dict["recall"] = float(getattr(m, "recall", 0.0))
-        # If YOLO provides f1 directly, you can read it; otherwise compute harmonic mean:
-        if hasattr(m, "f1"):
-            metrics_dict["f1"] = float(m.f1)
-        else:
-            p = metrics_dict["precision"]
-            r = metrics_dict["recall"]
-            metrics_dict["f1"] = (2.0 * p * r / (p + r)) if (p + r) > 0 else 0.0
 
-        metrics_dict["map50"] = float(getattr(m, "map50", 0.0))
-        metrics_dict["map50_95"] = float(
-            getattr(m, "map", 0.0)
-        )  # also called mAP_0.5:0.95
-    else:
-        logger.warning("val_results has no 'metrics' attribute. Logging zeros.")
-        metrics_dict = {
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": 0.0,
-            "map50": 0.0,
-            "map50_95": 0.0,
-        }
+    metrics_dict = {}
+    # The actual attribute names can differ by version. Adjust as needed.
+    metrics_dict["precision"] = metrics.box.mp
+    metrics_dict["recall"] = metrics.box.mr
+
+    p = metrics_dict["precision"]
+    r = metrics_dict["recall"]
+    metrics_dict["f1"] = (2.0 * p * r / (p + r)) if (p + r) > 0 else 0.0
+
+    metrics_dict["map50"] = metrics.box.map50
+    metrics_dict["map50_95"] = metrics.box.map
 
     logger.info(f"Validation Metrics for {experiment_name}: {metrics_dict}")
     results_collector.append(
