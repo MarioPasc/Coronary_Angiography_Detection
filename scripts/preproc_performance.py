@@ -22,8 +22,6 @@ Dependencies / Project Structure:
       ICA_Detection/splits/holdout.py              (create_holdout_split)
       ica_yolo_detection/models/yolo.py            (Detection_YOLO)
       And the associated YOLOv8 libraries, etc.
-
-Author: ChatGPT
 """
 
 import os
