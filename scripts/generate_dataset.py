@@ -107,18 +107,6 @@ DatasetGenerator.apply_preprocessing_plan(
 )
 logger.info("Preprocessing completed.")
 
-output_yolo_dataset = os.path.join(OUTPUT_FOLDER, "YOLO_ICA_DETECTION")
-yaml_filename = "yolo_ica_detection.yaml"
-
-holdout_split(
-    output_ica_detection,
-    SPLITS_DICT,
-    output_yolo_dataset,
-    yaml_filename=yaml_filename,
-    splits_info_filename="splits_info.json",
-    include_datasets=["CADICA"],
-)
-
 
 def rename_labels_folder(base_output_dir: str) -> None:
     """
@@ -141,3 +129,15 @@ def rename_labels_folder(base_output_dir: str) -> None:
 
 
 rename_labels_folder(output_ica_detection)
+
+output_yolo_dataset = os.path.join(OUTPUT_FOLDER, "YOLO_ICA_DETECTION")
+yaml_filename = "yolo_ica_detection.yaml"
+
+holdout_split(
+    output_ica_detection,
+    SPLITS_DICT,
+    output_yolo_dataset,
+    yaml_filename=yaml_filename,
+    splits_info_filename="splits_info.json",
+    include_datasets=["CADICA"],
+)
