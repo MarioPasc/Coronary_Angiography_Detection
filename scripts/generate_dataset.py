@@ -27,7 +27,6 @@ SPLITS_DICT = {"train": 0.7, "val": 0.3, "test": 0.0}
 # Output folder to store the final combined, preprocessed dataset and splits
 OUTPUT_FOLDER = "/media/hddb/mario/data/COMBINED"
 OUTPUT_FOLDER = "/mnt/home/users/tic_163_uma/mpascual/fscratch/datasets"
-OUTPUT_FOLDER = "/home/mario/Python/Datasets/COMBINED"
 
 
 # Preprocessing steps to be performed on the datasets
