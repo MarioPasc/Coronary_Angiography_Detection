@@ -4,8 +4,6 @@ import os
 import sys
 import json
 import random
-import shutil
-import argparse
 import math
 from typing import Dict, List
 import numpy as np
@@ -72,7 +70,7 @@ def create_symbolic_links(
         os.symlink(src, dst)
 
 
-def create_holdout_split(
+def holdout_split(
     input_root: str,
     splits: Dict[str, float],
     output_root: str,
@@ -207,7 +205,7 @@ if __name__ == "__main__":
     output_root = "/media/hddb/mario/data/COMBINED/YOLO_ICA_DETECTION"
     yaml_filename = "yolo_ica_detection.yaml"
 
-    create_holdout_split(
+    holdout_split(
         input_root,
         splits_dict,
         output_root,

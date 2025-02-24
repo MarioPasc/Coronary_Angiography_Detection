@@ -36,7 +36,7 @@ from typing import List, Dict, Any
 
 try:
     from ICA_Detection.generator.generator import DatasetGenerator
-    from ICA_Detection.splits.holdout import create_holdout_split
+    from ICA_Detection.splits.holdout import holdout_split  # type: ignore
     from ICA_Detection.models.yolo import Detection_YOLO
 except ImportError as e:
     print(
@@ -273,7 +273,7 @@ def create_splits_and_train(
     logger.info(f"Creating holdout split for {datasets} at {yolo_detection_out}")
     remove_dir_if_exists(yolo_detection_out)  # Ensure a fresh start
 
-    create_holdout_split(
+    holdout_split(
         input_root=ica_detection_in,
         splits=SPLITS_DICT,
         output_root=yolo_detection_out,
