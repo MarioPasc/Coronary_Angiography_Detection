@@ -27,6 +27,8 @@ SPLITS_DICT = {"train": 0.7, "val": 0.3, "test": 0.0}
 # Output folder to store the final combined, preprocessed dataset and splits
 OUTPUT_FOLDER = "/media/hddb/mario/data/COMBINED"
 OUTPUT_FOLDER = "/mnt/home/users/tic_163_uma/mpascual/fscratch/datasets"
+OUTPUT_FOLDER = "/home/mario/Python/Datasets/COMBINED"
+
 
 # Preprocessing steps to be performed on the datasets
 PLAN_STEPS = {
@@ -130,6 +132,9 @@ def rename_labels_folder(base_output_dir: str) -> None:
 
 rename_labels_folder(output_ica_detection)
 
+shutil.move(src=os.path.join(output_ica_detection, "processed.json"),
+            dst=os.path.join(output_ica_detection, ".."))
+
 output_yolo_dataset = os.path.join(OUTPUT_FOLDER, "YOLO_ICA_DETECTION")
 yaml_filename = "yolo_ica_detection.yaml"
 
@@ -139,5 +144,5 @@ holdout_split(
     output_yolo_dataset,
     yaml_filename=yaml_filename,
     splits_info_filename="splits_info.json",
-    include_datasets=["CADICA"],
+    include_datasets=["ARCADE"],
 )
