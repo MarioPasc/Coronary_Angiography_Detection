@@ -3,6 +3,7 @@
 import json
 import os
 from typing import Any, Dict, List
+import shutil
 
 # Import the integration function from the integration module.
 from ICA_Detection.integration.integrate import integrate_datasets
@@ -15,8 +16,8 @@ from ICA_Detection.preprocessing.preprocessing import process_images
 
 # Import Holdout functions
 
-from ICA_Detection.splits.holdout.holdout_patient import holdout
-from ICA_Detection.splits.holdout.apply_holdout_yolo import apply_holdout_yolo
+from ICA_Detection.splits.holdout.holdout_global import holdout
+from ICA_Detection.splits.holdout.holdout_yolo import apply_holdout_yolo
 
 
 class DatasetGenerator:
@@ -98,6 +99,56 @@ class DatasetGenerator:
         """
         process_images(planned_json_path, output_folder, steps_order)
 
+    @staticmethod
+    def execute_holdout_pipeline(
+        root_folder: str,
+        splits_dict: Dict[str, float],
+        output_splits_json: str,
+        include_datasets: List[str],
+    ):
+        """
+        High-level pipeline to:
+        1) Perform a one-time holdout on images_folder => produce splits_info.json.
+        2) Apply that split to create YOLO subfolders (train/val/test).
+        3) Apply that same split to create PyTorch subfolders for Faster R-CNN, RetinaNet, etc.
+
+        :param root_folder: High-level folder for reference (if needed).
+        :param splits_dict: e.g. {"train": 0.7, "val": 0.3, "test": 0.0}
+        :param output_splits_json: e.g. "splits_info.json"
+        :param include_datasets: Filter list, e.g. ["CADICA"]
+        """
+
+        # 1) Generate splits_info.json
+        #    (This does NOT create symlinks or subfolders. It just partitions patients.)
+        print("Performing holdout to generate splits_info.json...")
+        # holdout(...) is a function that groups by patient,
+        # randomly assigns them to train/val/test, and saves a JSON structure.
+
+        images_folder = os.path.join(root_folder, "images")
+
+        holdout(
+            images_folder=images_folder,
+            splits=splits_dict,
+            output_json_path=output_splits_json,
+            include_datasets=include_datasets,
+        )
+        # 2) Apply YOLO holdout
+        #    This reads the splits_info.json and creates subfolders: images/train, images/val, ...
+        # apply_holdout_yolo(splits_info_json, input_root, output_root)
+        dataset_folder = os.path.join(root_folder, "datasets")
+        if "yolo" in os.listdir(path=dataset_folder):
+            print("Applying YOLO holdout splits...")
+            apply_holdout_yolo(
+                splits_info_path=output_splits_json,
+                input_root=os.path.join(
+                    dataset_folder, "yolo"
+                ),  # contains images/ and labels/ in YOLO format
+                output_root=os.path.join(
+                    dataset_folder, "yolo"
+                ),  # e.g. "datasets/yolo" or similar
+                yaml_filename="yolo_ica_detection.yaml",
+            )
+
 
 if __name__ == "__main__":
     # --- Integration Step ---
@@ -108,6 +159,8 @@ if __name__ == "__main__":
 
     # datasets_to_process = ["CADICA", "ARCADE", "KEMEROVO"]
     datasets_to_process = ["CADICA"]
+
+    splits_dict = {"train": 0.7, "val": 0.3, "test": 0.0}
 
     output_base_folder = "/media/hddb/mario/data/COMBINED"
     output_base_folder = "/home/mariopasc/Python/Datasets/COMBINED"
@@ -179,3 +232,30 @@ if __name__ == "__main__":
         output_planned_json, output_ica_detection, steps_order
     )
     print("Preprocessing completed.")
+
+    # Move JSONs (Cleanup stage)
+
+    json_folder = os.path.join(output_ica_detection, "json_metadata")
+    os.makedirs(json_folder, exist_ok=True)
+
+    json_files = [
+        os.path.join(output_base_folder, file)
+        for file in os.listdir(output_base_folder)
+        if file.endswith(".json")
+    ]
+    json_files.append(os.path.join(output_ica_detection, "processed.json"))
+
+    for file in json_files:
+        shutil.move(src=file, dst=os.path.join(json_folder, os.path.basename(file)))
+
+    print("Applying holdout to non-PyTorch datasets")
+    print(
+        "[INFO] PyTorch datasets will be divided just like the other datasets\nbut they return DataLoader objects, so they must be splitted during trainig."
+    )
+
+    DatasetGenerator.execute_holdout_pipeline(
+        root_folder=output_ica_detection,
+        splits_dict=splits_dict,
+        output_splits_json=os.path.join(json_folder, "splits.json"),
+        include_datasets=datasets_to_process,
+    )
