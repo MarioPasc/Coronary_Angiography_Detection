@@ -4,7 +4,6 @@ import json
 from typing import Dict, Any
 
 from ICA_Detection.generator.generator import DatasetGenerator
-from ICA_Detection.splits.holdout.holdout_patient import holdout_split  # type: ignore
 
 import logging
 import os

@@ -1,8 +1,6 @@
 import os
 import json
 import sys
-from typing import Dict
-import math
 
 
 def create_symbolic_links(file_list, src_folder, dest_folder):
@@ -109,11 +107,11 @@ def apply_holdout_yolo(
                 #   - We know the patient_key is the first part of the filename up to (and including)
                 #     the patient, so let's just do a partial match search.
                 #   - Real code might want a precomputed dictionary from holdout(...).
-                for f in os.listdir(in_images):
-                    if f.startswith(patient_key + "_"):
+                for f in os.listdir(in_images):  # type: ignore
+                    if f.startswith(patient_key + "_"):  # type: ignore
                         # This belongs to the current patient.
                         # Symlink the image
-                        image_src = os.path.join(in_images, f)
+                        image_src = os.path.join(in_images, f)  # type: ignore
                         if os.path.isfile(image_src):
                             # Output path
                             image_dst_dir = split_img_out
@@ -121,7 +119,7 @@ def apply_holdout_yolo(
                             create_symbolic_links([f], in_images, image_dst_dir)
 
                             # For YOLO labels, we assume same base name, .txt extension
-                            base_name, _ = os.path.splitext(f)
+                            base_name, _ = os.path.splitext(f)  # type: ignore
                             label_file = base_name + ".txt"
                             label_src = os.path.join(in_labels, label_file)
                             if os.path.isfile(label_src):

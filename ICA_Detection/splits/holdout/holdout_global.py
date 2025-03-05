@@ -133,8 +133,8 @@ def holdout(
             splits_info[split_name].setdefault(dataset_prefix, []).append(patient_key)
 
     # 6) Save splits_info JSON
-    with open(output_json_path, "w") as f:
-        json.dump(splits_info, f, indent=2)
+    with open(output_json_path, "w") as f:  # type: ignore
+        json.dump(splits_info, f, indent=2)  # type: ignore
 
     print(f"Splits info JSON saved to {output_json_path}")
 

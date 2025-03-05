@@ -36,7 +36,6 @@ from typing import List, Dict, Any
 
 try:
     from ICA_Detection.generator.generator import DatasetGenerator
-    from ICA_Detection.splits.holdout.holdout_patient import holdout_split  # type: ignore
     from ICA_Detection.models.detection.yolo import Detection_YOLO
 except ImportError as e:
     print(

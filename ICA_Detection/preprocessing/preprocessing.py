@@ -240,7 +240,6 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
     # We only need one entry to check for the datasets, since all the images are going to
     # be in all the datasets, therefore the dataset_formats flag is present in all JSON entries
     config = entry.get("preprocessing_plan", {})
-    print(config)
     generate_datasets(root_folder=out_dir, config=config, json_path=processed_json_path)
 
 

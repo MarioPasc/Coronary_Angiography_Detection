@@ -13,6 +13,11 @@ from ICA_Detection.preprocessing.planner import create_preprocessing_plan
 # Import the process_images function from the preprocessing module.
 from ICA_Detection.preprocessing.preprocessing import process_images
 
+# Import Holdout functions
+
+from ICA_Detection.splits.holdout.holdout_patient import holdout
+from ICA_Detection.splits.holdout.apply_holdout_yolo import apply_holdout_yolo
+
 
 class DatasetGenerator:
     """
