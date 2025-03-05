@@ -46,6 +46,7 @@ PLAN_STEPS = {
     },
     "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
     "labels_formats": {"YOLO": True},
+
 }
 
 # ==========================

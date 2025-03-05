@@ -105,19 +105,21 @@ if __name__ == "__main__":
     datasets_to_process = ["CADICA"]
 
     output_base_folder = "/media/hddb/mario/data/COMBINED"
+    output_base_folder = "/home/mario/Python/Datasets/COMBINED"
     os.makedirs(output_base_folder, exist_ok=True)
     output_combined_json = os.path.join(
         output_base_folder, "combined_standardized.json"
     )
     output_planned_json = os.path.join(output_base_folder, "planned_standardized.json")
 
-    root_dirs_local = {
-        "CADICA": "/home/mario/Python/Datasets",
-        "ARCADE": "/home/mario/Python/Datasets",
-        "KEMEROVO": "/home/mario/Python/Datasets",
+    root_dirs = {
+        "CADICA": "/home/mario/Python/Datasets/COMBINED",
+        "ARCADE": "/home/mario/Python/Datasets/COMBINED",
+        "KEMEROVO": "/home/mario/Python/Datasets/COMBINED",
     }
 
-    root_dirs = {
+    
+    root_dirs_icai = {
         "CADICA": "/media/hddb/mario/data/COMBINED",
         "ARCADE": "/media/hddb/mario/data/COMBINED",
         "KEMEROVO": "/media/hddb/mario/data/COMBINED",
@@ -143,15 +145,15 @@ if __name__ == "__main__":
             "method": "bilinear",
         },
         "dtype_standarization": {"desired_dtype": "uint8"},
-        "format_standarization": {"desired_format": "png"},
-        "clahe": {
-            "window_size": 5,
-            "sigma": 1.0,
-            "clipLimit": 3.0,
-            "tileGridSize": (8, 8),
-        },
+        #"format_standarization": {"desired_format": "png"},
+        #"clahe": {
+        #    "window_size": 5,
+        #    "sigma": 1.0,
+        #    "clipLimit": 3.0,
+        #    "tileGridSize": (8, 8),
+        #},
         "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
-        "labels_formats": {"YOLO": True},  # New key for additional label generation.
+        "dataset_formats": {"YOLO": True},  # New key for additional label generation.
     }
     print("Creating preprocessing plan...")
     planned_data = DatasetGenerator.create_preprocessing_plan(data, plan_steps)

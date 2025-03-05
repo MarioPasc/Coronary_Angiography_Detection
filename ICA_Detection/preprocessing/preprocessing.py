@@ -4,8 +4,9 @@ import os
 import cv2
 import json
 import shutil
-from typing import List
+from typing import List, Dict, Any
 from tqdm import tqdm  # type: ignore
+from pathlib import Path
 
 # Import our tool functions.
 
@@ -15,7 +16,7 @@ from ICA_Detection.tools.resolution import apply_resolution
 from ICA_Detection.tools.fse import filtering_smoothing_equalization
 from ICA_Detection.tools.clahe import clahe_enhancement
 from ICA_Detection.tools.bbox_translation import common_to_yolo, rescale_bbox
-
+from ICA_Detection.tools.dataset_conversions import construct_yolo, construct_retinanet
 
 def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None:
     """
@@ -48,7 +49,7 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
     """
     # Create output structure
     images_out = os.path.join(out_dir, "images")
-    labels_out = os.path.join(out_dir, "labels")
+    labels_out = os.path.join(out_dir, "labels_pascal_voc")
     labels_yolo_out = os.path.join(out_dir, "labels_yolo")
     os.makedirs(images_out, exist_ok=True)
     os.makedirs(labels_out, exist_ok=True)
@@ -205,7 +206,7 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
 
             # --- Additional Label Formats ---
             labels_formats = entry.get("preprocessing_plan", {}).get(
-                "labels_formats", {}
+                "dataset_formats", {}
             )
             if labels_formats.get("YOLO", False):
                 label_yolo_out_path = os.path.join(labels_yolo_out, label_filename)
@@ -230,7 +231,57 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
         json.dump(data, f, indent=2)
 
     print(f"All images processed. Updated JSON saved to: {processed_json_path}")
+    
+    # We only need one entry to check for the datasets, since all the images are going to 
+    # be in all the datasets, therefore the dataset_formats flag is present in all JSON entries
+    config = entry.get("preprocessing_plan", {})
+    print(config)
+    generate_datasets(root_folder=out_dir, config=config)    
 
+
+def generate_datasets(root_folder: str, config: Dict[str, Any]) -> None:
+    """
+    Look at config['dataset_formats'] to determine which dataset
+    formats should be generated. Then call the corresponding function
+    from dataset_conversions.
+
+    :param root_folder: Path to the root folder that contains:
+                        images/, labels_pascal_voc/, labels_yolo/, processed.json, etc.
+    :param config: A dictionary that has at least a 'dataset_formats' key
+                   indicating which dataset formats to create:
+                     {
+                       "dataset_formats": {
+                         "YOLO": True,
+                         "RetinaNet": False,
+                         "FasterRCNN": True,
+                         ...
+                       }
+                     }
+    """
+    dataset_formats = config.get("dataset_formats", {})
+
+    # Create a datasets/ subfolder if needed
+    root_path = Path(root_folder).resolve()
+    datasets_path = root_path / "datasets"
+    datasets_path.mkdir(exist_ok=True)
+    
+    print(f"Building datasets: ")
+    print(dataset_formats)
+
+    # For each format that is True, call the corresponding constructor
+    if dataset_formats.get("YOLO", False):
+        construct_yolo(root_path)
+        
+        # Cleanup
+        shutil.rmtree(os.path.join(root_path, "labels_yolo"))
+
+
+    if dataset_formats.get("RetinaNet", False):
+        construct_retinanet(root_path)
+
+    # Add more checks for other formats as you implement them
+    # if dataset_formats.get("FasterRCNN", False):
+    #     construct_faster_rcnn(root_path)
 
 if __name__ == "__main__":
 
@@ -244,7 +295,7 @@ if __name__ == "__main__":
         },
         "clahe":  {"window_size": 5, "sigma": 1.0, "clipLimit": 2.0, "tileGridSize": (8,8)},
         "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
-        "labels_formats": {"YOLO": True},
+        "dataset_formats": {"YOLO": True},
     }
 
     output_base_folder = "/home/mariopasc/Python/Datasets/COMBINED"

@@ -11,6 +11,7 @@
 
 - Revisar módulo Swim-Transformer para la selección de frames
 - Revisar la disponibilidad de Efficient-Net, MAMBA-YOLO para realizar detección
+- La idea principal es entrenar un modelo de segmentación con el conjunto ARCADE, con la finalidad de realizar una segmentación de las arterias. Este modelo entrenado con ARCADE luego podrá generar máscaras para las arterias en CADICA o KEMEROVO. Luego, se propondrá un modelo de detección que realice detección en la imagen cruda, y la máscara de segmentación extraída. Se comprobará dónde se realiza la detección mejor.
 
 **Completado:**
 

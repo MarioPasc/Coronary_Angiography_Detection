@@ -109,11 +109,11 @@ def create_preprocessing_plan(
             }
 
         # Ensure a labels_formats entry exists.
-        if "labels_formats" in plan_steps:
-            plan["labels_formats"] = plan_steps["labels_formats"]
+        if "dataset_formats" in plan_steps:
+            plan["dataset_formats"] = plan_steps["dataset_formats"]
         else:
             # Default: produce YOLO labels.
-            plan["labels_formats"] = {"YOLO": True}
+            plan["dataset_formats"] = {"YOLO": True}
 
         if plan:
             entry["preprocessing_plan"] = plan
@@ -139,7 +139,7 @@ if __name__ == "__main__":
         "format_standarization": {"desired_format": "png"},
         "clahe":  {"window_size": 5, "sigma": 1.0, "clipLimit": 2.0, "tileGridSize": (8,8)},
         "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
-        "labels_formats": {"YOLO": True},  # New key for additional label generation.
+        "dataset_formats": {"YOLO": True},  # New key for additional label generation.
     }
     planned_data = create_preprocessing_plan(data, plan_steps)
 
