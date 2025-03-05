@@ -1,7 +1,9 @@
 import os
 import shutil
 from pathlib import Path
-from typing import Union
+from typing import Union, Any, Dict
+import json
+
 
 def construct_yolo(root_folder: Union[str, Path]) -> None:
     """
@@ -41,28 +43,51 @@ def construct_yolo(root_folder: Union[str, Path]) -> None:
                 shutil.copy(label_file, yolo_labels / label_file.name)
 
 
-def construct_retinanet(root_folder: Union[str, Path]) -> None:
+def construct_pytorch_compatible(
+    json_path: Union[str, Path], root_folder: Union[str, Path], dataset_name: str
+) -> str:
     """
-    Example function (stub) for constructing a RetinaNet-compatible dataset.
-    Adjust the logic as needed for your specific format requirements.
+    Creates a RetinaNet-compatible dataset folder. It symlinks images into
+    output_dir/images, and writes a new JSON file with updated image paths.
 
-    :param root_folder: Path to the root folder containing images/, labels_pascal_voc/, etc.
+    :param json_path: Path to the original processed.json
+    :param output_dir: Folder where the new dataset structure will be created
+    :return: Path to the newly created JSON annotation file
     """
     root_path = Path(root_folder).resolve()
-    retina_path = root_path / "datasets" / "retina_net"
-    retina_images = retina_path / "images"
-    retina_labels = retina_path / "labels"
+    datasets_path = root_path / "datasets"
+    datasets_path.mkdir(parents=True, exist_ok=True)
 
-    # Ensure the retina_net/ directory structure exists
-    retina_images.mkdir(parents=True, exist_ok=True)
-    retina_labels.mkdir(parents=True, exist_ok=True)
+    dataset_name = dataset_name.strip("_")
 
-    # Here you would implement:
-    #   - Copying/Linking images
-    #   - Copying annotations from Pascal VOC or another source
-    #   - Possibly transforming annotation formats
-    # For now, it’s just a placeholder
-    pass
+    output_dir = datasets_path / dataset_name
+    os.makedirs(output_dir, exist_ok=True)
 
+    images_dir = os.path.join(output_dir, "images")
+    os.makedirs(images_dir, exist_ok=True)
 
-# Add more functions construct_faster_rcnn, construct_whatever(), etc.
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    new_data: Dict[str, Any] = {"Standard_dataset": {}}
+
+    for key, item in data["Standard_dataset"].items():
+        original_img_path = item["image"]["dataset_route"]
+        filename = os.path.basename(original_img_path)
+        symlink_path = os.path.join(images_dir, filename)
+
+        if not os.path.exists(symlink_path):
+            os.symlink(original_img_path, symlink_path)
+
+        # Copy item data, updating the "dataset_route" to the new symlink path
+        new_item = dict(item)
+        new_item["image"] = dict(item["image"])
+        new_item["image"]["dataset_route"] = symlink_path
+
+        new_data["Standard_dataset"][key] = new_item
+
+    new_json_path = os.path.join(output_dir, f"{dataset_name}_annotations.json")
+    with open(new_json_path, "w") as out_f:
+        json.dump(new_data, out_f, indent=2)
+
+    return new_json_path

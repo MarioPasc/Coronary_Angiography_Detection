@@ -16,7 +16,11 @@ from ICA_Detection.tools.resolution import apply_resolution
 from ICA_Detection.tools.fse import filtering_smoothing_equalization
 from ICA_Detection.tools.clahe import clahe_enhancement
 from ICA_Detection.tools.bbox_translation import common_to_yolo, rescale_bbox
-from ICA_Detection.tools.dataset_conversions import construct_yolo, construct_retinanet
+from ICA_Detection.tools.dataset_conversions import (
+    construct_yolo,
+    construct_pytorch_compatible,
+)
+
 
 def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None:
     """
@@ -142,20 +146,19 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             # Update image info with new resolution
             img_info["width"] = desired_X
             img_info["height"] = desired_Y
-            
+
             # Update the bounding box coordinates in the JSON (keeping Pascal VOC format)
             annotations = entry.get("annotations", {})
             for key, bbox in annotations.items():
                 if key == "name":
                     continue
-                updated_bbox = rescale_bbox(bbox, old_width, old_height, desired_X, desired_Y)
+                updated_bbox = rescale_bbox(
+                    bbox, old_width, old_height, desired_X, desired_Y
+                )
                 annotations[key] = updated_bbox
 
         # --- CLAHE ---
-        if (
-            "clahe" in entry.get("clahe", {})
-            and "clahe" in steps_order
-        ):
+        if "clahe" in entry.get("clahe", {}) and "clahe" in steps_order:
             fse_plan = entry["preprocessing_plan"]["clahe"]
             window_size = fse_plan.get("window_size")
             sigma = fse_plan.get("sigma")
@@ -165,7 +168,9 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             if img is None:
                 print(f"Error reading image for FSE for {uid}.")
                 continue
-            enhanced = clahe_enhancement(img, window_size, sigma, clipLimit, tileGridSize)
+            enhanced = clahe_enhancement(
+                img, window_size, sigma, clipLimit, tileGridSize
+            )
             cv2.imwrite(current_img_path, enhanced)
 
         # --- Filtering Smoothing Equalization ---
@@ -231,15 +236,15 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
         json.dump(data, f, indent=2)
 
     print(f"All images processed. Updated JSON saved to: {processed_json_path}")
-    
-    # We only need one entry to check for the datasets, since all the images are going to 
+
+    # We only need one entry to check for the datasets, since all the images are going to
     # be in all the datasets, therefore the dataset_formats flag is present in all JSON entries
     config = entry.get("preprocessing_plan", {})
     print(config)
-    generate_datasets(root_folder=out_dir, config=config)    
+    generate_datasets(root_folder=out_dir, config=config, json_path=processed_json_path)
 
 
-def generate_datasets(root_folder: str, config: Dict[str, Any]) -> None:
+def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str) -> None:
     """
     Look at config['dataset_formats'] to determine which dataset
     formats should be generated. Then call the corresponding function
@@ -264,24 +269,27 @@ def generate_datasets(root_folder: str, config: Dict[str, Any]) -> None:
     root_path = Path(root_folder).resolve()
     datasets_path = root_path / "datasets"
     datasets_path.mkdir(exist_ok=True)
-    
+
     print(f"Building datasets: ")
     print(dataset_formats)
 
     # For each format that is True, call the corresponding constructor
     if dataset_formats.get("YOLO", False):
         construct_yolo(root_path)
-        
+
         # Cleanup
         shutil.rmtree(os.path.join(root_path, "labels_yolo"))
 
-
     if dataset_formats.get("RetinaNet", False):
-        construct_retinanet(root_path)
+        construct_pytorch_compatible(
+            json_path=json_path, root_folder=root_path, dataset_name="retinanet"
+        )
 
-    # Add more checks for other formats as you implement them
-    # if dataset_formats.get("FasterRCNN", False):
-    #     construct_faster_rcnn(root_path)
+    if dataset_formats.get("FasterRCNN", False):
+        construct_pytorch_compatible(
+            json_path=json_path, root_folder=root_path, dataset_name="fasterrcnn"
+        )
+
 
 if __name__ == "__main__":
 
@@ -293,7 +301,12 @@ if __name__ == "__main__":
             "desired_Y": 512,
             "method": "bilinear",
         },
-        "clahe":  {"window_size": 5, "sigma": 1.0, "clipLimit": 2.0, "tileGridSize": (8,8)},
+        "clahe": {
+            "window_size": 5,
+            "sigma": 1.0,
+            "clipLimit": 2.0,
+            "tileGridSize": (8, 8),
+        },
         "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
         "dataset_formats": {"YOLO": True},
     }

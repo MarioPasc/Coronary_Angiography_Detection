@@ -36,8 +36,8 @@ from typing import List, Dict, Any
 
 try:
     from ICA_Detection.generator.generator import DatasetGenerator
-    from ICA_Detection.splits.holdout import holdout_split  # type: ignore
-    from ICA_Detection.models.yolo import Detection_YOLO
+    from ICA_Detection.splits.holdout.holdout_patient import holdout_split  # type: ignore
+    from ICA_Detection.models.detection.yolo import Detection_YOLO
 except ImportError as e:
     print(
         "Make sure to adjust the import statements to match your project's folder structure."

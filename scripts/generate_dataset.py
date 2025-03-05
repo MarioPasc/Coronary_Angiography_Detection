@@ -4,7 +4,7 @@ import json
 from typing import Dict, Any
 
 from ICA_Detection.generator.generator import DatasetGenerator
-from ICA_Detection.splits.holdout import holdout_split  # type: ignore
+from ICA_Detection.splits.holdout.holdout_patient import holdout_split  # type: ignore
 
 import logging
 import os
@@ -46,7 +46,6 @@ PLAN_STEPS = {
     },
     "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
     "labels_formats": {"YOLO": True},
-
 }
 
 # ==========================
@@ -132,8 +131,10 @@ def rename_labels_folder(base_output_dir: str) -> None:
 
 rename_labels_folder(output_ica_detection)
 
-shutil.move(src=os.path.join(output_ica_detection, "processed.json"),
-            dst=os.path.join(output_ica_detection, ".."))
+shutil.move(
+    src=os.path.join(output_ica_detection, "processed.json"),
+    dst=os.path.join(output_ica_detection, ".."),
+)
 
 output_yolo_dataset = os.path.join(OUTPUT_FOLDER, "YOLO_ICA_DETECTION")
 yaml_filename = "yolo_ica_detection.yaml"

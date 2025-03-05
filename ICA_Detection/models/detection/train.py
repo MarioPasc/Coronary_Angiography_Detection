@@ -6,13 +6,13 @@ from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm  # type: ignore
 
 # Example references to your local modules
-from ICA_Detection.models.faster_rcnn import (
+from ICA_Detection.models.detection.faster_rcnn import (
     create_frcnn_dataset,
     FasterRCNNDataset,
     get_fasterrcnn_model,
     basic_transform,
 )
-from ICA_Detection.models.retinanet import (
+from ICA_Detection.models.detection.retinanet import (
     create_retinanet_dataset,
     RetinaNetDataset,
     get_retinanet_model,
