@@ -38,13 +38,14 @@ class SplitCocoDataset(CocoDetection):
         return img, target
 
     def convert_coco_annotations(self, anns, real_idx):
-        """
-        Convert COCO-style annotations into a PyTorch-compatible format.
-        """
+        # Retrieve the actual image info from self.coco.dataset["images"]
+        image_info = self.coco.dataset["images"][real_idx]
+        actual_image_id = image_info["id"]
+
         target = {
             "boxes": [],
             "labels": [],
-            "image_id": torch.tensor([real_idx], dtype=torch.int64),
+            "image_id": torch.tensor([actual_image_id], dtype=torch.int64),
             "area": [],
             "iscrowd": [],
         }
