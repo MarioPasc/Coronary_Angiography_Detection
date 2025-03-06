@@ -9,6 +9,8 @@ from . import utils
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
+DEBUG: bool = False
+
 
 class CocoEvaluator:
     def __init__(self, coco_gt, iou_types):
@@ -33,6 +35,19 @@ class CocoEvaluator:
 
         for iou_type in self.iou_types:
             results = self.prepare(predictions, iou_type)
+
+            if DEBUG:
+                # [DEBUG]
+                annsImgIds = (
+                    set([res["image_id"] for res in results]) if results else set()
+                )
+                gtImgIds = set(self.coco_gt.getImgIds())
+                print(f"[DEBUG] Prediction image IDs: {annsImgIds}")
+                print(f"[DEBUG] Ground truth image IDs: {gtImgIds}")
+                print(
+                    f"[DEBUG] Difference: {annsImgIds - gtImgIds}"
+                )  # Shows IDs in predictions but not in ground truth
+
             with redirect_stdout(io.StringIO()):
                 coco_dt = COCO.loadRes(self.coco_gt, results) if results else COCO()
             coco_eval = self.coco_eval[iou_type]

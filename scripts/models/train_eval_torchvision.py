@@ -1,6 +1,5 @@
 import os
 import csv
-import time
 import argparse
 import torch
 import torch.optim as optim

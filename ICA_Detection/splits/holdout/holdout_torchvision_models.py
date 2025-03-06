@@ -6,6 +6,8 @@ import re
 from torch.utils.data import DataLoader
 import torch
 
+DEBUG: bool = False
+
 
 class SplitCocoDataset(CocoDetection):
     """
@@ -32,6 +34,15 @@ class SplitCocoDataset(CocoDetection):
         real_idx = self.keep_indices[idx]
         img, anns = super().__getitem__(real_idx)  # anns is a list of dicts
 
+        if DEBUG:
+            # Retrieve the actual image info from self.coco.dataset["images"]
+            image_info = self.coco.dataset["images"][real_idx]
+            actual_image_id = image_info["id"]
+
+            print(
+                f"[DEBUG] Dataset __getitem__: idx={idx}, real_idx={real_idx}, image_id={actual_image_id}"
+            )
+
         # Convert annotations to PyTorch-friendly format
         target = self.convert_coco_annotations(anns, real_idx)
 
@@ -45,7 +56,7 @@ class SplitCocoDataset(CocoDetection):
         target = {
             "boxes": [],
             "labels": [],
-            "image_id": torch.tensor([actual_image_id], dtype=torch.int64),
+            "image_id": actual_image_id,
             "area": [],
             "iscrowd": [],
         }
@@ -204,5 +215,10 @@ def holdout_coco(
         test_loader = DataLoader(
             test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn
         )
+
+    if DEBUG:
+        print(
+            f"[DEBUG] Validation set image IDs: {list(val_dataset.image_ids_set)[:10]}..."
+        )  # Just show first 10
 
     return train_loader, val_loader, test_loader

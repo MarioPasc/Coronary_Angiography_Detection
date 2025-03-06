@@ -8,6 +8,8 @@ from . import utils
 from .coco_eval import CocoEvaluator
 from .coco_utils import get_coco_api_from_dataset
 
+DEBUG: bool = False
+
 
 def train_one_epoch(
     model, optimizer, data_loader, device, epoch, print_freq, scaler=None
@@ -102,12 +104,29 @@ def evaluate(model, data_loader, device):
         model_time = time.time()
         outputs = model(images)
 
+        if DEBUG:
+            # After the outputs = model([img.to(device) for img in images]) line
+            for i, (img_id, pred) in enumerate(zip(targets, outputs)):
+                print(
+                    f"[DEBUG] Model prediction: img_id={img_id['image_id'].item()}, boxes={len(pred['boxes'])}"
+                )
+
         outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
         model_time = time.time() - model_time
 
         res = {target["image_id"]: output for target, output in zip(targets, outputs)}
         evaluator_time = time.time()
+
+        if DEBUG:
+            print(f"Sending {len(res)} results to COCO evaluator")
+            # Print the first few results properly
+            if res:
+                first_key = list(res.keys())[0]
+                print(f"Sample result key: {first_key}")
+                print(f"Sample result value: {res[first_key]}")
+
         coco_evaluator.update(res)
+
         evaluator_time = time.time() - evaluator_time
         metric_logger.update(model_time=model_time, evaluator_time=evaluator_time)
 
