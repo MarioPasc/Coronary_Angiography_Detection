@@ -63,8 +63,11 @@ def construct_pytorch_compatible(
     output_dir = datasets_path / dataset_name
     os.makedirs(output_dir, exist_ok=True)
 
+    # Avoid creating unnecessary symlinks
+    """
     images_dir = os.path.join(output_dir, "images")
     os.makedirs(images_dir, exist_ok=True)
+    """
 
     with open(json_path, "r") as f:
         data = json.load(f)
@@ -73,16 +76,19 @@ def construct_pytorch_compatible(
 
     for key, item in data["Standard_dataset"].items():
         original_img_path = item["image"]["dataset_route"]
+
+        # Avoid creating unnecessary symlinks
+        """
         filename = os.path.basename(original_img_path)
         symlink_path = os.path.join(images_dir, filename)
 
         if not os.path.exists(symlink_path):
             os.symlink(original_img_path, symlink_path)
-
+        """
         # Copy item data, updating the "dataset_route" to the new symlink path
         new_item = dict(item)
         new_item["image"] = dict(item["image"])
-        new_item["image"]["dataset_route"] = symlink_path
+        new_item["image"]["dataset_route"] = original_img_path
 
         new_data["Standard_dataset"][key] = new_item
 

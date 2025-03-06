@@ -90,7 +90,7 @@ def _get_patient_key(item_id: str) -> str:
     return f"{dataset_prefix}_{patient_prefix}"
 
 
-def holdout_retinanet(
+def holdout_fasterrcnn(
     retinanet_json_path: str,
     splits_info_path: str,
     transforms=None,

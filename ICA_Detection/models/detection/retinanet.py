@@ -1,149 +1,95 @@
-import os
-import json
 import torch
-from torch.utils.data import Dataset
-from PIL import Image
-
-import torchvision  # type: ignore
-from torchvision.models.detection.retinanet import RetinaNetHead  # type: ignore
-from torchvision.transforms import functional as F  # type: ignore
-
-##############################################################################
-#  A) Function to create a local dataset folder for RetinaNet
-##############################################################################
+import torchvision
+from torchvision.models.detection import RetinaNet
+from torchvision.models.detection.anchor_utils import AnchorGenerator
+from torchvision.ops import FeaturePyramidNetwork
 
 
-def create_retinanet_dataset(json_path, output_dir):
+def get_retina_net_model(
+    pretrained=True, num_classes=2
+):  # 2 classes: background and lesion
     """
-    Similar to create_frcnn_dataset but for RetinaNet.
-    Symlinks images into output_dir, writes new JSON with updated paths.
+    Creates and returns a RetinaNet model for lesion detection.
+
+    Args:
+        pretrained (bool): Whether to use a model pre-trained on COCO dataset
+        num_classes (int): Number of classes (including background)
+
+    Returns:
+        RetinaNet: The model ready for training/inference
     """
-    os.makedirs(output_dir, exist_ok=True)
-    images_dir = os.path.join(output_dir, "images")
-    os.makedirs(images_dir, exist_ok=True)
+    # Load a pre-trained model
+    if pretrained:
+        # Start with a pre-trained model
+        model = torchvision.models.detection.retinanet_resnet50_fpn(pretrained=True)
 
-    with open(json_path, "r") as f:
-        data = json.load(f)
+        # Replace the classifier with a new one for our number of classes
+        in_features = model.head.classification_head.conv[0].in_channels
+        num_anchors = model.head.classification_head.num_anchors
 
-    new_data = {"Standard_dataset": {}}
+        # Create new classification head
+        model.head.classification_head.num_classes = num_classes
+        model.head.classification_head.conv = torch.nn.Sequential(
+            torch.nn.Conv2d(
+                in_features, in_features, kernel_size=3, stride=1, padding=1
+            ),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(
+                in_features, in_features, kernel_size=3, stride=1, padding=1
+            ),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(
+                in_features, in_features, kernel_size=3, stride=1, padding=1
+            ),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(
+                in_features, in_features, kernel_size=3, stride=1, padding=1
+            ),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(
+                in_features,
+                num_anchors * num_classes,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+        )
+    else:
+        # Start with a model from scratch
+        # Load backbone
+        backbone = torchvision.models.resnet50(pretrained=True)
 
-    for key, item in data["Standard_dataset"].items():
-        original_img_path = item["image"]["dataset_route"]
-        filename = os.path.basename(original_img_path)
-        symlink_path = os.path.join(images_dir, filename)
+        # Remove the last layers as we don't need them
+        modules = list(backbone.children())[:-2]
+        backbone = torch.nn.Sequential(*modules)
 
-        if not os.path.exists(symlink_path):
-            os.symlink(original_img_path, symlink_path)
+        # FPN needs to know the number of output channels in the backbone
+        backbone_out_channels = 2048
 
-        new_item = dict(item)
-        new_item["image"] = dict(item["image"])
-        new_item["image"]["dataset_route"] = symlink_path
-        new_data["Standard_dataset"][key] = new_item
+        # Define Feature Pyramid Network
+        fpn = FeaturePyramidNetwork(
+            in_channels_list=[256, 512, 1024, 2048], out_channels=256
+        )
 
-    new_json_path = os.path.join(output_dir, "retinanet_annotations.json")
-    with open(new_json_path, "w") as out_f:
-        json.dump(new_data, out_f, indent=2)
+        # Combine backbone and FPN
+        backbone_with_fpn = torchvision.models.detection.backbone_utils.BackboneWithFPN(
+            backbone,
+            return_layers={"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"},
+            in_channels_list=[256, 512, 1024, 2048],
+            out_channels=256,
+        )
 
-    return new_json_path
+        # Define anchor generator
+        anchor_generator = AnchorGenerator(
+            sizes=((32, 64, 128, 256, 512),),  # Different sizes of anchors
+            aspect_ratios=((0.5, 1.0, 2.0),),  # Different aspect ratios
+        )
 
+        # Create the model
+        model = RetinaNet(
+            backbone=backbone_with_fpn,
+            num_classes=num_classes,
+            anchor_generator=anchor_generator,
+        )
 
-##############################################################################
-#  B) Custom Dataset for RetinaNet (no augmentation, label always '1')
-##############################################################################
-
-
-class RetinaNetDataset(Dataset):
-    def __init__(self, json_path, transforms=None):
-        self.json_path = json_path
-        self.transforms = transforms
-
-        with open(json_path, "r") as f:
-            data = json.load(f)
-
-        self.samples = list(data["Standard_dataset"].values())
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        item = self.samples[idx]
-
-        # Load image
-        img_path = item["image"]["dataset_route"]
-        img = Image.open(img_path).convert("RGB")
-
-        # Parse bounding boxes
-        annots = item.get("annotations", {})
-        boxes = []
-        labels = []
-
-        for k, v in annots.items():
-            if k.startswith("bbox"):
-                xmin = float(v["xmin"])
-                ymin = float(v["ymin"])
-                xmax = float(v["xmax"])
-                ymax = float(v["ymax"])
-                boxes.append([xmin, ymin, xmax, ymax])
-                labels.append(1)  # single lesion class => 1
-
-        # Ensure shape is (N,4) even if N=0
-        if len(boxes) == 0:
-            boxes_tensor = torch.zeros((0, 4), dtype=torch.float32)
-            labels_tensor = torch.zeros((0,), dtype=torch.int64)
-        else:
-            boxes_tensor = torch.tensor(boxes, dtype=torch.float32)  # shape (N,4)
-            labels_tensor = torch.tensor(labels, dtype=torch.int64)
-
-        # Build target
-        target = {}
-        target["boxes"] = boxes_tensor
-        target["labels"] = labels_tensor
-        target["image_id"] = torch.tensor([idx])
-
-        if boxes_tensor.shape[0] == 0:
-            area = torch.zeros((0,), dtype=torch.float32)
-        else:
-            area = (boxes_tensor[:, 2] - boxes_tensor[:, 0]) * (
-                boxes_tensor[:, 3] - boxes_tensor[:, 1]
-            )
-        target["area"] = area
-
-        target["iscrowd"] = torch.zeros((len(boxes),), dtype=torch.int64)
-
-        # Optionally apply transforms
-        if self.transforms:
-            img, target = self.transforms(img, target)
-
-        return img, target
-
-
-##############################################################################
-#  C) Model builder: RetinaNet with ResNet50-FPN
-##############################################################################
-
-
-def get_retinanet_model():
-    """
-    Returns a RetinaNet model with background + 1 lesion class => num_classes=2.
-    """
-    model = torchvision.models.detection.retinanet_resnet50_fpn(pretrained=True)
-
-    # Replace classification head
-    in_features = model.head.classification_head.conv[0].in_channels
-    num_anchors = model.head.classification_head.num_anchors
-    model.head.classification_head = RetinaNetHead(
-        in_channels=in_features,
-        num_anchors=num_anchors,
-        num_classes=2,  # background + 1 lesion
-        conv_depth=4,
-    )
     return model
-
-
-##############################################################################
-#  D) Simple transform
-##############################################################################
-
-
-def basic_transform(image, target):
-    return F.to_tensor(image), target

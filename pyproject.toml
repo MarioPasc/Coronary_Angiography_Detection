@@ -48,3 +48,7 @@ include = ["ICA_Detection", "ICA_Detection.*", "ICA_Detection.external.ultralyti
 
 [tool.setuptools.package-data]
 "CADICA_Detection.external.ultralytics" = ["*"]
+
+[[tool.mypy.overrides]]
+ignore_missing_imports = true
+module = "torchvision.*"
