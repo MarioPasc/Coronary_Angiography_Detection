@@ -290,7 +290,7 @@ def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str) 
         )
 
 
-if __name__ == "__main__":
+def main():
 
     plan_steps = {
         "format_standarization": {"desired_format": "png"},

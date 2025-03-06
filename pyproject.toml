@@ -33,6 +33,7 @@ dependencies = [
   "pandas",
   "types-requests",
   "types-PyYAML",
+  "pycocotools",
 ]
 description = ""
 name = "ICA_Detection"
@@ -52,3 +53,7 @@ include = ["ICA_Detection", "ICA_Detection.*", "ICA_Detection.external.ultralyti
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
 module = "torchvision.*"
+
+[[tool.mypy.overrides]]
+ignore_missing_imports = true
+module = "pycocotools.*"
