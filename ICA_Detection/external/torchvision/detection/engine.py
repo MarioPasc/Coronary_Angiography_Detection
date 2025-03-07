@@ -1,6 +1,8 @@
 import math
 import sys
 import time
+import os
+import json
 
 import torch
 import torchvision.models.detection.mask_rcnn
@@ -83,52 +85,94 @@ def _get_iou_types(model):
 
 
 @torch.inference_mode()
-def evaluate(model, data_loader, device):
+def evaluate(model, data_loader, device, epoch, json_path=None):
+    """
+    If save_json=True, we collect predictions + ground-truth in all_results
+    and save them to json_path at the end.
+    """
     n_threads = torch.get_num_threads()
     # FIXME remove this and make paste_masks_in_image run on the GPU
     torch.set_num_threads(1)
     cpu_device = torch.device("cpu")
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
-    header = "Test:"
+    header = f"Evaluation on epoch {epoch}:"
 
     coco = get_coco_api_from_dataset(data_loader.dataset)
     iou_types = _get_iou_types(model)
     coco_evaluator = CocoEvaluator(coco, iou_types)
 
+    # Only accumulate results if we plan to save them.
+    all_results = {}
+
+    all_results[f"epoch_{epoch}"] = {}
+
+    dataset_root = data_loader.dataset.root  # Where images are stored
+
     for images, targets in metric_logger.log_every(data_loader, 100, header):
-        images = list(img.to(device) for img in images)
+        images = [img.to(device) for img in images]
 
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         model_time = time.time()
         outputs = model(images)
-
-        if DEBUG:
-            # After the outputs = model([img.to(device) for img in images]) line
-            for i, (img_id, pred) in enumerate(zip(targets, outputs)):
-                print(
-                    f"[DEBUG] Model prediction: img_id={img_id['image_id'].item()}, boxes={len(pred['boxes'])}"
-                )
-
-        outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
         model_time = time.time() - model_time
 
-        res = {target["image_id"]: output for target, output in zip(targets, outputs)}
+        # Move outputs to CPU for evaluation and JSON saving
+        outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
+
+        # Prepare results for coco evaluator
+        res = {}
+        for tgt, out in zip(targets, outputs):
+            # We have "image_id" stored in the target
+            img_id_tensor = tgt["image_id"]
+            if isinstance(img_id_tensor, torch.Tensor):
+                img_id = img_id_tensor.item()
+            else:
+                img_id = img_id_tensor  # in case it's int
+
+            res[img_id] = out
+
+            if json_path is not None:                
+                # 1) Get file name from COCO
+                #    (this also works if your COCO "images" contain 'file_name')
+                img_info = data_loader.dataset.coco.loadImgs(img_id)[0]
+                file_name = img_info["file_name"]
+                # Full path
+                full_image_path = os.path.join(dataset_root, file_name)
+
+                # 2) Predictions
+                predicted_bboxes = out["boxes"].tolist()   # Nx4
+                predicted_scores = out["scores"].tolist()  # Nx
+                predicted_labels = out["labels"].tolist()  # Nx
+
+                # 3) Ground truth
+                gt_bboxes = tgt["boxes"].tolist()          # Mx4
+                gt_labels = tgt["labels"].tolist()         # Mx
+                gt_area = tgt["area"].tolist()             # Mx
+                gt_iscrowd = tgt["iscrowd"].tolist()       # Mx
+
+                all_results[f"epoch_{epoch}"][f"{file_name}"] = {
+                    "image_id": img_id,
+                    "file_name": file_name,
+                    "image_path": full_image_path,
+                    "predicted_bboxes": predicted_bboxes,
+                    "predicted_scores": predicted_scores,
+                    "predicted_labels": predicted_labels,
+                    "gt_bboxes": gt_bboxes,
+                    "gt_labels": gt_labels,
+                    "gt_area": gt_area,
+                    "gt_iscrowd": gt_iscrowd
+                }
+
         evaluator_time = time.time()
+        coco_evaluator.update(res)
+        evaluator_time = time.time() - evaluator_time
+
+        metric_logger.update(model_time=model_time, evaluator_time=evaluator_time)
 
         if DEBUG:
-            print(f"Sending {len(res)} results to COCO evaluator")
-            # Print the first few results properly
-            if res:
-                first_key = list(res.keys())[0]
-                print(f"Sample result key: {first_key}")
-                print(f"Sample result value: {res[first_key]}")
-
-        coco_evaluator.update(res)
-
-        evaluator_time = time.time() - evaluator_time
-        metric_logger.update(model_time=model_time, evaluator_time=evaluator_time)
+            print(f"[DEBUG] Processed batch with {len(images)} images.")
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -139,4 +183,28 @@ def evaluate(model, data_loader, device):
     coco_evaluator.accumulate()
     coco_evaluator.summarize()
     torch.set_num_threads(n_threads)
+
+    # If requested, dump all_results to JSON
+    if json_path is not None:
+        os.makedirs(os.path.dirname(json_path), exist_ok=True)
+
+        # Load existing JSON if available
+        if os.path.exists(json_path):
+            with open(json_path, "r") as f:
+                try:
+                    existing_results = json.load(f)
+                except json.JSONDecodeError:
+                    existing_results = {}  # In case of a corrupt or empty JSON file
+        else:
+            existing_results = {}
+
+        # Update with new epoch results
+        existing_results.update(all_results)
+
+        # Write back the merged results
+        with open(json_path, "w") as f:
+            json.dump(existing_results, f, indent=2)
+
+        print(f"[INFO] Saved detection results to {json_path}")
+
     return coco_evaluator

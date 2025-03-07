@@ -330,5 +330,5 @@ if __name__ == "__main__":
     main(args)
 
 """
-python scripts/models/train_eval_torchvision.py --json_path /home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/datasets/retinanet/retinanet_coco.json --images_root /home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/images --output_dir /home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/experiments --splits_info_path /home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/json_metadata/splits.json --model_type retina_net --pretrained --freeze_until 2 --epochs 5 --lr 0.0001 --lr_step_size 2 --lr_gamma 0.1 --print_freq 1 --save_freq 1 
+python scripts/models/train_eval_torchvision.py --json_path /home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/datasets/retinanet/COCO_coco.json --images_root /home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/images --output_dir /home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/experiments --splits_info_path /home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/json_metadata/splits.json --model_type retina_net --pretrained --freeze_until 2 --epochs 5 --lr 0.0001 --lr_step_size 2 --lr_gamma 0.1 --print_freq 1 --save_freq 1 
 """

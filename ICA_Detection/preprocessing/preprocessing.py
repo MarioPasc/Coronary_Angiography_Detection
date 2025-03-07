@@ -279,14 +279,9 @@ def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str) 
         # Cleanup
         shutil.rmtree(os.path.join(root_path, "labels_yolo"))
 
-    if dataset_formats.get("RetinaNet", False):
+    if dataset_formats.get("RetinaNet", False) or dataset_formats.get("FasterRCNN", False) or dataset_formats.get("SSD", False):
         construct_pytorch_compatible(
-            json_path=json_path, root_folder=root_path, dataset_name="retinanet"
-        )
-
-    if dataset_formats.get("FasterRCNN", False):
-        construct_pytorch_compatible(
-            json_path=json_path, root_folder=root_path, dataset_name="fasterrcnn"
+            json_path=json_path, root_folder=root_path, dataset_name="COCO"
         )
 
 
