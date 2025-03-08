@@ -49,6 +49,7 @@ def main(args):
     csv_dir = os.path.join(model_dir, "csv")
     logs_dir = os.path.join(model_dir, "logs")
     results_dir = os.path.join(model_dir, "results")
+    json_results_path = os.path.join(results_dir, "validation_preds.json")
 
     os.makedirs(checkpoints_dir, exist_ok=True)
     os.makedirs(csv_dir, exist_ok=True)
@@ -173,7 +174,9 @@ def main(args):
         # --------------------------
         # engine.evaluate returns a CocoEvaluator if it's recognized as COCO
         print("Evaluating on validation set...")
-        coco_eval = engine.evaluate(model, val_loader, device=device)
+        coco_eval = engine.evaluate(
+            model, val_loader, device=device, json_path=json_results_path, epoch=epoch
+        )
 
         # The main AP results are typically in coco_eval.coco_eval["bbox"].stats
         # if your dataset is recognized as COCO.
@@ -230,7 +233,14 @@ def main(args):
     # -----------------------------
     if test_loader:
         print("\nEvaluating on test set...")
-        engine.evaluate(model, test_loader, device=device)
+
+        engine.evaluate(
+            model,
+            test_loader,
+            device=device,
+            json_path=os.path.join(results_dir, "test_preds.json"),
+            epoch="0",  # Placeholder for epoch
+        )
         # If recognized as COCO, this prints final test AP
 
     print("\nTraining completed!")
