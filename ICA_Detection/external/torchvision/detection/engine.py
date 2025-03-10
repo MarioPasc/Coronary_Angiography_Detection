@@ -4,6 +4,8 @@ import time
 import os
 import json
 
+from typing import Dict, Any
+
 import torch
 import torchvision.models.detection.mask_rcnn
 from . import utils
@@ -133,7 +135,7 @@ def evaluate(model, data_loader, device, epoch, json_path=None):
 
             res[img_id] = out
 
-            if json_path is not None:                
+            if json_path is not None:
                 # 1) Get file name from COCO
                 #    (this also works if your COCO "images" contain 'file_name')
                 img_info = data_loader.dataset.coco.loadImgs(img_id)[0]
@@ -142,15 +144,15 @@ def evaluate(model, data_loader, device, epoch, json_path=None):
                 full_image_path = os.path.join(dataset_root, file_name)
 
                 # 2) Predictions
-                predicted_bboxes = out["boxes"].tolist()   # Nx4
+                predicted_bboxes = out["boxes"].tolist()  # Nx4
                 predicted_scores = out["scores"].tolist()  # Nx
                 predicted_labels = out["labels"].tolist()  # Nx
 
                 # 3) Ground truth
-                gt_bboxes = tgt["boxes"].tolist()          # Mx4
-                gt_labels = tgt["labels"].tolist()         # Mx
-                gt_area = tgt["area"].tolist()             # Mx
-                gt_iscrowd = tgt["iscrowd"].tolist()       # Mx
+                gt_bboxes = tgt["boxes"].tolist()  # Mx4
+                gt_labels = tgt["labels"].tolist()  # Mx
+                gt_area = tgt["area"].tolist()  # Mx
+                gt_iscrowd = tgt["iscrowd"].tolist()  # Mx
 
                 all_results[f"epoch_{epoch}"][f"{file_name}"] = {
                     "image_id": img_id,
@@ -162,7 +164,7 @@ def evaluate(model, data_loader, device, epoch, json_path=None):
                     "gt_bboxes": gt_bboxes,
                     "gt_labels": gt_labels,
                     "gt_area": gt_area,
-                    "gt_iscrowd": gt_iscrowd
+                    "gt_iscrowd": gt_iscrowd,
                 }
 
         evaluator_time = time.time()
@@ -208,3 +210,57 @@ def evaluate(model, data_loader, device, epoch, json_path=None):
         print(f"[INFO] Saved detection results to {json_path}")
 
     return coco_evaluator
+
+
+def compute_validation_loss(
+    model: torch.nn.Module,
+    data_loader: torch.utils.data.DataLoader,
+    device: torch.device,
+) -> float:
+    """
+    Computes the average validation loss for a Torchvision detection model.
+
+    Because the model returns losses only when in training mode,
+    we temporarily set model.train() but still wrap the computation
+    in a no-grad block to avoid updating weights.
+
+    Args:
+        model (torch.nn.Module): Your detection model (Faster R-CNN, SSD, etc.).
+        data_loader (torch.utils.data.DataLoader): Validation data loader that yields
+            (images, targets) pairs.
+        device (torch.device): The device ('cpu' or 'cuda').
+
+    Returns:
+        float: The average validation loss over all batches in data_loader.
+    """
+    # Store the original training/eval mode so we can restore it at the end
+    was_training = model.training
+
+    # Put model into training mode so it returns the loss dict
+    model.train()
+
+    total_loss = 0.0
+    num_batches = 0
+
+    # We do not want gradient updates for validation
+    with torch.no_grad():
+        for images, targets in data_loader:
+            images = [img.to(device) for img in images]
+            # Also move target tensors (boxes, labels, etc.) to device
+            targets = [
+                {k: v.to(device) for k, v in t.items() if torch.is_tensor(v)}
+                for t in targets
+            ]
+
+            loss_dict: Dict[str, Any] = model(images, targets)  # returns losses
+            batch_loss = sum(loss for loss in loss_dict.values())
+            total_loss += batch_loss.item()
+            num_batches += 1
+
+    # Restore model’s original mode
+    if not was_training:
+        model.eval()
+
+    if num_batches == 0:
+        return 0.0
+    return total_loss / num_batches

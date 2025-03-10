@@ -19,7 +19,7 @@ def freeze_vgg_layers(vgg_features, freeze_until=10):
         count += 1
 
 
-def get_ssd_model(pretrained=True, num_classes=2, freeze_until=10):
+def get_ssd_model(pretrained=True, num_classes=2, freeze_until=2):
     """
     Creates and returns an SSD (Single Shot MultiBox Detector) model for lesion detection.
 
@@ -33,27 +33,43 @@ def get_ssd_model(pretrained=True, num_classes=2, freeze_until=10):
     """
     if pretrained:
         # ------------------------------------------------
-        # Use a pre-trained SSD (VGG16 backbone) from Torchvision
+        # 1) Load the pre-trained SSD (VGG16 backbone)
         # ------------------------------------------------
-        model = torchvision.models.detection.ssd300_vgg16(pretrained=True)
+        model = torchvision.models.detection.ssd300_vgg16(weights="DEFAULT")
 
-        # Optionally freeze some early VGG layers
-        # The backbone is accessible via model.backbone, specifically model.backbone.body
+        # 2) Optionally freeze some early VGG layers
         if hasattr(model.backbone, "body"):
             freeze_vgg_layers(model.backbone.body, freeze_until)
 
-        # Replace the classification head for our number of classes
-        in_channels = model.head.classification_head.in_channels
-        num_anchors = model.head.classification_head.num_anchors
+        # 3) Collect original conv in_channels from the pretrained classification layers
+        in_channels = []
+        for conv_layer in model.head.classification_head.module_list:
+            in_channels.append(conv_layer.in_channels)
 
-        model.head.classification_head.cls_logits = nn.Conv2d(
-            in_channels, num_anchors * num_classes, kernel_size=3, padding=1
+        # 4) Figure out the number of anchors per feature map
+        #    (Each conv_layer.out_channels is num_anchors * old_num_columns)
+        old_num_columns = model.head.classification_head.num_columns  # typically 91
+        num_anchors = [
+            conv_layer.out_channels // old_num_columns
+            for conv_layer in model.head.classification_head.module_list
+        ]
+
+        # 5) Now re-init the classification and regression heads fully
+        #    So that classification_head.num_columns = num_classes, not 91!
+        new_classification_head = (
+            torchvision.models.detection.ssd.SSDClassificationHead(
+                in_channels=in_channels,
+                num_anchors=num_anchors,
+                num_classes=num_classes,  # e.g. 2 => 1 class + background
+            )
+        )
+        new_regression_head = torchvision.models.detection.ssd.SSDRegressionHead(
+            in_channels=in_channels, num_anchors=num_anchors
         )
 
-        # Re-initialize regression head for consistency (optional)
-        model.head.regression_head.bbox_pred = nn.Conv2d(
-            in_channels, num_anchors * 4, kernel_size=3, padding=1
-        )
+        # 6) Assign them to model.head
+        model.head.classification_head = new_classification_head
+        model.head.regression_head = new_regression_head
 
     else:
         # ------------------------------------------------
@@ -67,10 +83,8 @@ def get_ssd_model(pretrained=True, num_classes=2, freeze_until=10):
         freeze_vgg_layers(vgg_backbone, freeze_until)
 
         # 3) Modify the backbone for SSD
-        #    E.g. often you do: pool5 => ceil_mode = True, slice backbone to conv5_3
         if hasattr(vgg_backbone[16], "ceil_mode"):
             vgg_backbone[16].ceil_mode = True  # pool5
-
         # We'll slice up to index 23 to stop after conv5_3
         vgg_backbone = vgg_backbone[:23]
 

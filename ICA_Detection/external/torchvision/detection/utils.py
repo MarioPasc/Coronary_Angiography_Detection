@@ -63,7 +63,11 @@ class SmoothedValue:
 
     def __str__(self):
         return self.fmt.format(
-            median=self.median, avg=self.avg, global_avg=self.global_avg, max=self.max, value=self.value
+            median=self.median,
+            avg=self.avg,
+            global_avg=self.global_avg,
+            max=self.max,
+            value=self.value,
         )
 
 
@@ -127,7 +131,9 @@ class MetricLogger:
             return self.meters[attr]
         if attr in self.__dict__:
             return self.__dict__[attr]
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{attr}'"
+        )
 
     def __str__(self):
         loss_str = []
@@ -165,7 +171,14 @@ class MetricLogger:
             )
         else:
             log_msg = self.delimiter.join(
-                [header, "[{0" + space_fmt + "}/{1}]", "eta: {eta}", "{meters}", "time: {time}", "data: {data}"]
+                [
+                    header,
+                    "[{0" + space_fmt + "}/{1}]",
+                    "eta: {eta}",
+                    "{meters}",
+                    "time: {time}",
+                    "data: {data}",
+                ]
             )
         MB = 1024.0 * 1024.0
         for obj in iterable:
@@ -190,14 +203,21 @@ class MetricLogger:
                 else:
                     print(
                         log_msg.format(
-                            i, len(iterable), eta=eta_string, meters=str(self), time=str(iter_time), data=str(data_time)
+                            i,
+                            len(iterable),
+                            eta=eta_string,
+                            meters=str(self),
+                            time=str(iter_time),
+                            data=str(data_time),
                         )
                     )
             i += 1
             end = time.time()
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        print(f"{header} Total time: {total_time_str} ({total_time / len(iterable):.4f} s / it)")
+        print(
+            f"{header} Total time: {total_time_str} ({total_time / len(iterable):.4f} s / it)"
+        )
 
 
 def collate_fn(batch):
@@ -276,7 +296,104 @@ def init_distributed_mode(args):
     args.dist_backend = "nccl"
     print(f"| distributed init (rank {args.rank}): {args.dist_url}", flush=True)
     torch.distributed.init_process_group(
-        backend=args.dist_backend, init_method=args.dist_url, world_size=args.world_size, rank=args.rank
+        backend=args.dist_backend,
+        init_method=args.dist_url,
+        world_size=args.world_size,
+        rank=args.rank,
     )
     torch.distributed.barrier()
     setup_for_distributed(args.rank == 0)
+
+
+# Functions to get lr scheduler and optimizer
+
+import torch
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import (
+    _LRScheduler,
+    CosineAnnealingWarmRestarts,
+    ReduceLROnPlateau,
+)
+from typing import Any
+
+
+def get_optimizer(model: torch.nn.Module, args: Any) -> Optimizer:
+    """
+    Returns an optimizer for the model based on the user's choice.
+
+    Allowed optimizer types:
+        - 'adam'   : torch.optim.Adam
+        - 'adamw'  : torch.optim.AdamW
+        - 'nadam'  : torch.optim.NAdam
+        - 'radam'  : torch.optim.RAdam
+
+    Args:
+        model (torch.nn.Module): The model whose parameters will be optimized.
+        args (Any): An arguments object (e.g., argparse.Namespace) that must contain:
+            - optimizer_type (str): The type of optimizer to use.
+            - lr (float): Learning rate.
+            - weight_decay (float): Weight decay factor.
+
+    Returns:
+        Optimizer: The constructed optimizer.
+    """
+    params = [p for p in model.parameters() if p.requires_grad]
+    opt_type = args.optimizer_type.lower()
+
+    if opt_type == "adam":
+        optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay=args.weight_decay)
+    elif opt_type == "adamw":
+        optimizer = torch.optim.AdamW(
+            params, lr=args.lr, weight_decay=args.weight_decay
+        )  # type: ignore
+    elif opt_type == "nadam":
+        optimizer = torch.optim.NAdam(
+            params, lr=args.lr, weight_decay=args.weight_decay
+        )  # type: ignore
+    elif opt_type == "radam":
+        optimizer = torch.optim.RAdam(
+            params, lr=args.lr, weight_decay=args.weight_decay
+        )  # type: ignore
+    else:
+        raise ValueError(
+            f"Unsupported optimizer type: {args.optimizer_type}. Choose from Adam, AdamW, NAdam, or RAdam."
+        )
+
+    return optimizer
+
+
+def get_lr_scheduler(optimizer: Optimizer, args: Any) -> _LRScheduler:
+    """
+    Returns a learning rate scheduler based on user configuration.
+
+    If args.cos_lr is True, it uses CosineAnnealingWarmRestarts.
+    Otherwise, it uses ReduceLROnPlateau, which is known to work well
+    for fine-tuning on small object detection tasks in medical images.
+
+    Note: When using ReduceLROnPlateau, you must call scheduler.step(val_loss)
+          at the end of each epoch instead of scheduler.step().
+
+    Args:
+        optimizer (Optimizer): The optimizer for which to schedule the learning rate.
+        args (Any): An arguments object (e.g., argparse.Namespace) that must contain:
+            - cos_lr (bool): Whether to use cosine LR scheduling.
+            - T_0 (int): Period of the first restart for CosineAnnealingWarmRestarts.
+            - (Other scheduler parameters can be added as needed.)
+
+    Returns:
+        _LRScheduler: The learning rate scheduler.
+    """
+    if args.cos_lr:
+        # Using CosineAnnealingWarmRestarts
+        scheduler = CosineAnnealingWarmRestarts(
+            optimizer, T_0=args.T_0, T_mult=1, eta_min=0.0, last_epoch=-1
+        )
+    else:
+        # Using ReduceLROnPlateau which monitors the validation loss.
+        # This scheduler reduces the LR when a metric has stopped improving.
+        # You must call scheduler.step(val_loss) after each epoch.
+        scheduler = ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.1, patience=3, verbose=True
+        )
+
+    return scheduler
