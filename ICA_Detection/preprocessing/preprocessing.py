@@ -55,9 +55,12 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
     images_out = os.path.join(out_dir, "images")
     labels_out = os.path.join(out_dir, "labels_pascal_voc")
     labels_yolo_out = os.path.join(out_dir, "labels_yolo")
+    datasets_out_dir = os.path.join(out_dir, "datasets")
+
     os.makedirs(images_out, exist_ok=True)
     os.makedirs(labels_out, exist_ok=True)
     os.makedirs(labels_yolo_out, exist_ok=True)
+    os.makedirs(datasets_out_dir, exist_ok=True)
 
     # Load the planned JSON
     with open(json_path, "r") as f:
@@ -293,7 +296,7 @@ def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str) 
         or dataset_formats.get("SSD", False)
     ):
         construct_pytorch_compatible(
-            json_path=json_path, root_folder=root_path, dataset_name="COCO"
+            json_path=json_path, root_folder=root_path, dataset_name="detection"
         )
 
 

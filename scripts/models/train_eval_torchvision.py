@@ -20,7 +20,7 @@ from ICA_Detection.models.detection.retinanet import get_retina_net_model
 from ICA_Detection.models.detection.ssd import get_ssd_model
 
 # Data loader function
-from ICA_Detection.splits.holdout.holdout_torchvision_models import holdout_coco
+from ICA_Detection.splits.holdout.holdout_detection_models import holdout_coco
 
 #########################
 # Helper functions

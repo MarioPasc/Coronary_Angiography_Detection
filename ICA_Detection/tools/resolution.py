@@ -1,7 +1,7 @@
 # ica_yolo_detection/preprocessing/tools/resolution.py
 
 import cv2
-from typing import Optional
+from typing import Optional, Any
 
 
 def apply_resolution(
@@ -10,7 +10,7 @@ def apply_resolution(
     x_final: int,
     y_final: int,
     method: str = "bilinear",
-) -> Optional[any]:
+) -> Optional[Any]:
     """
     Resize the image at image_path to the desired resolution using OpenCV and save it to output_path.
 
