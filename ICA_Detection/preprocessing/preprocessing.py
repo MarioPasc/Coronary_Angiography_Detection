@@ -197,6 +197,10 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             for key, bbox in annotations.items():
                 if key == "name":
                     continue
+                elif key.startswith("segmentation"):
+                    continue
+                elif key == "vessel_segmentations":
+                    continue
                 xmin = bbox["xmin"]
                 ymin = bbox["ymin"]
                 xmax = bbox["xmax"]
@@ -218,6 +222,10 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
                 lines = []
                 for key, bbox in annotations.items():
                     if key == "name":
+                        continue
+                    elif key.startswith("segmentation"):
+                        continue
+                    elif key == "vessel_segmentations":
                         continue
                     orig_width = img_info.get("width")
                     orig_height = img_info.get("height")
@@ -279,7 +287,11 @@ def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str) 
         # Cleanup
         shutil.rmtree(os.path.join(root_path, "labels_yolo"))
 
-    if dataset_formats.get("RetinaNet", False) or dataset_formats.get("FasterRCNN", False) or dataset_formats.get("SSD", False):
+    if (
+        dataset_formats.get("RetinaNet", False)
+        or dataset_formats.get("FasterRCNN", False)
+        or dataset_formats.get("SSD", False)
+    ):
         construct_pytorch_compatible(
             json_path=json_path, root_folder=root_path, dataset_name="COCO"
         )

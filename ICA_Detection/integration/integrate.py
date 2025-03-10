@@ -10,7 +10,7 @@ from ICA_Detection.integration.kemerovo import process_kemerovo_dataset
 
 
 def integrate_datasets(
-    datasets: List[str], root_dirs: Dict[str, str], arcade_task: str = "stenosis"
+    datasets: List[str], root_dirs: Dict[str, str], include_syntax: bool = True
 ) -> Dict[str, Any]:
     """
     Integrate standardized JSON outputs from multiple datasets.
@@ -50,7 +50,7 @@ def integrate_datasets(
                 continue
             print("Processing ARCADE dataset...")
             # process_arcade_dataset expects the folder that contains the "ARCADE" folder.
-            data = process_arcade_dataset(root, task=arcade_task)
+            data = process_arcade_dataset(root, include_syntax=include_syntax)
             combined_entries.update(data.get("Standard_dataset", {}))
         elif ds_upper == "KEMEROVO":
             root = root_dirs.get("KEMEROVO")
@@ -83,13 +83,8 @@ if __name__ == "__main__":
         "KEMEROVO": "/home/mariopasc/Python/Datasets",
     }
 
-    # Optionally, specify the ARCADE task ("stenosis", "syntax", or "both").
-    arcade_task = "stenosis"
-
     # Integrate the selected datasets.
-    final_json: Dict[str, Any] = integrate_datasets(
-        datasets_to_process, root_dirs, arcade_task=arcade_task
-    )
+    final_json: Dict[str, Any] = integrate_datasets(datasets_to_process, root_dirs)
 
     # Save the combined JSON to a file.
     output_file = "combined_standardized.json"

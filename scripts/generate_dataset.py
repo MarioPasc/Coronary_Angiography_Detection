@@ -18,7 +18,7 @@ import shutil
 LOG_FILE = "./dataset_generation.log"  # Change this to your desired log file path
 
 # Datasets to integrate and combined. Possible args incluide ["CADICA", "ARCADE", "KEMEROVO"]
-DATASETS_TO_PROCESS = ["CADICA"]
+DATASETS_TO_PROCESS = ["ARCADE"]
 
 # Splits dictionary. Split type and % of the images being allocated in that split
 SPLITS_DICT = {"train": 0.7, "val": 0.3, "test": 0.0}
@@ -35,10 +35,6 @@ OUTPUT_FOLDER = "/home/mariopasc/Python/Datasets/COMBINED"  # Sobremesa
 ROOT_DIR_SOURCE_DATASETS = (
     "/home/mariopasc/Python/Datasets/COMBINED/source"  # Sobremesa
 )
-
-# ARCADE task
-
-ARCADE_TASK = "stenosis"
 
 # Preprocessing steps to be performed on the datasets
 PLAN_STEPS = {
@@ -95,7 +91,7 @@ root_dirs = {
 
 print("Integrating datasets...")
 final_json: Dict[str, Any] = DatasetGenerator.integrate_datasets(
-    DATASETS_TO_PROCESS, root_dirs, arcade_task=ARCADE_TASK
+    DATASETS_TO_PROCESS, root_dirs
 )
 with open(output_combined_json, "w") as f:
     json.dump(final_json, f, indent=4)

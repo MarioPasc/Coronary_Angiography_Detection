@@ -67,6 +67,7 @@ def process_arcade_annotation_file(
         ann_dict: Dict[str, Any] = {"name": f"{unique_id}.txt"}
         bbox_count: int = 1
         for a in annots:
+            # Store the bboxes
             bbox_list: List[float] = a.get("bbox", [])
             if len(bbox_list) < 4:
                 continue
@@ -82,6 +83,27 @@ def process_arcade_annotation_file(
             }
             common_bbox = arcade_to_common(native_bbox)
             ann_dict[f"bbox{bbox_count}"] = common_bbox
+
+            segmentation_data = a.get("segmentation", [])
+            # If you need a flattened array
+            if segmentation_data and isinstance(segmentation_data, list):
+                # If it's a list of lists (polygon format), flatten it
+                if segmentation_data and isinstance(segmentation_data[0], list):
+                    flattened_segmentation = segmentation_data[
+                        0
+                    ]  # Take the first polygon
+                else:
+                    flattened_segmentation = segmentation_data
+
+                native_segmentation = {
+                    "xyxy": flattened_segmentation,
+                    "label": cat_mapping.get(
+                        a.get("category_id"), str(a.get("category_id"))  # type: ignore
+                    ),
+                }
+
+                ann_dict[f"segmentation{bbox_count}"] = native_segmentation
+
             bbox_count += 1
 
         lesion_flag: bool = True if bbox_count > 1 else False
@@ -103,25 +125,18 @@ def process_arcade_annotation_file(
     return output_entries, unique_id_counter
 
 
-def process_arcade_dataset(root_dir: str, task: str = "stenosis") -> Dict[str, Any]:
+def process_arcade_dataset(
+    root_dir: str, include_syntax: bool = True
+) -> Dict[str, Any]:
     root_dir = os.path.join(root_dir, "ARCADE")
     standard_dataset: Dict[str, Any] = {}
     unique_id_counter: int = 1
 
-    if task == "both":
-        modalities: List[str] = ["stenosis", "syntax"]
-    elif task in ["stenosis", "syntax"]:
-        modalities = [task]
-    else:
-        print("Invalid task provided; defaulting to 'stenosis'.")
-        modalities = ["stenosis"]
-
-    for modality in modalities:
-        modality_dir: str = os.path.join(root_dir, modality)
-        if not os.path.isdir(modality_dir):
-            continue
+    # First process stenosis data (always processed)
+    stenosis_dir: str = os.path.join(root_dir, "stenosis")
+    if os.path.isdir(stenosis_dir):
         for split in ["train", "val", "test"]:
-            split_dir: str = os.path.join(modality_dir, split)
+            split_dir: str = os.path.join(stenosis_dir, split)
             if not os.path.isdir(split_dir):
                 continue
             images_folder: str = os.path.join(split_dir, "images")
@@ -134,6 +149,108 @@ def process_arcade_dataset(root_dir: str, task: str = "stenosis") -> Dict[str, A
                 annot_file, images_folder, split, unique_id_counter
             )
             standard_dataset.update(entries)
+
+    # If include_syntax is True, process syntax data and add to stenosis entries
+    if include_syntax:
+        syntax_dir: str = os.path.join(root_dir, "syntax")
+        if os.path.isdir(syntax_dir):
+            syntax_data_by_split = {}
+
+            # First load all the syntax data by split
+            for split in ["train", "val", "test"]:
+                split_dir: str = os.path.join(syntax_dir, split)  # type: ignore
+                if not os.path.isdir(split_dir):
+                    continue
+                images_folder: str = os.path.join(split_dir, "images")  # type: ignore
+                annotations_folder: str = os.path.join(split_dir, "annotations")  # type: ignore
+                annot_file: str = os.path.join(annotations_folder, f"{split}.json")  # type: ignore
+                if not os.path.exists(annot_file):
+                    print(f"Syntax annotation file not found: {annot_file}")
+                    continue
+
+                # Load the syntax JSON file
+                with open(annot_file, "r") as f:
+                    syntax_data = json.load(f)
+
+                syntax_images = syntax_data.get("images", [])
+                syntax_annotations = syntax_data.get("annotations", [])
+                syntax_categories = syntax_data.get("categories", [])
+
+                # Build category mapping for syntax
+                syntax_cat_mapping = {
+                    cat["id"]: cat["name"] for cat in syntax_categories
+                }
+
+                # Build mapping from image filename to annotations
+                syntax_file_to_annots = {}
+
+                # First map image_id to filename
+                syntax_id_to_filename = {
+                    img["id"]: img["file_name"] for img in syntax_images
+                }
+
+                # Then map image_id to annotations
+                syntax_img_id_to_annots: Dict[str, Any] = {}
+                for ann in syntax_annotations:
+                    img_id = ann["image_id"]
+                    syntax_img_id_to_annots.setdefault(img_id, []).append(ann)
+
+                # Finally map filename to annotations
+                for img_id, annots in syntax_img_id_to_annots.items():
+                    filename = syntax_id_to_filename.get(img_id)
+                    if filename:
+                        num = os.path.splitext(filename)[0]  # e.g., "98"
+                        unique_id = f"arcade{split}_p{num}_v{num}_{num.zfill(5)}"
+                        syntax_file_to_annots[unique_id] = {
+                            "annotations": annots,
+                            "categories": syntax_cat_mapping,
+                        }
+
+                syntax_data_by_split[split] = syntax_file_to_annots
+
+            # Now add syntax data to stenosis entries
+            for unique_id, entry in standard_dataset.items():
+                # Parse the unique_id to find the split
+                split_part = unique_id.split("_")[0]
+                split = split_part.replace("arcade", "")
+
+                # Check if we have syntax data for this split and image
+                if (
+                    split in syntax_data_by_split
+                    and unique_id in syntax_data_by_split[split]
+                ):
+                    syntax_info = syntax_data_by_split[split][unique_id]
+
+                    # Create vessel_segmentations list
+                    vessel_segmentations = []
+                    for ann in syntax_info["annotations"]:
+                        cat_id = ann.get("category_id")
+                        segmentation_data = ann.get("segmentation", [])
+                        attributes = ann.get("attributes", [])
+
+                        if segmentation_data and isinstance(segmentation_data, list):
+                            # If it's a list of lists (polygon format), flatten it
+                            if segmentation_data and isinstance(
+                                segmentation_data[0], list
+                            ):
+                                flattened_segmentation = segmentation_data[
+                                    0
+                                ]  # Take the first polygon
+                            else:
+                                flattened_segmentation = segmentation_data
+
+                            vessel_segmentation = {
+                                "xyxy": flattened_segmentation,
+                                "attributes": attributes,
+                            }
+                            vessel_segmentations.append(vessel_segmentation)
+
+                    # Add vessel_segmentations to entry annotations
+                    if vessel_segmentations:
+                        entry["annotations"][
+                            "vessel_segmentations"
+                        ] = vessel_segmentations
+
     return {"Standard_dataset": standard_dataset}
 
 
@@ -142,9 +259,10 @@ if __name__ == "__main__":
     download_url: str = (
         "https://data.mendeley.com/public-files/datasets/ydrm75xywg/files/61f788d6-65ce-4265-a23a-5ba16931d18b/file_downloaded"
     )
-    extract_folder: str = "/home/mario/Python/Datasets"
+    extract_folder: str = "/home/mariopasc/Python/Datasets/COMBINED/source"
     # download_and_extract_arcade(download_url, extract_folder)
-    json_data: Dict[str, Any] = process_arcade_dataset(extract_folder, task="stenosis")
+    # json_data: Dict[str, Any] = process_arcade_dataset(extract_folder, task="stenosis")
+    json_data: Dict[str, Any] = process_arcade_dataset(extract_folder)
     output_json_file: str = "arcade_standardized.json"
     with open(output_json_file, "w") as f:
         json.dump(json_data, f, indent=4)

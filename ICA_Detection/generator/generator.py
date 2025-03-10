@@ -30,7 +30,7 @@ class DatasetGenerator:
 
     @staticmethod
     def integrate_datasets(
-        datasets: List[str], root_dirs: Dict[str, str], arcade_task: str = "stenosis"
+        datasets: List[str], root_dirs: Dict[str, str], include_syntax: bool = True
     ) -> Dict[str, Any]:
         """
         Integrate standardized JSON outputs from multiple datasets.
@@ -44,7 +44,7 @@ class DatasetGenerator:
         Returns:
             Dict[str, Any]: Combined standardized JSON with a top-level "Standard_dataset" key.
         """
-        return integrate_datasets(datasets, root_dirs, arcade_task=arcade_task)
+        return integrate_datasets(datasets, root_dirs, include_syntax=include_syntax)
 
     @staticmethod
     def create_preprocessing_plan(
@@ -186,7 +186,8 @@ if __name__ == "__main__":
 
     print("Integrating datasets...")
     final_json: Dict[str, Any] = DatasetGenerator.integrate_datasets(
-        datasets_to_process, root_dirs, arcade_task=arcade_task
+        datasets_to_process,
+        root_dirs,
     )
     with open(output_combined_json, "w") as f:
         json.dump(final_json, f, indent=4)
