@@ -8,7 +8,7 @@ import os
 
 # Import the UNet model and dataset
 # Assuming the UNet and dataset code is in the same directory
-from ICA_Detection.models.segmentation.unet import UNet
+from ICA_Detection.tasks.segmentation.models.unet import UNet
 from ICA_Detection.splits.holdout.holdout_segmentation_models import (
     holdout_segmentation,
     visualize_sample,

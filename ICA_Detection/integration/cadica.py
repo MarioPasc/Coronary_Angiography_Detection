@@ -114,8 +114,11 @@ def process_video(video_dir: str, patient_id: str, lesion_flag: bool) -> Dict[st
 
             transformed_bboxes.append(common_bbox)
         annotations: Dict[str, Any] = {"name": f"{unique_id}.txt"}
+        stenosis_dict: Dict[str, Any] = {}
         for idx, t_bbox in enumerate(transformed_bboxes, start=1):
-            annotations[f"bbox{idx}"] = t_bbox
+            stenosis_dict[f"bbox{idx}"] = t_bbox
+        annotations["stenosis"] = stenosis_dict
+
         entry: Dict[str, Any] = {
             "id": unique_id,
             "dataset_origin": "cadica",

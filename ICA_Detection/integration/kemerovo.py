@@ -45,27 +45,6 @@ def cleanup_kemerovo_folder(kemerovo_path: str) -> None:
                 print(f"Removed directory: {item_path}")
 
 
-def convert_bbox_to_yolo(
-    xmin: float,
-    ymin: float,
-    xmax: float,
-    ymax: float,
-    img_width: float,
-    img_height: float,
-) -> Dict[str, float]:
-    # This function is replaced by our translator.
-    box_width: float = xmax - xmin
-    box_height: float = ymax - ymin
-    x_center: float = (xmin + xmax) / 2.0 / img_width
-    y_center: float = (ymin + ymax) / 2.0 / img_height
-    return {
-        "x_center": x_center,
-        "y_center": y_center,
-        "width": box_width / img_width,
-        "height": box_height / img_height,
-    }
-
-
 def parse_voc_xml(
     xml_file: str, image_path: str
 ) -> Tuple[Optional[str], Optional[int], Optional[int], List[Dict[str, Any]]]:
@@ -133,8 +112,10 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
 
                 transformed_bboxes.append(common_bbox)
             annotations_dict: Dict[str, Any] = {"name": f"{std_id}.txt"}
+            stenosis_dict: Dict[str, Any] = {}
             for idx, t_bbox in enumerate(transformed_bboxes, start=1):
-                annotations_dict[f"bbox{idx}"] = t_bbox
+                stenosis_dict[f"bbox{idx}"] = t_bbox
+            annotations_dict["stenosis"] = stenosis_dict
             lesion_flag: bool = True
             entry: Dict[str, Any] = {
                 "id": std_id,

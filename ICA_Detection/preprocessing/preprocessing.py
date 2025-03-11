@@ -60,12 +60,16 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
     labels_yolo_out = os.path.join(out_dir, "labels_yolo")
     datasets_out_dir = os.path.join(out_dir, "datasets")
     output_masks_dir = os.path.join(datasets_out_dir, "segmentation/masks")
+    output_masks_dir_stenosis = os.path.join(output_masks_dir, "stenosis")
+    output_masks_dir_arteries = os.path.join(output_masks_dir, "arteries")
 
     os.makedirs(images_out, exist_ok=True)
     os.makedirs(labels_out, exist_ok=True)
     os.makedirs(labels_yolo_out, exist_ok=True)
     os.makedirs(datasets_out_dir, exist_ok=True)
     os.makedirs(output_masks_dir, exist_ok=True)
+    os.makedirs(output_masks_dir_stenosis, exist_ok=True)
+    os.makedirs(output_masks_dir_arteries, exist_ok=True)
 
     # Load the planned JSON
     with open(json_path, "r") as f:
@@ -147,6 +151,7 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             if ret is None:
                 print(f"Error resizing image for {uid}.")
                 continue
+
             # --- Update JSON with new image resolution and bounding boxes ---
             # Save old dimensions
             old_width = img_info.get("width")
@@ -157,28 +162,71 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
 
             # Update the bounding box coordinates in the JSON (keeping Pascal VOC format)
             annotations = entry.get("annotations", {})
-            for key, bbox in annotations.items():
-                if key == "name":
-                    continue
-                elif key.startswith("segmentation"):
-                    continue
-                # Save the vessel segmentation
-                elif key == "vessel_segmentations":
-                    vessel_segmentations = annotations.get("vessel_segmentations", [])
 
-                    mask_filename = f"{uid}_seg.png"
-                    mask_path = os.path.join(output_masks_dir, mask_filename)
+            # Process vessel segmentations
+            if "vessel_segmentations" in annotations:
+                vessel_segmentations = annotations.get("vessel_segmentations", [])
 
-                    # Create an empty mask image
-                    mask = Image.new("L", (old_width, old_height), 0)
-                    draw = ImageDraw.Draw(mask)
+                mask_filename = f"{uid}_artery_seg.png"
+                mask_path = os.path.join(output_masks_dir_arteries, mask_filename)
 
-                    # Draw all vessel segmentations on the mask
-                    for vessel_seg in vessel_segmentations:
-                        xyxy = vessel_seg.get("xyxy", [])
-                        attributes = vessel_seg.get("attributes", [])
-                        attributes["mask_path"] = mask_path
-                        # Convert flat list to points array
+                # Create an empty mask image
+                mask = Image.new("L", (old_width, old_height), 0)
+                draw = ImageDraw.Draw(mask)
+
+                # Draw all vessel segmentations on the mask
+                for vessel_seg in vessel_segmentations:
+                    xyxy = vessel_seg.get("xyxy", [])
+                    attributes = vessel_seg.get("attributes", {})
+                    attributes["mask_path"] = mask_path
+                    # Convert flat list to points array
+                    if xyxy and len(xyxy) >= 4:
+                        points = np.array(xyxy).reshape(-1, 2)
+                        # Convert to tuple list for PIL
+                        points = [(x, y) for x, y in points]
+                        # Draw polygon with fill color 255 (white)
+                        draw.polygon(points, fill=255)
+
+                    # Update bounding box coordinates if present
+                    if "bbox" in vessel_seg:
+                        vessel_seg["bbox"] = rescale_bbox(
+                            vessel_seg["bbox"],
+                            old_width,
+                            old_height,
+                            desired_X,
+                            desired_Y,
+                        )
+
+                # Resize mask to standard size
+                mask = mask.resize((desired_X, desired_Y), Image.NEAREST)
+
+                # Save mask to file
+                mask.save(mask_path)
+
+            # Process stenosis annotations
+            if "stenosis" in annotations:
+                stenosis_data = annotations.get("stenosis", {})
+
+                # Create a stenosis mask
+                mask_filename = f"{uid}_stenosis_seg.png"
+                mask_path = os.path.join(output_masks_dir_stenosis, mask_filename)
+
+                # Create an empty mask image
+                mask = Image.new("L", (old_width, old_height), 0)
+                draw = ImageDraw.Draw(mask)
+
+                # Process each stenosis entry (bboxes and segmentations)
+                for key, value in stenosis_data.items():
+                    if key.startswith("bbox"):
+                        # Rescale bounding box
+                        stenosis_data[key] = rescale_bbox(
+                            value, old_width, old_height, desired_X, desired_Y
+                        )
+                    elif key.startswith("segmentation"):
+                        # Handle segmentation data
+                        xyxy = value.get("xyxy", [])
+
+                        # Convert flat list to points array and draw on mask
                         if xyxy and len(xyxy) >= 4:
                             points = np.array(xyxy).reshape(-1, 2)
                             # Convert to tuple list for PIL
@@ -186,18 +234,11 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
                             # Draw polygon with fill color 255 (white)
                             draw.polygon(points, fill=255)
 
-                    # Resize mask to standard size
-                    mask = mask.resize((desired_X, desired_Y), Image.NEAREST)
+                # Resize mask to standard size
+                mask = mask.resize((desired_X, desired_Y), Image.NEAREST)
 
-                    # Save mask to file
-                    mask.save(mask_path)
-
-                elif key.startswith("bbox"):
-                    # Save the bbox
-                    updated_bbox = rescale_bbox(
-                        bbox, old_width, old_height, desired_X, desired_Y
-                    )
-                    annotations[key] = updated_bbox
+                # Save mask to file
+                mask.save(mask_path)
 
         # --- CLAHE ---
         if "clahe" in entry.get("clahe", {}) and "clahe" in steps_order:
@@ -236,21 +277,23 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             label_filename = annotations.get("name", f"{uid}.txt")
 
             lines = []
-            for key, bbox in annotations.items():
-                if key == "name":
+            for key, value in annotations.items():
+                if key == "name" or key == "vessel_segmentations":
                     continue
-                elif key.startswith("segmentation"):
-                    continue
-                elif key == "vessel_segmentations":
-                    continue
-                xmin = bbox["xmin"]
-                ymin = bbox["ymin"]
-                xmax = bbox["xmax"]
-                ymax = bbox["ymax"]
-                line = f"0 {xmin} {ymin} {xmax} {ymax}"
-                lines.append(line)
+                elif key == "stenosis":
+                    stenosis_data = annotations.get("stenosis", {})
 
-            # Save default labels file
+                    # Process each stenosis bounding box
+                    for subkey, bbox in stenosis_data.items():
+                        if subkey.startswith("bbox"):
+                            xmin = bbox["xmin"]
+                            ymin = bbox["ymin"]
+                            xmax = bbox["xmax"]
+                            ymax = bbox["ymax"]
+                            line = f"0 {xmin} {ymin} {xmax} {ymax}"
+                            lines.append(line)
+
+            # Save default labels file (Pascal VOC format)
             label_out_path = os.path.join(labels_out, label_filename)
             with open(label_out_path, "w") as f:
                 f.write("\n".join(lines))
@@ -261,22 +304,21 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             )
             if labels_formats.get("YOLO", False):
                 label_yolo_out_path = os.path.join(labels_yolo_out, label_filename)
-                lines = []
-                for key, bbox in annotations.items():
-                    if key == "name":
-                        continue
-                    elif key.startswith("segmentation"):
-                        continue
-                    elif key == "vessel_segmentations":
-                        continue
-                    orig_width = img_info.get("width")
-                    orig_height = img_info.get("height")
-                    yolo_bbox = common_to_yolo(bbox, orig_width, orig_height)
-                    line = f"0 {yolo_bbox['x_center']} {yolo_bbox['y_center']} {yolo_bbox['width']} {yolo_bbox['height']}"
-                    lines.append(line)
+                yolo_lines = []
+
+                # Handle stenosis bounding boxes for YOLO format
+                if "stenosis" in annotations:
+                    stenosis_data = annotations.get("stenosis", {})
+                    for subkey, bbox in stenosis_data.items():
+                        if subkey.startswith("bbox"):
+                            orig_width = img_info.get("width")
+                            orig_height = img_info.get("height")
+                            yolo_bbox = common_to_yolo(bbox, orig_width, orig_height)
+                            line = f"0 {yolo_bbox['x_center']} {yolo_bbox['y_center']} {yolo_bbox['width']} {yolo_bbox['height']}"
+                            yolo_lines.append(line)
 
                 with open(label_yolo_out_path, "w") as f:
-                    f.write("\n".join(lines))
+                    f.write("\n".join(yolo_lines))
 
     # --------------------------------
     # After processing all, save JSON:

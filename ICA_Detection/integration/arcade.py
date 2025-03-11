@@ -65,6 +65,8 @@ def process_arcade_annotation_file(
         annots: List[Dict[str, Any]] = image_to_annots.get(img["id"], [])
 
         ann_dict: Dict[str, Any] = {"name": f"{unique_id}.txt"}
+        stenosis_dict: Dict[str, Any] = {}
+
         bbox_count: int = 1
         for a in annots:
             # Store the bboxes
@@ -82,7 +84,7 @@ def process_arcade_annotation_file(
                 ),
             }
             common_bbox = arcade_to_common(native_bbox)
-            ann_dict[f"bbox{bbox_count}"] = common_bbox
+            stenosis_dict[f"bbox{bbox_count}"] = common_bbox
 
             segmentation_data = a.get("segmentation", [])
             # If you need a flattened array
@@ -102,9 +104,11 @@ def process_arcade_annotation_file(
                     ),
                 }
 
-                ann_dict[f"segmentation{bbox_count}"] = native_segmentation
+                stenosis_dict[f"segmentation{bbox_count}"] = native_segmentation
 
             bbox_count += 1
+
+        ann_dict["stenosis"] = stenosis_dict
 
         lesion_flag: bool = True if bbox_count > 1 else False
 
@@ -226,7 +230,18 @@ def process_arcade_dataset(
                     for ann in syntax_info["annotations"]:
                         cat_id = ann.get("category_id")
                         segmentation_data = ann.get("segmentation", [])
+                        area_data = ann.get("area", [])
+                        bbox_data = ann.get("bbox", [])
+                        iscrowd_data = ann.get("iscrowd", [])
                         attributes = ann.get("attributes", [])
+
+                        bbox_data_parsed = {
+                            "xmin": bbox_data[0],
+                            "ymin": bbox_data[1],
+                            "xmax": bbox_data[2],
+                            "ymax": bbox_data[3],
+                            "label": ann.get("category_id", 0),
+                        }
 
                         if segmentation_data and isinstance(segmentation_data, list):
                             # If it's a list of lists (polygon format), flatten it
@@ -241,6 +256,9 @@ def process_arcade_dataset(
 
                             vessel_segmentation = {
                                 "xyxy": flattened_segmentation,
+                                "bbox": bbox_data_parsed,
+                                "area": area_data,
+                                "iscrowd": iscrowd_data,
                                 "attributes": attributes,
                             }
                             vessel_segmentations.append(vessel_segmentation)

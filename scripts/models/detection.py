@@ -6,7 +6,7 @@ import yaml
 from typing import Any, Dict
 
 # from references/detection code
-from ICA_Detection.external.torchvision.detection import (
+from ICA_Detection.tasks.detection.torchvision.detection import (
     engine,
     utils,
     transforms as rtransforms,  # the reference/detection/transforms.py
@@ -15,9 +15,9 @@ from ICA_Detection.external.torchvision.detection import (
 
 
 # Model definitions
-from ICA_Detection.models.detection.faster_rcnn import get_faster_rcnn_model
-from ICA_Detection.models.detection.retinanet import get_retina_net_model
-from ICA_Detection.models.detection.ssd import get_ssd_model
+from ICA_Detection.tasks.detection.models.faster_rcnn import get_faster_rcnn_model
+from ICA_Detection.tasks.detection.models.retinanet import get_retina_net_model
+from ICA_Detection.tasks.detection.models.ssd import get_ssd_model
 
 # Data loader function
 from ICA_Detection.splits.holdout.holdout_detection_models import holdout_coco
