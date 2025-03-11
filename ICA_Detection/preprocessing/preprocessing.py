@@ -67,7 +67,6 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
     os.makedirs(datasets_out_dir, exist_ok=True)
     os.makedirs(output_masks_dir, exist_ok=True)
 
-
     # Load the planned JSON
     with open(json_path, "r") as f:
         data = json.load(f)
@@ -89,7 +88,6 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
         # Define working filename: we use PNG for all processed images
         working_filename = f"{uid}.png"
         working_img_path = os.path.join(images_out, working_filename)
-
 
         # --- Step 1: Format Standardization ---
         if (
@@ -142,7 +140,6 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             desired_Y = res_plan.get("desired_Y")
             method = res_plan.get("method")
 
-            
             new_img_path = current_img_path  # Overwrite in place
             ret = apply_resolution(
                 current_img_path, new_img_path, desired_X, desired_Y, method
@@ -201,8 +198,6 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
                         bbox, old_width, old_height, desired_X, desired_Y
                     )
                     annotations[key] = updated_bbox
-
-
 
         # --- CLAHE ---
         if "clahe" in entry.get("clahe", {}) and "clahe" in steps_order:
