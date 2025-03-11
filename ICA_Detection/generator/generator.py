@@ -150,7 +150,7 @@ class DatasetGenerator:
             )
 
 
-if __name__ == "__main__":
+def main() -> None:
     # --- Integration Step ---
     # You can download the datasets manually from:
     # - KEMEROV: https://data.mendeley.com/datasets/ydrm75xywg/2

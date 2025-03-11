@@ -68,29 +68,8 @@ def create_segmentation_dataset(
                 print(f"Error opening image {image_path}: {e}")
                 continue
 
-        # Create an empty mask image
-        mask = Image.new("L", (original_width, original_height), 0)
-        draw = ImageDraw.Draw(mask)
-
-        # Draw all vessel segmentations on the mask
-        for vessel_seg in vessel_segmentations:
-            xyxy = vessel_seg.get("xyxy", [])
-
-            # Convert flat list to points array
-            if xyxy and len(xyxy) >= 4:
-                points = np.array(xyxy).reshape(-1, 2)
-                # Convert to tuple list for PIL
-                points = [(x, y) for x, y in points]
-                # Draw polygon with fill color 255 (white)
-                draw.polygon(points, fill=255)
-
-        # Resize mask to standard size
-        mask = mask.resize(image_size, Image.BILINEAR)
-
-        # Save mask to file
         mask_filename = f"{image_id}_mask.png"
         mask_path = os.path.join(output_masks_dir, mask_filename)
-        mask.save(mask_path)
 
         # Add to segmentation dataset
         segmentation_entry = {

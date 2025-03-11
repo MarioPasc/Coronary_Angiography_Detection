@@ -7,6 +7,9 @@ import shutil
 from typing import List, Dict, Any
 from tqdm import tqdm  # type: ignore
 from pathlib import Path
+import numpy as np
+
+from PIL import Image, ImageDraw
 
 # Import our tool functions.
 
@@ -56,11 +59,14 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
     labels_out = os.path.join(out_dir, "labels_pascal_voc")
     labels_yolo_out = os.path.join(out_dir, "labels_yolo")
     datasets_out_dir = os.path.join(out_dir, "datasets")
+    output_masks_dir = os.path.join(datasets_out_dir, "segmentation/masks")
 
     os.makedirs(images_out, exist_ok=True)
     os.makedirs(labels_out, exist_ok=True)
     os.makedirs(labels_yolo_out, exist_ok=True)
     os.makedirs(datasets_out_dir, exist_ok=True)
+    os.makedirs(output_masks_dir, exist_ok=True)
+
 
     # Load the planned JSON
     with open(json_path, "r") as f:
@@ -83,6 +89,7 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
         # Define working filename: we use PNG for all processed images
         working_filename = f"{uid}.png"
         working_img_path = os.path.join(images_out, working_filename)
+
 
         # --- Step 1: Format Standardization ---
         if (
@@ -135,6 +142,7 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             desired_Y = res_plan.get("desired_Y")
             method = res_plan.get("method")
 
+            
             new_img_path = current_img_path  # Overwrite in place
             ret = apply_resolution(
                 current_img_path, new_img_path, desired_X, desired_Y, method
@@ -155,10 +163,46 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
             for key, bbox in annotations.items():
                 if key == "name":
                     continue
-                updated_bbox = rescale_bbox(
-                    bbox, old_width, old_height, desired_X, desired_Y
-                )
-                annotations[key] = updated_bbox
+                elif key.startswith("segmentation"):
+                    continue
+                # Save the vessel segmentation
+                elif key == "vessel_segmentations":
+                    vessel_segmentations = annotations.get("vessel_segmentations", [])
+
+                    mask_filename = f"{uid}_seg.png"
+                    mask_path = os.path.join(output_masks_dir, mask_filename)
+
+                    # Create an empty mask image
+                    mask = Image.new("L", (old_width, old_height), 0)
+                    draw = ImageDraw.Draw(mask)
+
+                    # Draw all vessel segmentations on the mask
+                    for vessel_seg in vessel_segmentations:
+                        xyxy = vessel_seg.get("xyxy", [])
+                        attributes = vessel_seg.get("attributes", [])
+                        attributes["mask_path"] = mask_path
+                        # Convert flat list to points array
+                        if xyxy and len(xyxy) >= 4:
+                            points = np.array(xyxy).reshape(-1, 2)
+                            # Convert to tuple list for PIL
+                            points = [(x, y) for x, y in points]
+                            # Draw polygon with fill color 255 (white)
+                            draw.polygon(points, fill=255)
+
+                    # Resize mask to standard size
+                    mask = mask.resize((desired_X, desired_Y), Image.NEAREST)
+
+                    # Save mask to file
+                    mask.save(mask_path)
+
+                elif key.startswith("bbox"):
+                    # Save the bbox
+                    updated_bbox = rescale_bbox(
+                        bbox, old_width, old_height, desired_X, desired_Y
+                    )
+                    annotations[key] = updated_bbox
+
+
 
         # --- CLAHE ---
         if "clahe" in entry.get("clahe", {}) and "clahe" in steps_order:

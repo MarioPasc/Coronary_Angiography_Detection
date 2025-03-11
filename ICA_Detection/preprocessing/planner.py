@@ -48,11 +48,10 @@ def create_preprocessing_plan(
             original_name = img_info.get("original_name", "")
             _, ext = os.path.splitext(original_name)
             original_format = ext.lstrip(".").lower()
-            if original_format != desired_format:
-                plan["format_standarization"] = {
-                    "original_format": original_format,
-                    "desired_format": desired_format,
-                }
+            plan["format_standarization"] = {
+                "original_format": original_format,
+                "desired_format": desired_format,
+            }
 
         # Dtype check.
         dtype_plan = plan_steps.get("dtype_standarization")
@@ -83,12 +82,12 @@ def create_preprocessing_plan(
             method = res_plan.get("method")
             current_X = img_info.get("width")
             current_Y = img_info.get("height")
-            if current_X != desired_X or current_Y != desired_Y:
-                plan["resolution_standarization"] = {
-                    "desired_X": desired_X,
-                    "desired_Y": desired_Y,
-                    "method": method,
-                }
+            #if current_X != desired_X or current_Y != desired_Y:
+            plan["resolution_standarization"] = {
+                "desired_X": desired_X,
+                "desired_Y": desired_Y,
+                "method": method,
+            }
 
         # CLAHE methodology
         fse_plan = plan_steps.get("clahe")
@@ -120,8 +119,7 @@ def create_preprocessing_plan(
     return data
 
 
-if __name__ == "__main__":
-    # Example usage:
+def main():    # Example usage:
     input_json = "combined_standardized.json"
     output_json = "planned_standardized.json"
 
