@@ -1,9 +1,11 @@
 import os
-import shutil
-from pathlib import Path
-from typing import Union, Any, Dict
 import json
+from pathlib import Path
+from typing import Dict, Any, Union, Tuple
+import shutil
 from PIL import Image
+
+from .bbox_translation import calculate_polygon_area, calculate_bbox_from_segmentation
 
 
 def construct_yolo(root_folder: Union[str, Path]) -> None:
@@ -44,24 +46,21 @@ def construct_yolo(root_folder: Union[str, Path]) -> None:
                 shutil.copy(label_file, yolo_labels / label_file.name)
 
 
-def construct_pytorch_compatible(
-    json_path: Union[str, Path], root_folder: Union[str, Path], dataset_name: str
-) -> str:
+def construct_coco_compatible(
+    json_path: Union[str, Path], root_folder: Union[str, Path]
+) -> Tuple[str, str]:
     """
-    Creates a dataset folder (if needed) and two JSON files:
+    Creates a dataset folder (if needed) and three JSON files:
       1) The original "Standard_dataset" JSON, with possibly updated paths
-      2) A COCO-style JSON, to enable COCO evaluation with CocoEvaluator.
+      2) A COCO-style JSON for stenosis data, to enable COCO evaluation with CocoEvaluator
+      3) A COCO-style JSON for arteries data, containing vessel segmentations
 
-    Returns the path to the newly created  COCO JSON.
+    Returns the paths to the newly created COCO JSONs (stenosis_coco.json, arteries_coco.json).
     """
 
     root_path = Path(root_folder).resolve()
     datasets_path = root_path / "datasets"
     datasets_path.mkdir(parents=True, exist_ok=True)
-
-    dataset_name = dataset_name.strip("_")
-    output_dir = datasets_path / dataset_name
-    os.makedirs(output_dir, exist_ok=True)
 
     with open(json_path, "r") as f:
         data = json.load(f)
@@ -80,88 +79,200 @@ def construct_pytorch_compatible(
         new_data["Standard_dataset"][key] = new_item
 
     # -----------------------------------------------------------------
-    # 2) Create a COCO-style JSON for evaluation
-    #
-    #    "images":      [ { "id", "file_name", "width", "height" }, ... ]
-    #    "annotations": [ { "id", "image_id", "category_id", "bbox", "area", "iscrowd" }, ... ]
-    #    "categories":  [ { "id", "name" }, ... ]
-    #
-    #    We'll assume there's only 1 class: "lesion" => category_id=1
-    #    If you have more classes, you'll need to adapt accordingly.
+    # 2) Create a COCO-style JSON for stenosis evaluation
     # -----------------------------------------------------------------
-    coco_images = []
-    coco_annotations = []
-    coco_categories = [{"id": 1, "name": "stenosis"}]  # adapt if more classes
+    stenosis_images = []
+    stenosis_annotations = []
+    stenosis_categories = [{"id": 1, "name": "stenosis"}]
 
-    ann_id_counter = 1  # unique ID for each annotation
+    stenosis_ann_id_counter = 1
     image_id_counter = 1
 
     for key, item in new_data["Standard_dataset"].items():
         img_path = item["image"]["dataset_route"]
 
-        # 2.1) Load the image to get width/height
-        #      You can skip this if you already have width/height in your data
-        #      But COCO format requires them.
+        # Load the image to get width/height
         with Image.open(img_path) as im:
             width, height = im.size
 
-        # 2.2) Add an entry to the "images" list
-        #      We'll map your original `key` or integer index to a new integer ID
+        # Add an entry to the "images" list
         image_id = image_id_counter
         image_id_counter += 1
 
-        coco_images.append(
+        stenosis_images.append(
             {
                 "id": image_id,
-                "file_name": os.path.basename(
-                    img_path
-                ),  # or the full path if you prefer
+                "file_name": os.path.basename(img_path),
                 "width": width,
                 "height": height,
             }
         )
 
-        # 2.3) Convert bounding boxes from item["annotations"]
-        annots = item.get("annotations", {})
-        for ann_key, ann_val in annots.items():
-            if ann_key.startswith("bbox"):
-                xmin = float(ann_val["xmin"])
-                ymin = float(ann_val["ymin"])
-                xmax = float(ann_val["xmax"])
-                ymax = float(ann_val["ymax"])
+        # Process stenosis annotations if they exist
+        if "annotations" in item and "stenosis" in item["annotations"]:
+            stenosis_data = item["annotations"]["stenosis"]
 
-                w = xmax - xmin
-                h = ymax - ymin
-                area = w * h
-                if w <= 0 or h <= 0:
-                    # skip invalid boxes
-                    continue
+            # Process bounding boxes
+            for ann_key, ann_val in stenosis_data.items():
+                if ann_key.startswith("bbox"):
+                    xmin = float(ann_val["xmin"])
+                    ymin = float(ann_val["ymin"])
+                    xmax = float(ann_val["xmax"])
+                    ymax = float(ann_val["ymax"])
 
-                # Each annotation has a unique ID
-                coco_annotations.append(
-                    {
-                        "id": ann_id_counter,
-                        "image_id": image_id,
-                        "category_id": 1,  # 'lesion'
-                        "bbox": [xmin, ymin, w, h],  # XYWH format for COCO
-                        "area": area,
-                        "iscrowd": 0,
-                    }
-                )
-                ann_id_counter += 1
+                    w = xmax - xmin
+                    h = ymax - ymin
+                    area = w * h
+                    if w <= 0 or h <= 0:
+                        # Skip invalid boxes
+                        continue
 
-    # 2.4) Build final COCO dict
-    coco_dict = {
-        "images": coco_images,
-        "annotations": coco_annotations,
-        "categories": coco_categories,
+                    # Add bounding box annotation
+                    stenosis_annotations.append(
+                        {
+                            "id": stenosis_ann_id_counter,
+                            "image_id": image_id,
+                            "category_id": 1,  # 'stenosis'
+                            "bbox": [xmin, ymin, w, h],  # XYWH format for COCO
+                            "area": area,
+                            "iscrowd": 0,
+                        }
+                    )
+                    stenosis_ann_id_counter += 1
+
+                # Process segmentation data
+                elif ann_key.startswith("segmentation"):
+                    # COCO segmentation format requires [x1,y1,x2,y2,...] format
+                    seg_points = ann_val["xyxy"]
+
+                    # Calculate area of the polygon
+                    # Simple approach: use polygon area formula
+                    area = calculate_polygon_area(seg_points)
+
+                    stenosis_annotations.append(
+                        {
+                            "id": stenosis_ann_id_counter,
+                            "image_id": image_id,
+                            "category_id": 1,  # 'stenosis'
+                            "segmentation": [
+                                seg_points
+                            ],  # COCO expects list of polygons
+                            "area": area,
+                            "iscrowd": 0,
+                            "bbox": calculate_bbox_from_segmentation(
+                                seg_points
+                            ),  # Required for COCO
+                        }
+                    )
+                    stenosis_ann_id_counter += 1
+
+    # Build stenosis COCO dict
+    stenosis_coco_dict = {
+        "images": stenosis_images,
+        "annotations": stenosis_annotations,
+        "categories": stenosis_categories,
+    }
+    os.makedirs(os.path.join(datasets_path, "stenosis"), exist_ok=True)
+
+    # Save stenosis_coco.json
+    stenosis_json_path = os.path.join(datasets_path, "stenosis", "stenosis_coco.json")
+    with open(stenosis_json_path, "w") as f_stenosis:
+        json.dump(stenosis_coco_dict, f_stenosis, indent=2)
+
+    print(f"Stenosis COCO-style annotation saved to: {stenosis_json_path}")
+
+    # -----------------------------------------------------------------
+    # 3) Create a COCO-style JSON for arteries evaluation
+    # -----------------------------------------------------------------
+    arteries_images = stenosis_images.copy()  # Reuse the same images
+    arteries_annotations = []
+    arteries_categories = [{"id": 1, "name": "artery"}]
+
+    arteries_ann_id_counter = 1
+
+    for key, item in new_data["Standard_dataset"].items():
+        # Use the same image_id mapping as before
+        image_id = stenosis_images[
+            list(new_data["Standard_dataset"].keys()).index(key)
+        ]["id"]
+
+        # Process vessel segmentations if they exist
+        if "annotations" in item and "vessel_segmentations" in item["annotations"]:
+            vessel_segments = item["annotations"]["vessel_segmentations"]
+
+            # Skip if no segments
+            if not vessel_segments:
+                continue
+
+            # Collect all segmentation points for this image
+            all_segmentations = []
+
+            # Find global bounding box (min x, min y, max x, max y) across all segments
+            global_x_min = float("inf")
+            global_y_min = float("inf")
+            global_x_max = float("-inf")
+            global_y_max = float("-inf")
+
+            total_area = 0
+
+            # Process each segment
+            for segment in vessel_segments:
+                # Extract segmentation points
+                seg_points = segment["xyxy"]
+                all_segmentations.extend(seg_points)
+
+                # Update global bounding box
+                x_coords = seg_points[0::2]
+                y_coords = seg_points[1::2]
+
+                global_x_min = min(global_x_min, min(x_coords))
+                global_y_min = min(global_y_min, min(y_coords))
+                global_x_max = max(global_x_max, max(x_coords))
+                global_y_max = max(global_y_max, max(y_coords))
+
+                # Add to total area (we'll later use the bounding box area)
+                if "area" in segment:
+                    total_area += segment["area"]
+
+            # Calculate bounding box in COCO format [x, y, width, height]
+            bbox_width = global_x_max - global_x_min
+            bbox_height = global_y_max - global_y_min
+
+            # Handle edge case of invalid dimensions
+            if bbox_width <= 0 or bbox_height <= 0:
+                continue
+
+            # Use bounding box area if total_area is not calculated
+            if total_area == 0:
+                total_area = bbox_width * bbox_height  # type: ignore
+
+            # Create a single annotation with all segmentations for this image
+            arteries_annotations.append(
+                {
+                    "id": arteries_ann_id_counter,
+                    "image_id": image_id,
+                    "category_id": 1,  # 'artery'
+                    "segmentation": all_segmentations,  # List of all segmentation polygons
+                    "bbox": [global_x_min, global_y_min, bbox_width, bbox_height],
+                    "area": total_area,
+                    "iscrowd": 0,
+                }
+            )
+            arteries_ann_id_counter += 1
+
+    # Build arteries COCO dict
+    arteries_coco_dict = {
+        "images": arteries_images,
+        "annotations": arteries_annotations,
+        "categories": arteries_categories,
     }
 
-    # 2.5) Save as dataset_name_coco.json
-    coco_json_path = os.path.join(output_dir, f"{dataset_name}_coco.json")
-    with open(coco_json_path, "w") as f_coco:
-        json.dump(coco_dict, f_coco, indent=2)
+    os.makedirs(os.path.join(datasets_path, "arteries"), exist_ok=True)
+    # Save arteries_coco.json
+    arteries_json_path = os.path.join(datasets_path, "arteries", "arteries_coco.json")
+    with open(arteries_json_path, "w") as f_arteries:
+        json.dump(arteries_coco_dict, f_arteries, indent=2)
 
-    print(f"COCO-style annotation saved to: {coco_json_path}")
+    print(f"Arteries COCO-style annotation saved to: {arteries_json_path}")
 
-    return coco_json_path
+    return stenosis_json_path, arteries_json_path

@@ -21,7 +21,7 @@ from ICA_Detection.tools.clahe import clahe_enhancement
 from ICA_Detection.tools.bbox_translation import common_to_yolo, rescale_bbox
 from ICA_Detection.tools.dataset_conversions import (
     construct_yolo,
-    construct_pytorch_compatible,
+    construct_coco_compatible,
 )
 
 
@@ -183,9 +183,9 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
                     if xyxy and len(xyxy) >= 4:
                         points = np.array(xyxy).reshape(-1, 2)
                         # Convert to tuple list for PIL
-                        points = [(x, y) for x, y in points]
+                        points = [(x, y) for x, y in points]  # type: ignore
                         # Draw polygon with fill color 255 (white)
-                        draw.polygon(points, fill=255)
+                        draw.polygon(points, fill=255)  # type: ignore
 
                     # Update bounding box coordinates if present
                     if "bbox" in vessel_seg:
@@ -198,7 +198,7 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
                         )
 
                 # Resize mask to standard size
-                mask = mask.resize((desired_X, desired_Y), Image.NEAREST)
+                mask = mask.resize((desired_X, desired_Y), Image.NEAREST)  # type: ignore
 
                 # Save mask to file
                 mask.save(mask_path)
@@ -230,12 +230,12 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
                         if xyxy and len(xyxy) >= 4:
                             points = np.array(xyxy).reshape(-1, 2)
                             # Convert to tuple list for PIL
-                            points = [(x, y) for x, y in points]
+                            points = [(x, y) for x, y in points]  # type: ignore
                             # Draw polygon with fill color 255 (white)
-                            draw.polygon(points, fill=255)
+                            draw.polygon(points, fill=255)  # type: ignore
 
                 # Resize mask to standard size
-                mask = mask.resize((desired_X, desired_Y), Image.NEAREST)
+                mask = mask.resize((desired_X, desired_Y), Image.NEAREST)  # type: ignore
 
                 # Save mask to file
                 mask.save(mask_path)
@@ -376,9 +376,7 @@ def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str) 
         or dataset_formats.get("FasterRCNN", False)
         or dataset_formats.get("SSD", False)
     ):
-        construct_pytorch_compatible(
-            json_path=json_path, root_folder=root_path, dataset_name="detection"
-        )
+        construct_coco_compatible(json_path=json_path, root_folder=root_path)
 
 
 def main():

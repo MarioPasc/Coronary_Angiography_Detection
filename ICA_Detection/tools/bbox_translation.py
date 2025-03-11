@@ -10,13 +10,14 @@ A dictionary with keys:
     "ymax": The y-coordinate (in pixels) of the bottom-right corner
     "label": The associated label
 
-This format is essentially the Pascal VOC format in pixel coordinates. 
-It is independent of image dimensions and can easily be translated into 
+This format is essentially the Pascal VOC format in pixel coordinates.
+It is independent of image dimensions and can easily be translated into
 other formats (e.g., normalized YOLO format) when needed.
 """
 
 from typing import Dict, Any
 import numpy as np
+
 
 def cadica_to_common(bbox: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -50,7 +51,7 @@ def arcade_to_common(bbox: Dict[str, Any]) -> Dict[str, Any]:
     y = bbox["y"] if "y" in bbox else bbox.get("Y")
     w = bbox["w"] if "w" in bbox else bbox.get("W")
     h = bbox["h"] if "h" in bbox else bbox.get("H")
-    return {"xmin": x, "ymin": y, "xmax": x + w, "ymax": y + h, "label": bbox["label"]}
+    return {"xmin": x, "ymin": y, "xmax": x + w, "ymax": y + h, "label": bbox["label"]}  # type: ignore
 
 
 def kemerovo_to_common(bbox: Dict[str, Any]) -> Dict[str, Any]:
@@ -107,17 +108,18 @@ def common_to_yolo(
         "label": bbox["label"],
     }
 
+
 def rescale_bbox(bbox, orig_width, orig_height, new_width, new_height):
     """
     Rescale a Pascal VOC bounding box given the old and new image dimensions.
-    
+
     Args:
         bbox (dict): Bounding box with keys "xmin", "ymin", "xmax", "ymax".
         orig_width (int): Original image width.
         orig_height (int): Original image height.
         new_width (int): New image width.
         new_height (int): New image height.
-    
+
     Returns:
         dict: New bounding box with updated coordinates.
     """
@@ -128,8 +130,9 @@ def rescale_bbox(bbox, orig_width, orig_height, new_width, new_height):
         "ymin": np.round(bbox["ymin"] * scale_y, 0),
         "xmax": np.round(bbox["xmax"] * scale_x, 0),
         "ymax": np.round(bbox["ymax"] * scale_y, 0),
-        "label": bbox.get("label", "")
+        "label": bbox.get("label", ""),
     }
+
 
 if __name__ == "__main__":
     # Example usage:
@@ -154,3 +157,48 @@ if __name__ == "__main__":
     # Convert one common bbox to YOLO normalized (assuming image size 800x800).
     yolo_bbox = common_to_yolo(common_cadica, 800, 800)
     print("YOLO normalized from Cadica:", yolo_bbox)
+
+
+def calculate_polygon_area(points):
+    """
+    Calculate the area of a polygon given its vertices.
+    Uses the Shoelace formula (also known as the Surveyor's formula).
+
+    Args:
+        points: List of coordinates [x1, y1, x2, y2, ...]
+
+    Returns:
+        Area of the polygon
+    """
+    # Convert flat list to pairs
+    vertices = [(points[i], points[i + 1]) for i in range(0, len(points), 2)]
+
+    # Apply Shoelace formula
+    n = len(vertices)
+    area = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        area += vertices[i][0] * vertices[j][1]
+        area -= vertices[j][0] * vertices[i][1]
+    area = abs(area) / 2.0
+
+    return area
+
+
+def calculate_bbox_from_segmentation(points):
+    """
+    Calculate bounding box from segmentation points in format [x1, y1, x2, y2, ...]
+
+    Returns:
+        [x_min, y_min, width, height] as required by COCO
+    """
+    # Extract x and y coordinates
+    x_coords = points[0::2]
+    y_coords = points[1::2]
+
+    x_min = min(x_coords)
+    y_min = min(y_coords)
+    width = max(x_coords) - x_min
+    height = max(y_coords) - y_min
+
+    return [x_min, y_min, width, height]

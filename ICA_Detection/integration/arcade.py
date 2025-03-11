@@ -3,6 +3,7 @@ import json
 from typing import List, Dict, Tuple, Any
 import requests
 import zipfile
+import shutil
 
 # Import the translator functions for Arcade.
 from ICA_Detection.tools.bbox_translation import arcade_to_common
@@ -160,12 +161,33 @@ def process_arcade_dataset(
         if os.path.isdir(syntax_dir):
             syntax_data_by_split = {}
 
+            # Since the ARCADE dataset does not share ID's between the stenosis
+            # and the syntax task, we have to create two different folders that share the same
+            # images but have different IDs.
+            # For example, an annotation on syntax could refer to ID 656 in train, but ID 656 in train
+            # is not the same image for the stenosis task.
+            # (sigh)
+
+            # FIXME: We have to fin a way to standarize the name of the images and masks. We may have to entirely chang the json creation
+
+            image_arteries_path = os.path.join(
+                root_dir, "../../ICA_DETECTION", "images", "images_arteries"
+            )
+            os.makedirs(image_arteries_path, exist_ok=True)
+
             # First load all the syntax data by split
             for split in ["train", "val", "test"]:
                 split_dir: str = os.path.join(syntax_dir, split)  # type: ignore
                 if not os.path.isdir(split_dir):
                     continue
                 images_folder: str = os.path.join(split_dir, "images")  # type: ignore
+
+                for image in os.listdir(images_folder):
+                    shutil.copyfile(
+                        src=os.path.join(images_folder, image),
+                        dst=os.path.join(image_arteries_path, image),
+                    )
+
                 annotations_folder: str = os.path.join(split_dir, "annotations")  # type: ignore
                 annot_file: str = os.path.join(annotations_folder, f"{split}.json")  # type: ignore
                 if not os.path.exists(annot_file):
