@@ -34,20 +34,40 @@ def train_one_epoch(
 
     for images, targets in metric_logger.log_every(data_loader, print_freq, header):
         images = list(image.to(device) for image in images)
-        targets = [
-            {
-                k: v.to(device) if isinstance(v, torch.Tensor) else v
-                for k, v in t.items()
-            }
-            for t in targets
-        ]
-        with torch.amp.autocast("cuda", enabled=scaler is not None):
-            loss_dict = model(images, targets)
-            losses = sum(loss for loss in loss_dict.values())
 
-        # reduce losses over all GPUs for logging purposes
-        loss_dict_reduced = utils.reduce_dict(loss_dict)
-        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+        formatted_targets = []
+        for t in targets:
+            if t.shape[0] == 0:  # Handle empty annotations
+                annotation_tensor = (
+                    torch.zeros((1, 5), dtype=torch.float32, device=device) - 1
+                )
+            else:
+                boxes = t[:, :4]  # Extract bounding boxes
+                labels = t[:, 4].view(-1, 1)  # Extract labels and ensure correct shape
+                annotation_tensor = torch.cat([boxes, labels], dim=1).to(device)
+            # Handle cases where there are no annotations
+            if annotation_tensor.shape[0] == 0:
+                annotation_tensor = (
+                    torch.zeros((1, 5), dtype=torch.float32, device=device) - 1
+                )
+
+            formatted_targets.append(annotation_tensor)
+
+        with torch.amp.autocast("cuda", enabled=scaler is not None):
+            # Model returns a tuple of (classification_loss, regression_loss)
+            classification_loss, regression_loss = model(images, formatted_targets)
+            # Sum the losses
+            losses = classification_loss + regression_loss
+
+            # Create a loss dict for metric logging
+            loss_dict = {
+                "classification": classification_loss,
+                "regression": regression_loss,
+            }
+
+            # For distributed training (keeping your existing code structure)
+            loss_dict_reduced = utils.reduce_dict(loss_dict)
+            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
 
         loss_value = losses_reduced.item()
 
@@ -117,7 +137,33 @@ def evaluate(model, data_loader, device, epoch, json_path=None):
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         model_time = time.time()
-        outputs = model(images)
+
+        # Switch model to eval mode for inference
+        model.eval()
+        with torch.no_grad():
+            # During evaluation, we need predictions, not losses
+            # We need to modify how we call the model or post-process its outputs
+            raw_predictions = model(images)
+
+            # Process the raw predictions into the expected format
+            # This depends on your model architecture, but typically we need:
+            # - boxes, scores, labels for each image
+            outputs = []
+
+            # If model returns pre-formatted predictions in eval mode:
+            if isinstance(raw_predictions, list) and all(
+                isinstance(pred, dict) for pred in raw_predictions
+            ):
+                outputs = raw_predictions
+            # If model returns a tuple of tensors (e.g., from RetinaNet):
+            elif isinstance(raw_predictions, tuple):
+                # Assuming raw_predictions contains classification and regression outputs
+                # We need to decode them into boxes, scores, and labels
+                for i in range(len(images)):
+                    # Process predictions for each image
+                    boxes, scores, labels = process_predictions(raw_predictions, i)
+                    outputs.append({"boxes": boxes, "scores": scores, "labels": labels})
+
         model_time = time.time() - model_time
 
         # Move outputs to CPU for evaluation and JSON saving
@@ -212,6 +258,58 @@ def evaluate(model, data_loader, device, epoch, json_path=None):
     return coco_evaluator
 
 
+def process_predictions(raw_predictions, image_index):
+    """
+    Process raw model predictions into the expected format of boxes, scores, and labels.
+    This function needs to be adapted based on your specific model architecture.
+
+    Args:
+        raw_predictions: The raw output from your model
+        image_index: The index of the current image in the batch
+
+    Returns:
+        boxes: Tensor of bounding boxes in [x1, y1, x2, y2] format
+        scores: Tensor of confidence scores
+        labels: Tensor of class labels
+    """
+    # This is a placeholder implementation that needs to be adapted to your model
+    # For example, if you're using RetinaNet with FocalLoss:
+
+    classification_output, regression_output = raw_predictions
+
+    # For RetinaNet-like models, you'd typically:
+    # 1. Select outputs for the current image
+    # 2. Apply sigmoid to classification outputs
+    # 3. Transform regression outputs to boxes
+    # 4. Apply NMS
+
+    # This is simplified and needs to be adapted to your specific architecture
+    import torch.nn.functional as F
+
+    # Get predictions for current image
+    cls_out = classification_output[image_index]
+    reg_out = regression_output[image_index]
+
+    # Apply sigmoid to get scores
+    scores = F.sigmoid(cls_out).max(dim=1)[0]
+
+    # Get class labels
+    labels = F.sigmoid(cls_out).max(dim=1)[1] + 1  # Adding 1 assuming background is 0
+
+    # Here you would transform regression outputs to actual boxes
+    # This is model-specific and needs implementation based on your architecture
+    # For now, we'll create dummy boxes as a placeholder
+    boxes = torch.zeros((len(scores), 4), device=reg_out.device)
+
+    # Filter predictions with low confidence
+    keep = scores > 0.05
+    boxes = boxes[keep]
+    scores = scores[keep]
+    labels = labels[keep]
+
+    return boxes, scores, labels
+
+
 def compute_validation_loss(
     model: torch.nn.Module,
     data_loader: torch.utils.data.DataLoader,
@@ -246,18 +344,38 @@ def compute_validation_loss(
     with torch.no_grad():
         for images, targets in data_loader:
             images = [img.to(device) for img in images]
-            # Also move target tensors (boxes, labels, etc.) to device
-            targets = [
-                {k: v.to(device) for k, v in t.items() if torch.is_tensor(v)}
-                for t in targets
-            ]
 
-            loss_dict: Dict[str, Any] = model(images, targets)  # returns losses
-            batch_loss = sum(loss for loss in loss_dict.values())
+            # Format targets similar to the train_one_epoch function
+            formatted_targets = []
+            for t in targets:
+                if t.shape[0] == 0:  # Handle empty annotations
+                    annotation_tensor = (
+                        torch.zeros((1, 5), dtype=torch.float32, device=device) - 1
+                    )
+                else:
+                    boxes = t[:, :4]  # Extract bounding boxes
+                    labels = t[:, 4].view(
+                        -1, 1
+                    )  # Extract labels and ensure correct shape
+                    annotation_tensor = torch.cat([boxes, labels], dim=1).to(device)
+                # Handle cases where there are no annotations
+                if annotation_tensor.shape[0] == 0:
+                    annotation_tensor = (
+                        torch.zeros((1, 5), dtype=torch.float32, device=device) - 1
+                    )
+
+                formatted_targets.append(annotation_tensor)
+
+            # Get losses from model (assuming model returns tuple of (class_loss, reg_loss))
+            classification_loss, regression_loss = model(images, formatted_targets)
+
+            # Sum the losses to get total batch loss
+            batch_loss = classification_loss + regression_loss
+
             total_loss += batch_loss.item()
             num_batches += 1
 
-    # Restore model’s original mode
+    # Restore model's original mode
     if not was_training:
         model.eval()
 

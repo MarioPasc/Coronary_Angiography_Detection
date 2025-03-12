@@ -8,6 +8,11 @@ import torch
 
 DEBUG: bool = False
 
+from ICA_Detection.tasks.detection.torchvision.detection import (
+    utils,
+    group_by_aspect_ratio,
+)
+
 
 class SplitCocoDataset(CocoDetection):
     """
@@ -188,14 +193,30 @@ def holdout_coco(
 
     # 5) Build DataLoaders
     def collate_fn(batch):
-        # CocoDetection returns [(img, target), (img, target), ...]
-        # We want: [imgs], [targets]
-        imgs = []
-        targets = []
-        for img, tgt in batch:
-            imgs.append(img)
-            targets.append(tgt)
-        return imgs, targets
+        images, targets = zip(*batch)  # Unzip into separate tuples
+
+        # Convert images to a stacked tensor
+        images = torch.stack(images, dim=0)
+
+        formatted_targets = []
+
+        for t in targets:
+            # Ensure 'boxes' and 'labels' exist
+            boxes = t["boxes"]
+            labels = t["labels"].unsqueeze(-1)  # Make sure labels are (N, 1)
+
+            # ✅ Combine boxes and labels into a single tensor: [x_min, y_min, x_max, y_max, class_label]
+            annotation_tensor = torch.cat([boxes, labels], dim=1)  # Shape: [N, 5]
+
+            # Handle empty annotations (avoid empty cat error)
+            if annotation_tensor.shape[0] == 0:
+                annotation_tensor = (
+                    torch.zeros((1, 5), dtype=torch.float32, device=boxes.device) - 1
+                )  # Set empty annotations to -1
+
+            formatted_targets.append(annotation_tensor)  # Add to list
+
+        return images, formatted_targets  # ✅ Return a list of tensors (not a dict)
 
     train_loader: DataLoader = DataLoader(
         train_dataset,

@@ -25,17 +25,19 @@ SPLITS_DICT = {"train": 0.7, "val": 0.3, "test": 0.0}
 SEED = 42
 
 # Output folder to store the final combined, preprocessed dataset and splits
-OUTPUT_FOLDER = "/home/mario/Python/Datasets/COMBINED/tasks" # Portátil
+# OUTPUT_FOLDER = "/home/mario/Python/Datasets/COMBINED/tasks" # Portátil
 # OUTPUT_FOLDER = "/media/hddb/mario/data/COMBINED" # ICAI
 # OUTPUT_FOLDER = "/mnt/home/users/tic_163_uma/mpascual/fscratch/datasets" # Picasso
-# OUTPUT_FOLDER = "/home/mariopasc/Python/Datasets/COMBINED/tasks"  # Sobremesa
+OUTPUT_FOLDER = "/home/mariopasc/Python/Datasets/COMBINED/tasks"  # Sobremesa
 
 # Root directories where the datasets are stored
+ROOT_DIR_SOURCE_DATASETS = "/home/mario/Python/Datasets/COMBINED/source"  # Portátil
+
+
 ROOT_DIR_SOURCE_DATASETS = (
     "/home/mariopasc/Python/Datasets/COMBINED/source"  # Sobremesa
 )
 
-ROOT_DIR_SOURCE_DATASETS = "/home/mario/Python/Datasets/COMBINED/source"  # Portátil
 
 # Preprocessing steps to be performed on the datasets
 
@@ -47,10 +49,7 @@ PLAN_STEPS_DETECTION = {
     },
     "dtype_standarization": {"desired_dtype": "uint8"},
     "format_standarization": {"desired_format": "png"},
-    "dataset_formats": {
-        "YOLO": True,
-        "COCO": True
-    },
+    "dataset_formats": {"YOLO": True, "COCO": True},
 }
 
 PLAN_STEPS_SEGMENTATION = {
@@ -62,16 +61,13 @@ PLAN_STEPS_SEGMENTATION = {
     "dtype_standarization": {"desired_dtype": "uint8"},
     "format_standarization": {"desired_format": "png"},
     "clahe": {
-       "window_size": 5,
-       "sigma": 1.0,
-       "clipLimit": 3.0,
-       "tileGridSize": (8, 8),
+        "window_size": 5,
+        "sigma": 1.0,
+        "clipLimit": 3.0,
+        "tileGridSize": (8, 8),
     },
     "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
-    "dataset_formats": {
-        "YOLO": True,
-        "COCO": True
-    },
+    "dataset_formats": {"YOLO": True, "COCO": True},
 }
 
 # ==========================
@@ -105,11 +101,19 @@ segmentation_folder_jsons = os.path.join(segmentation_folder, "json")
 os.makedirs(detection_folder_jsons, exist_ok=True)
 os.makedirs(segmentation_folder_jsons, exist_ok=True)
 
-output_combined_detection = os.path.join(detection_folder_jsons, "combined_standardized.json")
-output_combined_segmentation = os.path.join(segmentation_folder_jsons, "combined_standardized.json")
+output_combined_detection = os.path.join(
+    detection_folder_jsons, "combined_standardized.json"
+)
+output_combined_segmentation = os.path.join(
+    segmentation_folder_jsons, "combined_standardized.json"
+)
 
-output_planned_detection = os.path.join(detection_folder_jsons, "planned_standardized.json")
-output_planned_segmentation = os.path.join(segmentation_folder_jsons, "planned_standardized.json")
+output_planned_detection = os.path.join(
+    detection_folder_jsons, "planned_standardized.json"
+)
+output_planned_segmentation = os.path.join(
+    segmentation_folder_jsons, "planned_standardized.json"
+)
 
 root_dirs = {
     "CADICA": ROOT_DIR_SOURCE_DATASETS,
@@ -139,11 +143,15 @@ with open(output_combined_detection, "r") as f:
 
 with open(output_combined_segmentation, "r") as f:
     data_segmentation = json.load(f)
-    
+
 print("Creating preprocessing plan for detection...")
-planned_data_detection = DatasetGenerator.create_preprocessing_plan(data_detection, PLAN_STEPS_DETECTION, root_name="Stenosis_Detection")
+planned_data_detection = DatasetGenerator.create_preprocessing_plan(
+    data_detection, PLAN_STEPS_DETECTION, root_name="Stenosis_Detection"
+)
 print("Creating preprocessing plan for segmentation...")
-planned_data_segmentation = DatasetGenerator.create_preprocessing_plan(data_segmentation, PLAN_STEPS_SEGMENTATION, root_name="Arteries_Segmentation")
+planned_data_segmentation = DatasetGenerator.create_preprocessing_plan(
+    data_segmentation, PLAN_STEPS_SEGMENTATION, root_name="Arteries_Segmentation"
+)
 
 with open(output_planned_detection, "w") as f:
     json.dump(planned_data_detection, f, indent=4)
@@ -184,7 +192,7 @@ DatasetGenerator.execute_holdout_pipeline(
     splits_dict=SPLITS_DICT,
     output_splits_json=os.path.join(detection_folder, "json", "splits.json"),
     include_datasets=DATASETS_TO_PROCESS,
-    seed = SEED
+    seed=SEED,
 )
 
 DatasetGenerator.execute_holdout_pipeline(
@@ -192,5 +200,5 @@ DatasetGenerator.execute_holdout_pipeline(
     splits_dict=SPLITS_DICT,
     output_splits_json=os.path.join(segmentation_folder, "json", "splits.json"),
     include_datasets=DATASETS_TO_PROCESS,
-    seed = SEED
+    seed=SEED,
 )

@@ -47,7 +47,6 @@ def construct_yolo(root_folder: Union[str, Path]) -> None:
                 if link_dest.exists():
                     link_dest.unlink()
                 os.symlink(label_file, link_dest)
-                
 
 
 ###########################
@@ -94,12 +93,12 @@ def calculate_bbox_from_segmentation(points: List[float]) -> List[float]:
 
     return [xmin, ymin, xmax - xmin, ymax - ymin]
 
+
 ###########################
 # Detection (Stenosis)
 ###########################
 def construct_coco_detection(
-    json_path: Union[str, Path],
-    root_folder: Union[str, Path]
+    json_path: Union[str, Path], root_folder: Union[str, Path]
 ) -> str:
     """
     Build a COCO-style annotation for the "Stenosis_Detection" portion
@@ -151,8 +150,8 @@ def construct_coco_detection(
         )
 
         # If there are stenosis annotations, parse them
-        if "annotations" in item and "stenosis" in item["annotations"]:
-            stenosis_dict = item["annotations"]["stenosis"]
+        if "annotations" in item:
+            stenosis_dict = item["annotations"]
 
             for ann_key, ann_val in stenosis_dict.items():
                 # COCO uses XYWH format for bounding boxes
@@ -220,8 +219,7 @@ def construct_coco_detection(
 # Segmentation (Arteries)
 ###########################
 def construct_coco_segmentation(
-    json_path: Union[str, Path],
-    root_folder: Union[str, Path]
+    json_path: Union[str, Path], root_folder: Union[str, Path]
 ) -> str:
     """
     Build a COCO-style annotation for the "Arteries_Segmentation" portion
@@ -239,7 +237,9 @@ def construct_coco_segmentation(
         data = json.load(f)
 
     if "Arteries_Segmentation" not in data:
-        raise KeyError("JSON does not contain 'Arteries_Segmentation' at its top level.")
+        raise KeyError(
+            "JSON does not contain 'Arteries_Segmentation' at its top level."
+        )
 
     # Data subset for segmentation
     arteries_data = data["Arteries_Segmentation"]
@@ -279,7 +279,7 @@ def construct_coco_segmentation(
             for seg_info in vessel_segments:
                 # Each seg_info may contain "segment0", "segment1", or arbitrary keys
                 # that contain polygon points. Some also contain bounding boxes, etc.
-                # Below is a simpler approach: we gather all polygon coordinates 
+                # Below is a simpler approach: we gather all polygon coordinates
                 # in a single segmentation annotation.
 
                 # If you have multiple polygons, you can create multiple annotations
@@ -317,4 +317,3 @@ def construct_coco_segmentation(
 
     print(f"[COCO Segmentation] Arteries COCO JSON saved to: {arteries_json_path}")
     return str(arteries_json_path)
-

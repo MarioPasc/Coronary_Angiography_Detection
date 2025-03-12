@@ -11,12 +11,13 @@ from ICA_Detection.tasks.detection.torchvision.detection import (
     utils,
     transforms as rtransforms,  # the reference/detection/transforms.py
     early_stopping,
+    retina_wrapper,
 )
 
 
 # Model definitions
 from ICA_Detection.tasks.detection.models.faster_rcnn import get_faster_rcnn_model
-from ICA_Detection.tasks.detection.models.retinanet import get_retina_net_model
+from ICA_Detection.tasks.detection.models.retinanet.model import resnet152
 from ICA_Detection.tasks.detection.models.ssd import get_ssd_model
 
 # Data loader function
@@ -158,11 +159,8 @@ def main(args):
             freeze_until=args.freeze_until,
         )
     elif args.model_type.lower() == "retina_net":
-        model = get_retina_net_model(
-            pretrained=args.pretrained,
-            num_classes=args.num_classes,
-            freeze_until=args.freeze_until,
-        )
+        model = resnet152(num_classes=args.num_classes, pretrained=args.pretrained)
+        model = retina_wrapper.RetinaNetWrapper(retinanet_model=model)
     elif args.model_type.lower() == "ssd":
         model = get_ssd_model(
             pretrained=args.pretrained,
@@ -353,7 +351,10 @@ if __name__ == "__main__":
     )
     # Only one argument: the path to the config file.
     parser.add_argument(
-        "--config", type=str, default="args.yaml", help="Path to the YAML config file"
+        "--config",
+        type=str,
+        default="./scripts/models/args.yaml",
+        help="Path to the YAML config file",
     )
     args_cli = parser.parse_args()
 
