@@ -66,7 +66,6 @@ def process_arcade_annotation_file(
         annots: List[Dict[str, Any]] = image_to_annots.get(img["id"], [])
 
         ann_dict: Dict[str, Any] = {"name": f"{unique_id}.txt"}
-        stenosis_dict: Dict[str, Any] = {}
 
         bbox_count: int = 1
         for a in annots:
@@ -85,8 +84,11 @@ def process_arcade_annotation_file(
                 ),
             }
             common_bbox = arcade_to_common(native_bbox)
-            stenosis_dict[f"bbox{bbox_count}"] = common_bbox
+            ann_dict[f"bbox{bbox_count}"] = common_bbox
 
+    
+            # Hi! Uncomment me to store the stenosis segmentation of the ARCADE dataset
+            """
             segmentation_data = a.get("segmentation", [])
             # If you need a flattened array
             if segmentation_data and isinstance(segmentation_data, list):
@@ -105,12 +107,10 @@ def process_arcade_annotation_file(
                     ),
                 }
 
-                stenosis_dict[f"segmentation{bbox_count}"] = native_segmentation
+                ann_dict[f"segmentation{bbox_count}"] = native_segmentation
 
             bbox_count += 1
-
-        ann_dict["stenosis"] = stenosis_dict
-
+            """
         lesion_flag: bool = True if bbox_count > 1 else False
 
         entry: Dict[str, Any] = {
@@ -130,14 +130,20 @@ def process_arcade_annotation_file(
     return output_entries, unique_id_counter
 
 
-def process_arcade_dataset(
-    root_dir: str, include_syntax: bool = True
-) -> Dict[str, Any]:
+def process_arcade_stenosis_dataset(root_dir: str) -> Dict[str, Any]:
+    """
+    Process the ARCADE dataset for stenosis detection only.
+    
+    Args:
+        root_dir: Root directory containing the ARCADE dataset
+        
+    Returns:
+        Dictionary containing the standardized stenosis detection dataset
+    """
     root_dir = os.path.join(root_dir, "ARCADE")
-    standard_dataset: Dict[str, Any] = {}
+    stenosis_dataset: Dict[str, Any] = {}
     unique_id_counter: int = 1
 
-    # First process stenosis data (always processed)
     stenosis_dir: str = os.path.join(root_dir, "stenosis")
     if os.path.isdir(stenosis_dir):
         for split in ["train", "val", "test"]:
@@ -153,145 +159,180 @@ def process_arcade_dataset(
             entries, unique_id_counter = process_arcade_annotation_file(
                 annot_file, images_folder, split, unique_id_counter
             )
-            standard_dataset.update(entries)
+            stenosis_dataset.update(entries)
 
-    # If include_syntax is True, process syntax data and add to stenosis entries
-    if include_syntax:
-        syntax_dir: str = os.path.join(root_dir, "syntax")
-        if os.path.isdir(syntax_dir):
-            syntax_data_by_split = {}
+    return {"Stenosis_Detection": stenosis_dataset}
 
-            # Since the ARCADE dataset does not share ID's between the stenosis
-            # and the syntax task, we have to create two different folders that share the same
-            # images but have different IDs.
-            # For example, an annotation on syntax could refer to ID 656 in train, but ID 656 in train
-            # is not the same image for the stenosis task.
-            # (sigh)
 
-            # FIXME: We have to fin a way to standarize the name of the images and masks. We may have to entirely chang the json creation
+def process_arcade_vessel_segmentation(root_dir: str) -> Dict[str, Any]:
+    """
+    Process the ARCADE dataset for vessel segmentation task only.
+    
+    Args:
+        root_dir: Root directory containing the ARCADE dataset
+        
+    Returns:
+        Dictionary containing the standardized vessel segmentation dataset
+    """
+    root_dir = os.path.join(root_dir, "ARCADE")
+    arteries_dataset: Dict[str, Any] = {}
+    unique_id_counter: int = 1
 
-            image_arteries_path = os.path.join(
-                root_dir, "../../ICA_DETECTION", "images", "images_arteries"
+    syntax_dir: str = os.path.join(root_dir, "syntax")
+    if not os.path.isdir(syntax_dir):
+        print(f"Syntax directory not found: {syntax_dir}")
+        return {"Arteries_Segmentation": {}}
+
+    image_arteries_path = os.path.join(
+        root_dir, "../../ICA_DETECTION", "images", "images_arteries"
+    )
+    os.makedirs(image_arteries_path, exist_ok=True)
+
+    # Process syntax data by split
+    for split in ["train", "val", "test"]:
+        split_dir: str = os.path.join(syntax_dir, split)
+        if not os.path.isdir(split_dir):
+            continue
+            
+        images_folder: str = os.path.join(split_dir, "images")
+        
+        # Copy and rename images
+        for image in os.listdir(images_folder):
+            num = os.path.splitext(image)[0]  # e.g., "98"
+            unique_id = f"arcade{split}_p{num}_v{num}_{num.zfill(5)}.png"
+            
+            # Copy then rename to avoid overwriting
+            shutil.copyfile(
+                src=os.path.join(images_folder, image),
+                dst=os.path.join(image_arteries_path, image),
             )
-            os.makedirs(image_arteries_path, exist_ok=True)
+            os.rename(
+                src=os.path.join(image_arteries_path, image),
+                dst=os.path.join(image_arteries_path, unique_id)
+            )
 
-            # First load all the syntax data by split
-            for split in ["train", "val", "test"]:
-                split_dir: str = os.path.join(syntax_dir, split)  # type: ignore
-                if not os.path.isdir(split_dir):
+        annotations_folder: str = os.path.join(split_dir, "annotations")
+        annot_file: str = os.path.join(annotations_folder, f"{split}.json")
+        if not os.path.exists(annot_file):
+            print(f"Syntax annotation file not found: {annot_file}")
+            continue
+
+        # Load the syntax JSON file
+        with open(annot_file, "r") as f:
+            syntax_data = json.load(f)
+
+        syntax_images = syntax_data.get("images", [])
+        syntax_annotations = syntax_data.get("annotations", [])
+        syntax_categories = syntax_data.get("categories", [])
+
+        # Build category mapping for syntax
+        syntax_cat_mapping = {cat["id"]: cat["name"] for cat in syntax_categories}
+
+        # Build mapping from image_id to filename
+        id_to_filename = {img["id"]: img["file_name"] for img in syntax_images}
+        
+        # Map image_id to image dimensions
+        id_to_dimensions = {img["id"]: (img["width"], img["height"]) for img in syntax_images}
+
+        # Group annotations by image_id
+        img_id_to_annots: Dict[Any, List[Dict[str, Any]]] = {}
+        for ann in syntax_annotations:
+            img_id = ann["image_id"]
+            img_id_to_annots.setdefault(img_id, []).append(ann)
+
+        # Create entries for each image
+        for img_id, annots in img_id_to_annots.items():
+            filename = id_to_filename.get(img_id)
+            if not filename:
+                continue
+                
+            # Get image dimensions
+            img_width, img_height = id_to_dimensions.get(img_id, (0, 0))
+                
+            num = os.path.splitext(filename)[0]  # e.g., "98"
+            unique_id = f"arcade{split}_p{num}_v{num}_{num.zfill(5)}"
+            
+            vessel_segmentations = []
+            for i, ann in enumerate(annots):
+                cat_id = ann.get("category_id")
+                segmentation_data = ann.get("segmentation", [])
+                area_data = ann.get("area", 0)
+                bbox_data = ann.get("bbox", [])
+                iscrowd_data = ann.get("iscrowd", 0)
+                attributes = ann.get("attributes", {})
+
+                # Skip if incomplete data
+                if len(bbox_data) < 4:
                     continue
-                images_folder: str = os.path.join(split_dir, "images")  # type: ignore
 
-                for image in os.listdir(images_folder):
-                    shutil.copyfile(
-                        src=os.path.join(images_folder, image),
-                        dst=os.path.join(image_arteries_path, image),
-                    )
-
-                annotations_folder: str = os.path.join(split_dir, "annotations")  # type: ignore
-                annot_file: str = os.path.join(annotations_folder, f"{split}.json")  # type: ignore
-                if not os.path.exists(annot_file):
-                    print(f"Syntax annotation file not found: {annot_file}")
-                    continue
-
-                # Load the syntax JSON file
-                with open(annot_file, "r") as f:
-                    syntax_data = json.load(f)
-
-                syntax_images = syntax_data.get("images", [])
-                syntax_annotations = syntax_data.get("annotations", [])
-                syntax_categories = syntax_data.get("categories", [])
-
-                # Build category mapping for syntax
-                syntax_cat_mapping = {
-                    cat["id"]: cat["name"] for cat in syntax_categories
+                bbox_data_parsed = {
+                    "xmin": bbox_data[0],
+                    "ymin": bbox_data[1],
+                    "xmax": bbox_data[0] + bbox_data[2],  # Convert width to xmax
+                    "ymax": bbox_data[1] + bbox_data[3],  # Convert height to ymax
+                    "label": cat_id,
+                    "category": syntax_cat_mapping.get(cat_id, str(cat_id)),
                 }
 
-                # Build mapping from image filename to annotations
-                syntax_file_to_annots = {}
+                if segmentation_data and isinstance(segmentation_data, list):
+                    # If it's a list of lists (polygon format), flatten it
+                    if segmentation_data and isinstance(segmentation_data[0], list):
+                        flattened_segmentation = segmentation_data[0]  # Take the first polygon
+                    else:
+                        flattened_segmentation = segmentation_data
 
-                # First map image_id to filename
-                syntax_id_to_filename = {
-                    img["id"]: img["file_name"] for img in syntax_images
-                }
+                    vessel_segmentation = {
+                        f"segment{i}": flattened_segmentation,
+                        "bbox": bbox_data_parsed,
+                        "area": area_data,
+                        "iscrowd": iscrowd_data,
+                        "attributes": attributes,
+                    }
+                    vessel_segmentations.append(vessel_segmentation)
 
-                # Then map image_id to annotations
-                syntax_img_id_to_annots: Dict[str, Any] = {}
-                for ann in syntax_annotations:
-                    img_id = ann["image_id"]
-                    syntax_img_id_to_annots.setdefault(img_id, []).append(ann)
+            # Create the entry
+            ann_dict: Dict[str, Any] = {"name": f"{unique_id}.txt", "vessel_segmentations": vessel_segmentations}
+            
+            entry: Dict[str, Any] = {
+                "id": unique_id,
+                "dataset_origin": "arcade",
+                "image": {
+                    "name": f"{unique_id}.png",
+                    "route": os.path.join(image_arteries_path, f"{unique_id}.png"),
+                    "original_name": filename,
+                    "height": img_height,
+                    "width": img_width,
+                },
+                "annotations": ann_dict,
+            }
+            
+            arteries_dataset[unique_id] = entry
 
-                # Finally map filename to annotations
-                for img_id, annots in syntax_img_id_to_annots.items():
-                    filename = syntax_id_to_filename.get(img_id)
-                    if filename:
-                        num = os.path.splitext(filename)[0]  # e.g., "98"
-                        unique_id = f"arcade{split}_p{num}_v{num}_{num.zfill(5)}"
-                        syntax_file_to_annots[unique_id] = {
-                            "annotations": annots,
-                            "categories": syntax_cat_mapping,
-                        }
+    return {"Arteries_Segmentation": arteries_dataset}
 
-                syntax_data_by_split[split] = syntax_file_to_annots
 
-            # Now add syntax data to stenosis entries
-            for unique_id, entry in standard_dataset.items():
-                # Parse the unique_id to find the split
-                split_part = unique_id.split("_")[0]
-                split = split_part.replace("arcade", "")
-
-                # Check if we have syntax data for this split and image
-                if (
-                    split in syntax_data_by_split
-                    and unique_id in syntax_data_by_split[split]
-                ):
-                    syntax_info = syntax_data_by_split[split][unique_id]
-
-                    # Create vessel_segmentations list
-                    vessel_segmentations = []
-                    for ann in syntax_info["annotations"]:
-                        cat_id = ann.get("category_id")
-                        segmentation_data = ann.get("segmentation", [])
-                        area_data = ann.get("area", [])
-                        bbox_data = ann.get("bbox", [])
-                        iscrowd_data = ann.get("iscrowd", [])
-                        attributes = ann.get("attributes", [])
-
-                        bbox_data_parsed = {
-                            "xmin": bbox_data[0],
-                            "ymin": bbox_data[1],
-                            "xmax": bbox_data[2],
-                            "ymax": bbox_data[3],
-                            "label": ann.get("category_id", 0),
-                        }
-
-                        if segmentation_data and isinstance(segmentation_data, list):
-                            # If it's a list of lists (polygon format), flatten it
-                            if segmentation_data and isinstance(
-                                segmentation_data[0], list
-                            ):
-                                flattened_segmentation = segmentation_data[
-                                    0
-                                ]  # Take the first polygon
-                            else:
-                                flattened_segmentation = segmentation_data
-
-                            vessel_segmentation = {
-                                "xyxy": flattened_segmentation,
-                                "bbox": bbox_data_parsed,
-                                "area": area_data,
-                                "iscrowd": iscrowd_data,
-                                "attributes": attributes,
-                            }
-                            vessel_segmentations.append(vessel_segmentation)
-
-                    # Add vessel_segmentations to entry annotations
-                    if vessel_segmentations:
-                        entry["annotations"][
-                            "vessel_segmentations"
-                        ] = vessel_segmentations
-
-    return {"Standard_dataset": standard_dataset}
+def process_arcade_dataset(root_dir: str, task: str = "both") -> Dict[str, Any]:
+    """
+    Process the ARCADE dataset based on the specified task.
+    
+    Args:
+        root_dir: Root directory containing the ARCADE dataset
+        task: Task to process. Options are "stenosis", "arteries", or "both"
+        
+    Returns:
+        Dictionary containing the standardized dataset(s)
+    """
+    result: Dict[str, Any] = {}
+    
+    if task.lower() in ["stenosis", "both"]:
+        stenosis_data = process_arcade_stenosis_dataset(root_dir)
+        result.update(stenosis_data)
+        
+    if task.lower() in ["arteries", "both"]:
+        arteries_data = process_arcade_vessel_segmentation(root_dir)
+        result.update(arteries_data)
+        
+    return result
 
 
 if __name__ == "__main__":
@@ -299,10 +340,11 @@ if __name__ == "__main__":
     download_url: str = (
         "https://data.mendeley.com/public-files/datasets/ydrm75xywg/files/61f788d6-65ce-4265-a23a-5ba16931d18b/file_downloaded"
     )
-    extract_folder: str = "/home/mariopasc/Python/Datasets/COMBINED/source"
+    extract_folder: str = "/home/mario/Python/Datasets/COMBINED/source"
     # download_and_extract_arcade(download_url, extract_folder)
-    # json_data: Dict[str, Any] = process_arcade_dataset(extract_folder, task="stenosis")
-    json_data: Dict[str, Any] = process_arcade_dataset(extract_folder)
+    
+    # Process both tasks
+    json_data: Dict[str, Any] = process_arcade_dataset(extract_folder, task="both")
     output_json_file: str = "arcade_standardized.json"
     with open(output_json_file, "w") as f:
         json.dump(json_data, f, indent=4)

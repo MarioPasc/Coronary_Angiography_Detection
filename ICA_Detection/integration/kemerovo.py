@@ -82,7 +82,7 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
     dataset_dir: str = os.path.join(root_dir, "KEMEROVO", "dataset")
     if not os.path.isdir(dataset_dir):
         print(f"Dataset folder not found: {dataset_dir}")
-        return {"Standard_dataset": standard_dataset}
+        return {"Stenosis_Detection": standard_dataset}
     for file in os.listdir(dataset_dir):
         if file.lower().endswith(".xml"):
             xml_path: str = os.path.join(dataset_dir, file)
@@ -131,7 +131,7 @@ def process_kemerovo_dataset(root_dir: str) -> Dict[str, Any]:
                 "annotations": annotations_dict,
             }
             standard_dataset[std_id] = entry
-    return {"Standard_dataset": standard_dataset}
+    return {"Stenosis_Detection": standard_dataset}
 
 
 if __name__ == "__main__":

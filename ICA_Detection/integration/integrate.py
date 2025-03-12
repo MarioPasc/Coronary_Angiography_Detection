@@ -10,7 +10,7 @@ from ICA_Detection.integration.kemerovo import process_kemerovo_dataset
 
 
 def integrate_datasets(
-    datasets: List[str], root_dirs: Dict[str, str], include_syntax: bool = True
+    datasets: List[str], root_dirs: Dict[str, str]
 ) -> Dict[str, Any]:
     """
     Integrate standardized JSON outputs from multiple datasets.
@@ -42,7 +42,7 @@ def integrate_datasets(
                 continue
             print("Processing CADICA dataset...")
             data = process_cadica_dataset(root)
-            combined_entries.update(data.get("Standard_dataset", {}))
+            combined_entries.update(data.get("Stenosis_Detection", {}))
         elif ds_upper == "ARCADE":
             root = root_dirs.get("ARCADE")
             if not root:
@@ -50,8 +50,11 @@ def integrate_datasets(
                 continue
             print("Processing ARCADE dataset...")
             # process_arcade_dataset expects the folder that contains the "ARCADE" folder.
-            data = process_arcade_dataset(root, include_syntax=include_syntax)
-            combined_entries.update(data.get("Standard_dataset", {}))
+            data = process_arcade_dataset(root, task='stenosis')
+            combined_entries.update(data.get("Stenosis_Detection", {}))
+            
+            data_segmentation = process_arcade_dataset(root, task='arteries')
+            
         elif ds_upper == "KEMEROVO":
             root = root_dirs.get("KEMEROVO")
             if not root:
@@ -59,11 +62,12 @@ def integrate_datasets(
                 continue
             print("Processing KEMEROVO dataset...")
             data = process_kemerovo_dataset(root)
-            combined_entries.update(data.get("Standard_dataset", {}))
+            combined_entries.update(data.get("Stenosis_Detection", {}))
         else:
             print(f"Dataset '{ds}' not recognized. Skipping.")
 
-    return {"Standard_dataset": combined_entries}
+    return {"detection": {"Stenosis_Detection": combined_entries},
+            "segmentation": {"Arteries_Segmentation":data_segmentation}}
 
 
 if __name__ == "__main__":
@@ -78,9 +82,9 @@ if __name__ == "__main__":
     # Provide a mapping from dataset names to the required root directories.
     # Note: For CADICA and ARCADE, use the root folders expected by their processing functions.
     root_dirs = {
-        "CADICA": "/home/mariopasc/Python/Datasets",
-        "ARCADE": "/home/mariopasc/Python/Datasets",
-        "KEMEROVO": "/home/mariopasc/Python/Datasets",
+        "CADICA": "/home/mario/Python/Datasets/COMBINED/source",
+        "ARCADE": "/home/mario/Python/Datasets/COMBINED/source",
+        "KEMEROVO": "/home/mario/Python/Datasets/COMBINED/source",
     }
 
     # Integrate the selected datasets.

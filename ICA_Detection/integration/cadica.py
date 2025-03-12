@@ -180,7 +180,7 @@ def process_cadica_dataset(root_dir: str) -> Dict[str, Any]:
                 continue
             entries = process_video(video_dir, patient, lesion_flag)
             standard_dataset.update(entries)
-    return {"Standard_dataset": standard_dataset}
+    return {"Stenosis_Detection": standard_dataset}
 
 
 if __name__ == "__main__":

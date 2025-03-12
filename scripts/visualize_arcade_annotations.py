@@ -54,7 +54,7 @@ def visualize_coco_annotations(
     image_path_stenosis = os.path.join(stenosis_image_folder, image_info["file_name"])
     image_stenosis = np.array(Image.open(image_path_stenosis))
 
-    image_path_arteries = os.path.join(arteries_image_folder, "676.png")
+    image_path_arteries = os.path.join(arteries_image_folder, image_info["file_name"])
     image_arteries = np.array(Image.open(image_path_arteries))
 
     # Create the figure and subplots
@@ -177,15 +177,15 @@ def example_visualization():
     Example showing how to use the visualization function.
     """
     # Paths to your COCO JSON files
-    stenosis_coco_path = "/home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/datasets/stenosis/stenosis_coco.json"
-    arteries_coco_path = "/home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/datasets/arteries/arteries_coco.json"
+    stenosis_coco_path = "/home/mario/Python/Datasets/COMBINED/ICA_DETECTION/datasets/stenosis/stenosis_coco.json"
+    arteries_coco_path = "/home/mario/Python/Datasets/COMBINED/ICA_DETECTION/datasets/arteries/arteries_coco.json"
 
     # Path to your image folder
     stenosis_image_folder = (
-        "/home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/images/images_stenosis"
+        "/home/mario/Python/Datasets/COMBINED/ICA_DETECTION/images/"
     )
     arteries_image_folder = (
-        "/home/mariopasc/Python/Datasets/COMBINED/ICA_DETECTION/images/images_arteries"
+        "/home/mario/Python/Datasets/COMBINED/ICA_DETECTION/images/images_arteries"
     )
     # Image ID to visualize (this is the COCO image ID, not the original image name)
     image_id = 1  # Change this to the ID you want to visualize
