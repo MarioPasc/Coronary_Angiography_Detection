@@ -57,6 +57,7 @@ def holdout(
     splits: Dict[str, float],
     output_json_path: str,
     include_datasets: Optional[List[str]] = None,
+    seed: int = 42
 ) -> None:
     """
     Perform patient-level holdout splitting, then save the results to a JSON file.
@@ -76,6 +77,7 @@ def holdout(
         print(f"Error: images_folder does not exist: {images_folder}")
         sys.exit(1)
 
+    random.seed(seed)
     # 1) Gather all image filenames
     all_files = get_image_files(images_folder)
 

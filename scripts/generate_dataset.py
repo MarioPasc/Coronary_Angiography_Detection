@@ -22,6 +22,7 @@ DATASETS_TO_PROCESS = ["ARCADE"]
 
 # Splits dictionary. Split type and % of the images being allocated in that split
 SPLITS_DICT = {"train": 0.7, "val": 0.3, "test": 0.0}
+SEED = 42
 
 # Output folder to store the final combined, preprocessed dataset and splits
 OUTPUT_FOLDER = "/home/mario/Python/Datasets/COMBINED/tasks" # Portátil
@@ -38,16 +39,7 @@ ROOT_DIR_SOURCE_DATASETS = "/home/mario/Python/Datasets/COMBINED/source"  # Port
 
 # Preprocessing steps to be performed on the datasets
 
-
-# "clahe": {
-#    "window_size": 5,
-#    "sigma": 1.0,
-#    "clipLimit": 3.0,
-#    "tileGridSize": (8, 8),
-# },
-# "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
-
-PLAN_STEPS = {
+PLAN_STEPS_DETECTION = {
     "resolution_standarization": {
         "desired_X": 512,
         "desired_Y": 512,
@@ -60,6 +52,26 @@ PLAN_STEPS = {
         "FasterRCNN": True,
         "RetinaNet": True,
         "SSD": True,
+    },
+}
+
+PLAN_STEPS_SEGMENTATION = {
+    "resolution_standarization": {
+        "desired_X": 512,
+        "desired_Y": 512,
+        "method": "bilinear",
+    },
+    "dtype_standarization": {"desired_dtype": "uint8"},
+    "format_standarization": {"desired_format": "png"},
+    "clahe": {
+       "window_size": 5,
+       "sigma": 1.0,
+       "clipLimit": 3.0,
+       "tileGridSize": (8, 8),
+    },
+    "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
+    "dataset_formats": {
+        "YOLO": True,
     },
 }
 
@@ -84,15 +96,21 @@ logger.addHandler(file_handler)
 
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-detection_foler = os.path.join(OUTPUT_FOLDER, "stenosis_detection")
-segmentation_foler = os.path.join(OUTPUT_FOLDER, "arteries_segmentation")
-os.makedirs(detection_foler, exist_ok=True)
-os.makedirs(segmentation_foler, exist_ok=True)
+detection_folder = os.path.join(OUTPUT_FOLDER, "stenosis_detection")
+segmentation_folder = os.path.join(OUTPUT_FOLDER, "arteries_segmentation")
+os.makedirs(detection_folder, exist_ok=True)
+os.makedirs(segmentation_folder, exist_ok=True)
 
-output_combined_detection = os.path.join(detection_foler, "combined_standardized.json")
-output_combined_segmentation = os.path.join(segmentation_foler, "combined_standardized.json")
+detection_folder_jsons = os.path.join(detection_folder, "json")
+segmentation_folder_jsons = os.path.join(segmentation_folder, "json")
+os.makedirs(detection_folder_jsons, exist_ok=True)
+os.makedirs(segmentation_folder_jsons, exist_ok=True)
 
-output_planned_json = os.path.join(OUTPUT_FOLDER, "planned_standardized.json")
+output_combined_detection = os.path.join(detection_folder_jsons, "combined_standardized.json")
+output_combined_segmentation = os.path.join(segmentation_folder_jsons, "combined_standardized.json")
+
+output_planned_detection = os.path.join(detection_folder_jsons, "planned_standardized.json")
+output_planned_segmentation = os.path.join(segmentation_folder_jsons, "planned_standardized.json")
 
 root_dirs = {
     "CADICA": ROOT_DIR_SOURCE_DATASETS,
@@ -116,41 +134,44 @@ with open(output_combined_segmentation, "w") as f:
     json.dump(segmentation_json, f, indent=4)
 print(f"Segmentation JSON saved to {output_combined_segmentation}")
 
-"""
 # --- Preprocessing Planning Step ---
-with open(output_combined_json, "r") as f:
-    data = json.load(f)
-print("Creating preprocessing plan...")
-planned_data = DatasetGenerator.create_preprocessing_plan(data, PLAN_STEPS)
-with open(output_planned_json, "w") as f:
-    json.dump(planned_data, f, indent=4)
-print(f"Preprocessing plan saved to {output_planned_json}")
+with open(output_combined_detection, "r") as f:
+    data_detection = json.load(f)
+
+with open(output_combined_segmentation, "r") as f:
+    data_segmentation = json.load(f)
+    
+print("Creating preprocessing plan for detection...")
+planned_data_detection = DatasetGenerator.create_preprocessing_plan(data_detection, PLAN_STEPS_DETECTION, root_name="Stenosis_Detection")
+print("Creating preprocessing plan for segmentation...")
+planned_data_segmentation = DatasetGenerator.create_preprocessing_plan(data_segmentation, PLAN_STEPS_SEGMENTATION, root_name="Arteries_Segmentation")
+
+with open(output_planned_detection, "w") as f:
+    json.dump(planned_data_detection, f, indent=4)
+print(f"Preprocessing plan saved to {output_planned_detection}")
+with open(output_planned_segmentation, "w") as f:
+    json.dump(planned_data_segmentation, f, indent=4)
+print(f"Preprocessing plan saved to {output_planned_segmentation}")
+
 
 # --- Preprocessing Execution Step ---
 # Here, the user can supply a list of steps in order.
-steps_order = list(PLAN_STEPS.keys())
+steps_order_detection = list(PLAN_STEPS_DETECTION.keys())
+steps_order_segmentation = list(PLAN_STEPS_SEGMENTATION.keys())
 
-output_ica_detection = os.path.join(OUTPUT_FOLDER, "ICA_DETECTION")
-print("Applying preprocessing plan...")
+print("Applying preprocessing plan for detection...")
 DatasetGenerator.apply_preprocessing_plan(
-    output_planned_json, output_ica_detection, steps_order
+    output_planned_detection, detection_folder, steps_order_detection
 )
 print("Preprocessing completed.")
 
-# Move JSONs (Cleanup stage)
+print("Applying preprocessing plan for segmentation...")
+DatasetGenerator.apply_preprocessing_plan(
+    output_planned_segmentation, segmentation_folder, steps_order_segmentation
+)
+print("Preprocessing completed.")
 
-json_folder = os.path.join(output_ica_detection, "json_metadata")
-os.makedirs(json_folder, exist_ok=True)
-
-json_files = [
-    os.path.join(OUTPUT_FOLDER, file)
-    for file in os.listdir(OUTPUT_FOLDER)
-    if file.endswith(".json")
-]
-json_files.append(os.path.join(output_ica_detection, "processed.json"))
-
-for file in json_files:
-    shutil.move(src=file, dst=os.path.join(json_folder, os.path.basename(file)))
+shutil.rmtree(path=os.path.join(ROOT_DIR_SOURCE_DATASETS, "ARCADE", "images"))
 
 print("Applying holdout to non-PyTorch datasets")
 print(
@@ -158,9 +179,17 @@ print(
 )
 
 DatasetGenerator.execute_holdout_pipeline(
-    root_folder=output_ica_detection,
+    root_folder=detection_folder,
     splits_dict=SPLITS_DICT,
-    output_splits_json=os.path.join(json_folder, "splits.json"),
+    output_splits_json=os.path.join(detection_folder, "json", "splits.json"),
     include_datasets=DATASETS_TO_PROCESS,
+    seed = SEED
 )
-"""
+
+DatasetGenerator.execute_holdout_pipeline(
+    root_folder=segmentation_folder,
+    splits_dict=SPLITS_DICT,
+    output_splits_json=os.path.join(segmentation_folder, "json", "splits.json"),
+    include_datasets=DATASETS_TO_PROCESS,
+    seed = SEED
+)

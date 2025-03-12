@@ -4,15 +4,13 @@ import os
 import cv2
 import json
 import shutil
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from tqdm import tqdm  # type: ignore
 from pathlib import Path
 import numpy as np
-
 from PIL import Image, ImageDraw
 
-# Import our tool functions.
-
+# Example imports of your existing utility functions:
 from ICA_Detection.tools.format_standarization import apply_format_standarization
 from ICA_Detection.tools.dtype_standarization import apply_dtype_standarization
 from ICA_Detection.tools.resolution import apply_resolution
@@ -21,95 +19,94 @@ from ICA_Detection.tools.clahe import clahe_enhancement
 from ICA_Detection.tools.bbox_translation import common_to_yolo, rescale_bbox
 from ICA_Detection.tools.dataset_conversions import (
     construct_yolo,
-    construct_coco_compatible,
+    construct_coco_detection,
 )
 
 
-def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None:
+def process_images_by_task(
+    json_path: str,
+    out_dir: str,
+    steps_order: List[str],
+) -> None:
     """
-    Apply the preprocessing plan to all images based on the provided JSON and step order.
-
-    This function creates the following folder structure under out_dir:
-
-        out_dir/
-            images/
-            labels/
-
-    It processes each image entry in the JSON according to the provided step order:
-
-      1. format_standarization: If the image is not already in PNG, convert it using
-         apply_format_standarization; otherwise, copy it.
-      2. dtype_standarization: Standardize the image data type if needed.
-      3. resolution_standarization: Resize the image if needed.
-      4. filtering_smoothing_equalization: Apply Gaussian smoothing followed by histogram equalization.
-
-    After processing, the final image is saved to out_dir/images.
-    For images with "lesion": true, the annotations are saved as a text file in YOLO format
-    (one bounding box per row) in out_dir/labels.
+    Process images and annotations based on the task type, 
+    which is inferred from the top-level JSON key 
+    ('Stenosis_Detection' or 'Arteries_Segmentation').
 
     Args:
-        json_path (str): Path to the planned standardized JSON file.
-        out_dir (str): Output directory for the final folder structure.
-        steps_order (List[str]): Comma-separated list of preprocessing steps in order.
-                                  Default order is:
-                                  ["format_standarization", "dtype_standarization", "resolution_standarization", "filtering_smoothing_equalization"]
+        json_path (str): Path to the planned JSON file 
+                         (with top-level keys 'Stenosis_Detection' 
+                          or 'Arteries_Segmentation').
+        out_dir (str): Directory where the processed data should be stored.
+        steps_order (List[str]): List of preprocessing steps in the order 
+                                 they should be applied.
     """
-    # Create output structure
-    images_out = os.path.join(out_dir, "images")
-    labels_out = os.path.join(out_dir, "labels_pascal_voc")
-    labels_yolo_out = os.path.join(out_dir, "labels_yolo")
-    datasets_out_dir = os.path.join(out_dir, "datasets")
-    output_masks_dir = os.path.join(datasets_out_dir, "segmentation/masks")
-    output_masks_dir_stenosis = os.path.join(output_masks_dir, "stenosis")
-    output_masks_dir_arteries = os.path.join(output_masks_dir, "arteries")
-
-    os.makedirs(images_out, exist_ok=True)
-    os.makedirs(labels_out, exist_ok=True)
-    os.makedirs(labels_yolo_out, exist_ok=True)
-    os.makedirs(datasets_out_dir, exist_ok=True)
-    os.makedirs(output_masks_dir, exist_ok=True)
-    os.makedirs(output_masks_dir_stenosis, exist_ok=True)
-    os.makedirs(output_masks_dir_arteries, exist_ok=True)
-
-    # Load the planned JSON
+    # ---------------------------------------------------------------------
+    # 1. Read JSON and identify the task by checking the top-level key
+    # ---------------------------------------------------------------------
     with open(json_path, "r") as f:
         data = json.load(f)
 
-    dataset = data.get("Standard_dataset", {})
+    # Figure out if this is detection or segmentation by examining the JSON root
+    if "Stenosis_Detection" in data:
+        dataset_dict = data["Stenosis_Detection"]
+        task = "detection"
+    elif "Arteries_Segmentation" in data:
+        dataset_dict = data["Arteries_Segmentation"]
+        task = "segmentation"
+    else:
+        raise ValueError(
+            "No recognized top-level key found in JSON. "
+            "Expected 'Stenosis_Detection' or 'Arteries_Segmentation'."
+        )
 
-    for uid, entry in tqdm(
-        iterable=dataset.items(),
-        desc="Processing JSON entries ...",
-        colour="green",
-        total=len(dataset.items()),
-    ):
+    # ---------------------------------------------------------------------
+    # 2. Create output folder structure depending on your use case
+    # ---------------------------------------------------------------------
+    os.makedirs(out_dir, exist_ok=True)
+
+    images_out = os.path.join(out_dir, "images")
+    labels_out = os.path.join(out_dir, "labels")
+
+    os.makedirs(images_out, exist_ok=True)
+    os.makedirs(labels_out, exist_ok=True)
+    
+    # ---------------------------------------------------------------------
+    # 3. Iterate through each entry in the dataset and apply the pipeline
+    # ---------------------------------------------------------------------
+    for uid, entry in tqdm(dataset_dict.items(), desc="Processing JSON entries", colour="green"):
+
+        # -----------------------------------------------------------------
+        # 3a. Basic checks and paths
+        # -----------------------------------------------------------------
         img_info = entry.get("image", {})
         orig_img_path = img_info.get("route")
         if not orig_img_path or not os.path.exists(orig_img_path):
             print(f"Skipping {uid}: original image path not found.")
             continue
 
-        # Define working filename: we use PNG for all processed images
+        # We'll store the final processed image as PNG
         working_filename = f"{uid}.png"
         working_img_path = os.path.join(images_out, working_filename)
 
-        # --- Step 1: Format Standardization ---
+        # -----------------------------------------------------------------
+        # 3b. Format Standardization
+        # -----------------------------------------------------------------
         if (
             "format_standarization" in entry.get("preprocessing_plan", {})
             and "format_standarization" in steps_order
         ):
             desired_format = (
                 entry["preprocessing_plan"]["format_standarization"]
-                .get("desired_format")
+                .get("desired_format", "png")
                 .lower()
             )
-            ret = apply_format_standarization(
-                orig_img_path, working_img_path, desired_format
-            )
+            ret = apply_format_standarization(orig_img_path, working_img_path, desired_format)
             if ret is None:
                 print(f"Error converting format for {uid}.")
                 continue
         else:
+            # Copy instead, if we are not converting
             shutil.copy2(orig_img_path, working_img_path)
 
         # Rename 'route' to 'original_route' and introduce 'dataset_route'
@@ -118,221 +115,214 @@ def process_images(json_path: str, out_dir: str, steps_order: List[str]) -> None
 
         current_img_path = working_img_path
 
-        # --- Step 2: Dtype Standardization ---
+        # -----------------------------------------------------------------
+        # 3c. Dtype Standardization
+        # -----------------------------------------------------------------
         if (
             "dtype_standarization" in entry.get("preprocessing_plan", {})
             and "dtype_standarization" in steps_order
         ):
-            desired_dtype = entry["preprocessing_plan"]["dtype_standarization"].get(
-                "desired"
-            )
+            desired_dtype = entry["preprocessing_plan"]["dtype_standarization"].get("desired")
             new_img_path = current_img_path
-            ret = apply_dtype_standarization(
-                current_img_path, new_img_path, desired_dtype
-            )
+            ret = apply_dtype_standarization(current_img_path, new_img_path, desired_dtype)
             if ret is None:
                 print(f"Error converting dtype for {uid}.")
                 continue
 
-        # --- Step 3: Resolution Standardization ---
+        # -----------------------------------------------------------------
+        # 3d. Resolution Standardization + Bbox/Mask Rescaling
+        # -----------------------------------------------------------------
         if (
             "resolution_standarization" in entry.get("preprocessing_plan", {})
             and "resolution_standarization" in steps_order
         ):
             res_plan = entry["preprocessing_plan"]["resolution_standarization"]
-            desired_X = res_plan.get("desired_X")
-            desired_Y = res_plan.get("desired_Y")
-            method = res_plan.get("method")
+            desired_X = res_plan.get("desired_X", 512)
+            desired_Y = res_plan.get("desired_Y", 512)
+            method = res_plan.get("method", "bilinear")
+
+            old_width = img_info.get("width")
+            old_height = img_info.get("height")
 
             new_img_path = current_img_path  # Overwrite in place
-            ret = apply_resolution(
-                current_img_path, new_img_path, desired_X, desired_Y, method
-            )
+            ret = apply_resolution(current_img_path, new_img_path, desired_X, desired_Y, method)
             if ret is None:
                 print(f"Error resizing image for {uid}.")
                 continue
 
-            # --- Update JSON with new image resolution and bounding boxes ---
-            # Save old dimensions
-            old_width = img_info.get("width")
-            old_height = img_info.get("height")
-            # Update image info with new resolution
+            # Update the JSON's stored width/height
             img_info["width"] = desired_X
             img_info["height"] = desired_Y
 
-            # Update the bounding box coordinates in the JSON (keeping Pascal VOC format)
+            # Depending on the task, we may have different annotation fields
             annotations = entry.get("annotations", {})
 
-            # Process vessel segmentations
-            if "vessel_segmentations" in annotations:
-                vessel_segmentations = annotations.get("vessel_segmentations", [])
+            # ---------------- Segmentation branch ----------------
+            if task == "segmentation":
+                # Example: Arteries_Segmentation has "vessel_segmentations"
+                if "vessel_segmentations" in annotations and old_width and old_height:
+                    vessel_segmentations = annotations["vessel_segmentations"]
 
-                mask_filename = f"{uid}_artery_seg.png"
-                mask_path = os.path.join(output_masks_dir_arteries, mask_filename)
+                    mask_filename = f"{uid}_seg.png"
+                    mask_path = os.path.join(labels_out, mask_filename)
 
-                # Create an empty mask image
-                mask = Image.new("L", (old_width, old_height), 0)
-                draw = ImageDraw.Draw(mask)
+                    # Create an empty mask in the original size
+                    mask = Image.new("L", (old_width, old_height), 0)
+                    draw = ImageDraw.Draw(mask)
 
-                # Draw all vessel segmentations on the mask
-                for vessel_seg in vessel_segmentations:
-                    xyxy = vessel_seg.get("xyxy", [])
-                    attributes = vessel_seg.get("attributes", {})
-                    attributes["mask_path"] = mask_path
-                    # Convert flat list to points array
-                    if xyxy and len(xyxy) >= 4:
-                        points = np.array(xyxy).reshape(-1, 2)
-                        # Convert to tuple list for PIL
-                        points = [(x, y) for x, y in points]  # type: ignore
-                        # Draw polygon with fill color 255 (white)
-                        draw.polygon(points, fill=255)  # type: ignore
+                    for vessel_seg in vessel_segmentations:
+                        # If there's a bounding box, rescale it
+                        if "bbox" in vessel_seg:
+                            vessel_seg["bbox"] = rescale_bbox(
+                                vessel_seg["bbox"],
+                                old_width,
+                                old_height,
+                                desired_X,
+                                desired_Y,
+                            )
 
-                    # Update bounding box coordinates if present
-                    if "bbox" in vessel_seg:
-                        vessel_seg["bbox"] = rescale_bbox(
-                            vessel_seg["bbox"],
-                            old_width,
-                            old_height,
-                            desired_X,
-                            desired_Y,
-                        )
+                        # If there's segmentation coordinates, draw them
+                        # (Here we assume an array "segment0", "segment1", or something similar.)
+                        # You can unify them if they are all in "xyxy".
+                        for key_seg, seg_coords in vessel_seg.items():
+                            if key_seg.startswith("segment"):
+                                points_array = np.array(seg_coords).reshape(-1, 2)
+                                points_tuples = [(x, y) for x, y in points_array]
+                                draw.polygon(points_tuples, fill=255)
 
-                # Resize mask to standard size
-                mask = mask.resize((desired_X, desired_Y), Image.NEAREST)  # type: ignore
+                    # Resize the mask to the final size
+                    mask = mask.resize((desired_X, desired_Y), Image.NEAREST)
+                    mask.save(mask_path)
 
-                # Save mask to file
-                mask.save(mask_path)
+            # ---------------- Detection branch ----------------
+            elif task == "detection":
+                # Example: Stenosis_Detection has bounding boxes
+                if "bbox1" in annotations and old_width and old_height:
+                    # Possibly rescale a single bounding box or multiple
+                    # This is an example if your detection JSON might have multiple bboxes
+                    bbox = annotations["bbox1"]
+                    annotations["bbox1"] = rescale_bbox(bbox, old_width, old_height, desired_X, desired_Y)
 
-            # Process stenosis annotations
-            if "stenosis" in annotations:
-                stenosis_data = annotations.get("stenosis", {})
+        # -----------------------------------------------------------------
+        # 3e. CLAHE (if any)
+        # -----------------------------------------------------------------
+        if (
+            "clahe" in entry.get("preprocessing_plan", {})
+            and "clahe" in steps_order
+        ):
+            clahe_plan = entry["preprocessing_plan"]["clahe"]
+            window_size = clahe_plan.get("window_size", 5)
+            sigma = clahe_plan.get("sigma", 1.0)
+            clip_limit = clahe_plan.get("clipLimit", 2.0)
+            tile_grid_size = tuple(clahe_plan.get("tileGridSize", (8, 8)))
 
-                # Create a stenosis mask
-                mask_filename = f"{uid}_stenosis_seg.png"
-                mask_path = os.path.join(output_masks_dir_stenosis, mask_filename)
-
-                # Create an empty mask image
-                mask = Image.new("L", (old_width, old_height), 0)
-                draw = ImageDraw.Draw(mask)
-
-                # Process each stenosis entry (bboxes and segmentations)
-                for key, value in stenosis_data.items():
-                    if key.startswith("bbox"):
-                        # Rescale bounding box
-                        stenosis_data[key] = rescale_bbox(
-                            value, old_width, old_height, desired_X, desired_Y
-                        )
-                    elif key.startswith("segmentation"):
-                        # Handle segmentation data
-                        xyxy = value.get("xyxy", [])
-
-                        # Convert flat list to points array and draw on mask
-                        if xyxy and len(xyxy) >= 4:
-                            points = np.array(xyxy).reshape(-1, 2)
-                            # Convert to tuple list for PIL
-                            points = [(x, y) for x, y in points]  # type: ignore
-                            # Draw polygon with fill color 255 (white)
-                            draw.polygon(points, fill=255)  # type: ignore
-
-                # Resize mask to standard size
-                mask = mask.resize((desired_X, desired_Y), Image.NEAREST)  # type: ignore
-
-                # Save mask to file
-                mask.save(mask_path)
-
-        # --- CLAHE ---
-        if "clahe" in entry.get("clahe", {}) and "clahe" in steps_order:
-            fse_plan = entry["preprocessing_plan"]["clahe"]
-            window_size = fse_plan.get("window_size")
-            sigma = fse_plan.get("sigma")
-            clipLimit = fse_plan.get("clipLimit")
-            tileGridSize = fse_plan.get("tileGridSize")
             img = cv2.imread(current_img_path, cv2.IMREAD_GRAYSCALE)
             if img is None:
-                print(f"Error reading image for FSE for {uid}.")
+                print(f"Error reading image for CLAHE for {uid}.")
                 continue
-            enhanced = clahe_enhancement(
-                img, window_size, sigma, clipLimit, tileGridSize
-            )
+
+            enhanced = clahe_enhancement(img, window_size, sigma, clip_limit, tile_grid_size)
             cv2.imwrite(current_img_path, enhanced)
 
-        # --- Filtering Smoothing Equalization ---
+        # -----------------------------------------------------------------
+        # 3f. Filtering Smoothing Equalization
+        # -----------------------------------------------------------------
         if (
             "filtering_smoothing_equalization" in entry.get("preprocessing_plan", {})
             and "filtering_smoothing_equalization" in steps_order
         ):
             fse_plan = entry["preprocessing_plan"]["filtering_smoothing_equalization"]
-            window_size = fse_plan.get("window_size")
-            sigma = fse_plan.get("sigma")
+            window_size = fse_plan.get("window_size", 5)
+            sigma = fse_plan.get("sigma", 1.0)
+
             img = cv2.imread(current_img_path, cv2.IMREAD_GRAYSCALE)
             if img is None:
                 print(f"Error reading image for FSE for {uid}.")
                 continue
+
             enhanced = filtering_smoothing_equalization(img, window_size, sigma)
             cv2.imwrite(current_img_path, enhanced)
 
-        # --- Save Annotations ---
-        if entry.get("lesion", False):
-            annotations = entry.get("annotations", {})
-            label_filename = annotations.get("name", f"{uid}.txt")
+        # -----------------------------------------------------------------
+        # 3g. Save or convert bounding box annotations
+        #     (Detection case only, typically.)
+        # -----------------------------------------------------------------
+        # For detection tasks, you might have a 'lesion' flag
+        # or check if bounding boxes exist. Adjust as needed.
+        if task == "detection":
+            # If 'lesion' might be True or False in the detection context
+            # we only save labels for those that are True or for which bboxes exist.
+            if entry.get("lesion", False):
+                annotations = entry.get("annotations", {})
+                label_filename = annotations.get("name", f"{uid}.txt")
 
-            lines = []
-            for key, value in annotations.items():
-                if key == "name" or key == "vessel_segmentations":
-                    continue
-                elif key == "stenosis":
-                    stenosis_data = annotations.get("stenosis", {})
+                #  -- Pascal VOC style or raw bounding box lines
+                lines = []
+                if "bbox1" in annotations:  # or iterate if multiple bboxes
+                    bbox = annotations["bbox1"]
+                    xmin = bbox["xmin"]
+                    ymin = bbox["ymin"]
+                    xmax = bbox["xmax"]
+                    ymax = bbox["ymax"]
+                    # Class ID '0' for 'stenosis', for example
+                    line = f"0 {xmin} {ymin} {xmax} {ymax}"
+                    lines.append(line)
 
-                    # Process each stenosis bounding box
-                    for subkey, bbox in stenosis_data.items():
-                        if subkey.startswith("bbox"):
-                            xmin = bbox["xmin"]
-                            ymin = bbox["ymin"]
-                            xmax = bbox["xmax"]
-                            ymax = bbox["ymax"]
-                            line = f"0 {xmin} {ymin} {xmax} {ymax}"
-                            lines.append(line)
+                label_out_path = os.path.join(labels_out, label_filename)
+                with open(label_out_path, "w") as f:
+                    f.write("\n".join(lines))
 
-            # Save default labels file (Pascal VOC format)
-            label_out_path = os.path.join(labels_out, label_filename)
-            with open(label_out_path, "w") as f:
-                f.write("\n".join(lines))
+                #  -- YOLO format
+                labels_formats = entry.get("preprocessing_plan", {}).get("dataset_formats", {})
+                if labels_formats.get("YOLO", False):
+                    labels_yolo_out = os.path.join(labels_out, "yolo")
+                    yolo_lines = []
+                    if "bbox1" in annotations:
+                        # Recompute for YOLO
+                        orig_width = img_info.get("width", 512)
+                        orig_height = img_info.get("height", 512)
+                        yolo_bbox = common_to_yolo(
+                            annotations["bbox1"],
+                            orig_width,
+                            orig_height
+                        )
+                        line = (
+                            f"0 {yolo_bbox['x_center']} {yolo_bbox['y_center']} "
+                            f"{yolo_bbox['width']} {yolo_bbox['height']}"
+                        )
+                        yolo_lines.append(line)
 
-            # --- Additional Label Formats ---
-            labels_formats = entry.get("preprocessing_plan", {}).get(
-                "dataset_formats", {}
-            )
-            if labels_formats.get("YOLO", False):
-                label_yolo_out_path = os.path.join(labels_yolo_out, label_filename)
-                yolo_lines = []
+                    label_yolo_out_path = os.path.join(labels_yolo_out, label_filename)
+                    with open(label_yolo_out_path, "w") as f:
+                        f.write("\n".join(yolo_lines))
 
-                # Handle stenosis bounding boxes for YOLO format
-                if "stenosis" in annotations:
-                    stenosis_data = annotations.get("stenosis", {})
-                    for subkey, bbox in stenosis_data.items():
-                        if subkey.startswith("bbox"):
-                            orig_width = img_info.get("width")
-                            orig_height = img_info.get("height")
-                            yolo_bbox = common_to_yolo(bbox, orig_width, orig_height)
-                            line = f"0 {yolo_bbox['x_center']} {yolo_bbox['y_center']} {yolo_bbox['width']} {yolo_bbox['height']}"
-                            yolo_lines.append(line)
+    # ---------------------------------------------------------------------
+    # 4. Save an updated JSON with processed info
+    # ---------------------------------------------------------------------
+    processed_json_path = os.path.join(out_dir, "json", "processed.json")
 
-                with open(label_yolo_out_path, "w") as f:
-                    f.write("\n".join(yolo_lines))
+    # Overwrite the relevant portion in the original data
+    # so that we keep the same structure, just with updated fields.
+    if task == "detection":
+        data["Stenosis_Detection"] = dataset_dict
+    else:
+        data["Arteries_Segmentation"] = dataset_dict
 
-    # --------------------------------
-    # After processing all, save JSON:
-    # --------------------------------
-    processed_json_path = os.path.join(out_dir, "processed.json")
     with open(processed_json_path, "w") as f:
         json.dump(data, f, indent=2)
 
-    print(f"All images processed. Updated JSON saved to: {processed_json_path}")
+    # ---------------------------------------------------------------------
+    # 5. Optionally generate final datasets (COCO, YOLO, etc.)
+    # ---------------------------------------------------------------------
+    # Extract the config from the last entry or define it globally
+    # (You could also unify how you read your 'preprocessing_plan'.)
+    # This is just an example snippet:
+    if len(dataset_dict) > 0:
+        last_entry_key = list(dataset_dict.keys())[-1]
+        config = dataset_dict[last_entry_key].get("preprocessing_plan", {})
+        generate_datasets(root_folder=out_dir, config=config, json_path=processed_json_path)
 
-    # We only need one entry to check for the datasets, since all the images are going to
-    # be in all the datasets, therefore the dataset_formats flag is present in all JSON entries
-    config = entry.get("preprocessing_plan", {})
-    generate_datasets(root_folder=out_dir, config=config, json_path=processed_json_path)
+    print(f"All images processed. Updated JSON saved to: {processed_json_path}")
 
 
 def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str) -> None:
@@ -340,23 +330,8 @@ def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str) 
     Look at config['dataset_formats'] to determine which dataset
     formats should be generated. Then call the corresponding function
     from dataset_conversions.
-
-    :param root_folder: Path to the root folder that contains:
-                        images/, labels_pascal_voc/, labels_yolo/, processed.json, etc.
-    :param config: A dictionary that has at least a 'dataset_formats' key
-                   indicating which dataset formats to create:
-                     {
-                       "dataset_formats": {
-                         "YOLO": True,
-                         "RetinaNet": False,
-                         "FasterRCNN": True,
-                         ...
-                       }
-                     }
     """
     dataset_formats = config.get("dataset_formats", {})
-
-    # Create a datasets/ subfolder if needed
     root_path = Path(root_folder).resolve()
     datasets_path = root_path / "datasets"
     datasets_path.mkdir(exist_ok=True)
@@ -364,23 +339,26 @@ def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str) 
     print(f"Building datasets: ")
     print(dataset_formats)
 
-    # For each format that is True, call the corresponding constructor
     if dataset_formats.get("YOLO", False):
         construct_yolo(root_path)
-
-        # Cleanup
-        shutil.rmtree(os.path.join(root_path, "labels_yolo"))
+        # Cleanup (if you want to remove intermediate YOLO labels)
+        yolo_labels_dir = os.path.join(root_path, "labels_yolo")
+        if os.path.isdir(yolo_labels_dir):
+            shutil.rmtree(yolo_labels_dir)
 
     if (
         dataset_formats.get("RetinaNet", False)
         or dataset_formats.get("FasterRCNN", False)
         or dataset_formats.get("SSD", False)
     ):
-        construct_coco_compatible(json_path=json_path, root_folder=root_path)
+        construct_coco_detection(json_path=json_path, root_folder=str(root_path))
 
 
-def main():
-
+def main() -> None:
+    """
+    Example main function to run the pipeline.
+    """
+    # Example plan steps
     plan_steps = {
         "format_standarization": {"desired_format": "png"},
         "dtype_standarization": {"desired_dtype": "uint8"},
@@ -399,10 +377,21 @@ def main():
         "dataset_formats": {"YOLO": True},
     }
 
-    output_base_folder = "/home/mariopasc/Python/Datasets/COMBINED"
-    output_planned_json = os.path.join(output_base_folder, "planned_standardized.json")
     steps_order = list(plan_steps.keys())
 
-    output_base_folder = os.path.join(output_base_folder, "ICA_DETECTION")
-    process_images(output_planned_json, output_base_folder, steps_order)
+    # Example usage
+    # Suppose you have a separate JSON for detection:
+    detection_json = "/path/to/stenosis_detection.json"
+    detection_outdir = "/path/to/processed/stenosis_detection"
+    process_images_by_task(detection_json, detection_outdir, steps_order)
+
+    # And a separate JSON for segmentation:
+    segmentation_json = "/path/to/arteries_segmentation.json"
+    segmentation_outdir = "/path/to/processed/arteries_segmentation"
+    process_images_by_task(segmentation_json, segmentation_outdir, steps_order)
+
     print("Preprocessing completed.")
+
+
+if __name__ == "__main__":
+    main()

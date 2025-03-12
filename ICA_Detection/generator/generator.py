@@ -12,7 +12,7 @@ from ICA_Detection.integration.integrate import integrate_datasets
 from ICA_Detection.preprocessing.planner import create_preprocessing_plan
 
 # Import the process_images function from the preprocessing module.
-from ICA_Detection.preprocessing.preprocessing import process_images
+from ICA_Detection.preprocessing.preprocessing import process_images_by_task
 
 # Import Holdout functions
 
@@ -48,7 +48,7 @@ class DatasetGenerator:
 
     @staticmethod
     def create_preprocessing_plan(
-        data: Dict[str, Any], plan_steps: Dict[str, Any]
+        data: Dict[str, Any], plan_steps: Dict[str, Any], root_name: str
     ) -> Dict[str, Any]:
         """
         Create a preprocessing plan for the dataset based on specified plan steps.
@@ -69,7 +69,7 @@ class DatasetGenerator:
         Returns:
             Dict[str, Any]: The updated JSON dataset with a "preprocessing_plan" field for each entry.
         """
-        return create_preprocessing_plan(data, plan_steps)
+        return create_preprocessing_plan(data, plan_steps, root_name)
 
     @staticmethod
     def apply_preprocessing_plan(
@@ -97,7 +97,7 @@ class DatasetGenerator:
             output_folder (str): Base output folder where the structure "ICA_DETECTION/images" and "ICA_DETECTION/labels" will be created.
             steps_order (List[str]): List of preprocessing steps in the desired order.
         """
-        process_images(planned_json_path, output_folder, steps_order)
+        process_images_by_task(planned_json_path, output_folder, steps_order)
 
     @staticmethod
     def execute_holdout_pipeline(
@@ -105,6 +105,7 @@ class DatasetGenerator:
         splits_dict: Dict[str, float],
         output_splits_json: str,
         include_datasets: List[str],
+        seed: int = 42
     ):
         """
         High-level pipeline to:
@@ -131,6 +132,7 @@ class DatasetGenerator:
             splits=splits_dict,
             output_json_path=output_splits_json,
             include_datasets=include_datasets,
+            seed = seed
         )
         # 2) Apply YOLO holdout
         #    This reads the splits_info.json and creates subfolders: images/train, images/val, ...

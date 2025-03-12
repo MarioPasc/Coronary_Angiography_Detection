@@ -7,7 +7,7 @@ from typing import Dict, Any
 
 
 def create_preprocessing_plan(
-    data: Dict[str, Any], plan_steps: Dict[str, Any]
+    data: Dict[str, Any], plan_steps: Dict[str, Any], root_name: str = "Stenosis_Detection"
 ) -> Dict[str, Any]:
     """
     Iterate through the standardized JSON dataset and add preprocessing instructions for each image
@@ -36,7 +36,7 @@ def create_preprocessing_plan(
     Returns:
         Dict[str, Any]: The updated dataset with a new "preprocessing_plan" field added to each entry where needed.
     """
-    dataset = data.get("Standard_dataset", {})
+    dataset = data.get(root_name, {})
     for uid, entry in dataset.items():
         plan: Dict[str, Any] = entry.get("preprocessing_plan", {})
         img_info = entry.get("image", {})

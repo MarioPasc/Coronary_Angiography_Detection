@@ -184,7 +184,7 @@ def process_arcade_vessel_segmentation(root_dir: str) -> Dict[str, Any]:
         return {"Arteries_Segmentation": {}}
 
     image_arteries_path = os.path.join(
-        root_dir, "../../ICA_DETECTION", "images", "images_arteries"
+        root_dir, "images", "images_arteries"
     )
     os.makedirs(image_arteries_path, exist_ok=True)
 
