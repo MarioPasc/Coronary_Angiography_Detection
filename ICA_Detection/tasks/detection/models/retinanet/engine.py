@@ -17,65 +17,6 @@ from ICA_Detection.tasks.detection.utils.coco_utils import get_coco_api_from_dat
 DEBUG: bool = False
 
 
-def retina_collate_fn(
-    batch: List[Dict[str, Any]],
-) -> Tuple[torch.Tensor, List[Dict[str, torch.Tensor]]]:
-    """
-    Collate function that:
-      - Stacks `sample['img']` into a single tensor of shape (B, 3, H, W).
-      - Collects target annotations into a list of dictionaries (for future usage if needed).
-
-    **Note**: Here we assume each sample is a dict like:
-        {
-          'img': np.array shape (H, W, 3),  # float in [0,1]
-          'annot': np.array shape (N, 5),   # [x1, y1, x2, y2, class_idx]
-          'image_id': int,
-          ...
-        }
-    If your dataset returns exactly that format, this collate will convert it
-    into (images, targets) suitable for your training loop.
-    """
-    # In many RetinaNet repos, people just do a list of images + list of Nx5 annotations.
-    # We'll demonstrate a version that returns images as a single stacked tensor (B, 3, H, W).
-
-    imgs = []
-    targets = []
-
-    for sample in batch:
-        img_np = sample["img"]  # (H, W, 3), float32
-        # Convert to Torch tensor [3, H, W]
-        img_th = torch.from_numpy(img_np).permute(2, 0, 1)  # shape: (3, H, W)
-
-        imgs.append(img_th)
-
-        # We keep the “annot” but also any other meta
-        target_dict = {}
-        annot_np = sample["annot"]  # shape (N, 5)
-        if annot_np.shape[0] == 0:
-            # No annotations
-            boxes = torch.zeros((0, 4), dtype=torch.float32)
-            labels = torch.zeros((0,), dtype=torch.int64)
-        else:
-            boxes = torch.from_numpy(annot_np[:, 0:4])
-            labels = torch.from_numpy(annot_np[:, 4]).long()
-
-        target_dict["boxes"] = boxes
-        target_dict["labels"] = labels
-
-        if "image_id" in sample:
-            target_dict["image_id"] = torch.tensor(
-                sample["image_id"], dtype=torch.int64
-            )
-        else:
-            target_dict["image_id"] = torch.tensor(-1, dtype=torch.int64)
-
-        targets.append(target_dict)
-
-    # Stack all images into (B, 3, H, W)
-    images_stacked = torch.stack(imgs, dim=0)
-    return images_stacked, targets
-
-
 def train_one_epoch(
     model,
     optimizer,

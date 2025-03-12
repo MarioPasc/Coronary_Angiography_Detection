@@ -86,11 +86,8 @@ class RetinaSplitCocoDataset(Dataset):
         img = self.load_image(image_id)
         annot = self.load_annotations(image_id)
 
-        sample = {"img": img, "annot": annot}
-
-        # Apply any transform that expects a dict {'img', 'annot'}
         if self.transform is not None:
-            sample = self.transform(sample)
+            sample = self.transform(img, annot)
 
         return sample
 
@@ -171,12 +168,6 @@ class RetinaSplitCocoDataset(Dataset):
         you can adapt accordingly or just keep 80 if using the standard categories.
         """
         return len(self.classes)
-        # or return 80 if you are using the standard COCO set.
-
-
-#
-# Example: holdout logic with the new RetinaSplitCocoDataset
-#
 
 
 def holdout_coco_retina(

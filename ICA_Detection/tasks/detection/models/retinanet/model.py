@@ -258,19 +258,14 @@ class ResNet(nn.Module):
             if isinstance(layer, nn.BatchNorm2d):
                 layer.eval()
 
-    def forward(self, images, targets=None):
+    def forward(self, targets):
         if self.training and targets is None:
             raise ValueError("In training mode, targets should be provided.")
 
         if self.training:
-            img_batch, annotations = images, targets
+            img_batch, annotations = targets
         else:
-            img_batch = images
-
-        if isinstance(images, list):
-            img_batch = torch.stack(images, dim=0)
-        else:
-            img_batch = images
+            img_batch = targets
 
         x = self.conv1(img_batch)
         x = self.bn1(x)
