@@ -49,9 +49,7 @@ PLAN_STEPS_DETECTION = {
     "format_standarization": {"desired_format": "png"},
     "dataset_formats": {
         "YOLO": True,
-        "FasterRCNN": True,
-        "RetinaNet": True,
-        "SSD": True,
+        "COCO": True
     },
 }
 
@@ -72,6 +70,7 @@ PLAN_STEPS_SEGMENTATION = {
     "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
     "dataset_formats": {
         "YOLO": True,
+        "COCO": True
     },
 }
 
@@ -171,7 +170,9 @@ DatasetGenerator.apply_preprocessing_plan(
 )
 print("Preprocessing completed.")
 
-shutil.rmtree(path=os.path.join(ROOT_DIR_SOURCE_DATASETS, "ARCADE", "images"))
+path_arteries_arcade = os.path.join(ROOT_DIR_SOURCE_DATASETS, "ARCADE", "images")
+if os.path.exists(path_arteries_arcade):
+    shutil.rmtree(path=path_arteries_arcade)
 
 print("Applying holdout to non-PyTorch datasets")
 print(

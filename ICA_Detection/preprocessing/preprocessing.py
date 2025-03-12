@@ -20,6 +20,7 @@ from ICA_Detection.tools.bbox_translation import common_to_yolo, rescale_bbox
 from ICA_Detection.tools.dataset_conversions import (
     construct_yolo,
     construct_coco_detection,
+    construct_coco_segmentation
 )
 
 
@@ -244,57 +245,65 @@ def process_images_by_task(
             cv2.imwrite(current_img_path, enhanced)
 
         # -----------------------------------------------------------------
-        # 3g. Save or convert bounding box annotations
-        #     (Detection case only, typically.)
+        # 3g. Save or convert bounding box annotations (detection task)
         # -----------------------------------------------------------------
-        # For detection tasks, you might have a 'lesion' flag
-        # or check if bounding boxes exist. Adjust as needed.
+        # TODO: Guardar también la segmentación en formato YOLO
         if task == "detection":
+            labels_formats = entry.get("preprocessing_plan", {}).get("dataset_formats", {})
             # If 'lesion' might be True or False in the detection context
-            # we only save labels for those that are True or for which bboxes exist.
+            # we only save labels for entries that have at least one bbox
+            # (which also implies 'lesion' is True).
             if entry.get("lesion", False):
                 annotations = entry.get("annotations", {})
                 label_filename = annotations.get("name", f"{uid}.txt")
 
-                #  -- Pascal VOC style or raw bounding box lines
-                lines = []
-                if "bbox1" in annotations:  # or iterate if multiple bboxes
-                    bbox = annotations["bbox1"]
-                    xmin = bbox["xmin"]
-                    ymin = bbox["ymin"]
-                    xmax = bbox["xmax"]
-                    ymax = bbox["ymax"]
-                    # Class ID '0' for 'stenosis', for example
-                    line = f"0 {xmin} {ymin} {xmax} {ymax}"
-                    lines.append(line)
+                # Collect all bounding boxes named "bbox1", "bbox2", etc.
+                # This will handle multiple bounding boxes in your JSON.
+                pascal_lines = []
+                yolo_lines = []
 
-                label_out_path = os.path.join(labels_out, label_filename)
+                # Image dimensions for YOLO normalization
+                orig_width = img_info.get("width", 512)
+                orig_height = img_info.get("height", 512)
+
+                for ann_key, bbox in annotations.items():
+                    if ann_key.startswith("bbox"):
+                        # 1) Pascal VOC–style line: 
+                        #    class_idx xmin ymin xmax ymax
+                        xmin = bbox["xmin"]
+                        ymin = bbox["ymin"]
+                        xmax = bbox["xmax"]
+                        ymax = bbox["ymax"]
+                        pascal_line = f"0 {xmin} {ymin} {xmax} {ymax}"  # "0" as class ID
+                        pascal_lines.append(pascal_line)
+
+                        # 2) YOLO–style line:
+                        #    class_idx x_center y_center width height (all normalized to [0,1] if you want standard YOLO)
+                        if labels_formats.get("YOLO", False):
+                            yolo_bbox = common_to_yolo(bbox, orig_width, orig_height)
+                            yolo_line = (
+                                f"0 {yolo_bbox['x_center']} {yolo_bbox['y_center']} "
+                                f"{yolo_bbox['width']} {yolo_bbox['height']}"
+                            )
+                            yolo_lines.append(yolo_line)
+
+                # Write Pascal VOC–style labels
+                labels_pascal_out = os.path.join(labels_out, "pascal_voc")
+                os.makedirs(labels_pascal_out, exist_ok=True)
+                label_out_path = os.path.join(labels_pascal_out, label_filename)
                 with open(label_out_path, "w") as f:
-                    f.write("\n".join(lines))
+                    f.write("\n".join(pascal_lines))
 
-                #  -- YOLO format
-                labels_formats = entry.get("preprocessing_plan", {}).get("dataset_formats", {})
+                # Write YOLO–style labels if requested
                 if labels_formats.get("YOLO", False):
+                    # Create subfolder (if desired) to store YOLO labels
                     labels_yolo_out = os.path.join(labels_out, "yolo")
-                    yolo_lines = []
-                    if "bbox1" in annotations:
-                        # Recompute for YOLO
-                        orig_width = img_info.get("width", 512)
-                        orig_height = img_info.get("height", 512)
-                        yolo_bbox = common_to_yolo(
-                            annotations["bbox1"],
-                            orig_width,
-                            orig_height
-                        )
-                        line = (
-                            f"0 {yolo_bbox['x_center']} {yolo_bbox['y_center']} "
-                            f"{yolo_bbox['width']} {yolo_bbox['height']}"
-                        )
-                        yolo_lines.append(line)
+                    os.makedirs(labels_yolo_out, exist_ok=True)
 
                     label_yolo_out_path = os.path.join(labels_yolo_out, label_filename)
-                    with open(label_yolo_out_path, "w") as f:
-                        f.write("\n".join(yolo_lines))
+                    with open(label_yolo_out_path, "w") as f_yolo:
+                        f_yolo.write("\n".join(yolo_lines))
+
 
     # ---------------------------------------------------------------------
     # 4. Save an updated JSON with processed info
@@ -320,12 +329,12 @@ def process_images_by_task(
     if len(dataset_dict) > 0:
         last_entry_key = list(dataset_dict.keys())[-1]
         config = dataset_dict[last_entry_key].get("preprocessing_plan", {})
-        generate_datasets(root_folder=out_dir, config=config, json_path=processed_json_path)
+        generate_datasets(root_folder=out_dir, config=config, json_path=processed_json_path, task = task)
 
     print(f"All images processed. Updated JSON saved to: {processed_json_path}")
 
 
-def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str) -> None:
+def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str, task: str) -> None:
     """
     Look at config['dataset_formats'] to determine which dataset
     formats should be generated. Then call the corresponding function
@@ -342,16 +351,19 @@ def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str) 
     if dataset_formats.get("YOLO", False):
         construct_yolo(root_path)
         # Cleanup (if you want to remove intermediate YOLO labels)
-        yolo_labels_dir = os.path.join(root_path, "labels_yolo")
+        yolo_labels_dir = os.path.join(root_path, "yolo")
         if os.path.isdir(yolo_labels_dir):
             shutil.rmtree(yolo_labels_dir)
 
     if (
-        dataset_formats.get("RetinaNet", False)
-        or dataset_formats.get("FasterRCNN", False)
-        or dataset_formats.get("SSD", False)
+        dataset_formats.get("COCO", False)
     ):
-        construct_coco_detection(json_path=json_path, root_folder=str(root_path))
+        if task == "segmentation":
+            construct_coco_segmentation(json_path=json_path, root_folder=str(root_path))
+        else:
+            construct_coco_detection(json_path=json_path, root_folder=str(root_path))
+
+        
 
 
 def main() -> None:

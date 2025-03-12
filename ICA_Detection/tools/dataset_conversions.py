@@ -1,7 +1,7 @@
 import os
 import json
 from pathlib import Path
-from typing import Dict, Any, Union, Tuple
+from typing import List, Union
 import shutil
 from PIL import Image
 
@@ -39,18 +39,16 @@ def construct_yolo(root_folder: Union[str, Path]) -> None:
             os.symlink(image_file, link_dest)
 
     # 2) Copy YOLO labels
-    original_labels_yolo = root_path / "labels_yolo"
+    original_labels_yolo = root_path / "labels" / "yolo"
     if original_labels_yolo.exists() and original_labels_yolo.is_dir():
         for label_file in original_labels_yolo.iterdir():
             if label_file.is_file():
-                shutil.copy(label_file, yolo_labels / label_file.name)
+                link_dest = yolo_labels / label_file.name
+                if link_dest.exists():
+                    link_dest.unlink()
+                os.symlink(label_file, link_dest)
+                
 
-
-import json
-import os
-from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
-from PIL import Image
 
 ###########################
 # Helper functions
@@ -112,7 +110,7 @@ def construct_coco_detection(
         str: The path to the newly created 'stenosis_coco.json' file.
     """
     root_path = Path(root_folder).resolve()
-    datasets_path = root_path / "datasets" / "stenosis"
+    datasets_path = root_path / "datasets" / "coco"
     datasets_path.mkdir(parents=True, exist_ok=True)
 
     with open(json_path, "r") as f:
@@ -210,7 +208,7 @@ def construct_coco_detection(
     }
 
     # Save the file
-    stenosis_json_path = datasets_path / "stenosis_coco.json"
+    stenosis_json_path = datasets_path / "coco_detection.json"
     with open(stenosis_json_path, "w") as f_stenosis:
         json.dump(stenosis_coco_dict, f_stenosis, indent=2)
 
@@ -234,7 +232,7 @@ def construct_coco_segmentation(
         str: The path to the newly created 'arteries_coco.json' file.
     """
     root_path = Path(root_folder).resolve()
-    datasets_path = root_path / "datasets" / "arteries"
+    datasets_path = root_path / "datasets" / "coco"
     datasets_path.mkdir(parents=True, exist_ok=True)
 
     with open(json_path, "r") as f:
@@ -313,7 +311,7 @@ def construct_coco_segmentation(
     }
 
     # Save the file
-    arteries_json_path = datasets_path / "arteries_coco.json"
+    arteries_json_path = datasets_path / "coco_segmentation.json"
     with open(arteries_json_path, "w") as f_arteries:
         json.dump(arteries_coco_dict, f_arteries, indent=2)
 

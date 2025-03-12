@@ -78,6 +78,7 @@ def holdout(
         sys.exit(1)
 
     random.seed(seed)
+
     # 1) Gather all image filenames
     all_files = get_image_files(images_folder)
 

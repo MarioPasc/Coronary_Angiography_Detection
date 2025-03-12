@@ -68,9 +68,10 @@ def process_arcade_annotation_file(
         ann_dict: Dict[str, Any] = {"name": f"{unique_id}.txt"}
 
         bbox_count: int = 1
-        for a in annots:
+        for a in annots:            
             # Store the bboxes
             bbox_list: List[float] = a.get("bbox", [])
+            
             if len(bbox_list) < 4:
                 continue
             # Build native arcade bbox dictionary.
@@ -86,7 +87,8 @@ def process_arcade_annotation_file(
             common_bbox = arcade_to_common(native_bbox)
             ann_dict[f"bbox{bbox_count}"] = common_bbox
 
-    
+            bbox_count += 1
+ 
             # Hi! Uncomment me to store the stenosis segmentation of the ARCADE dataset
             """
             segmentation_data = a.get("segmentation", [])
@@ -108,8 +110,6 @@ def process_arcade_annotation_file(
                 }
 
                 ann_dict[f"segmentation{bbox_count}"] = native_segmentation
-
-            bbox_count += 1
             """
         lesion_flag: bool = True if bbox_count > 1 else False
 
