@@ -6,8 +6,8 @@ import yaml
 from typing import Any, Dict
 
 # from references/detection code
-from ICA_Detection.tasks.detection.torchvision.detection import (
-    engine,
+from ICA_Detection.tasks.detection.models.retinanet import engine
+from ICA_Detection.tasks.detection.utils.detection import (
     utils,
     transforms as rtransforms,  # the reference/detection/transforms.py
     early_stopping,
@@ -16,9 +16,7 @@ from ICA_Detection.tasks.detection.torchvision.detection import (
 
 
 # Model definitions
-from ICA_Detection.tasks.detection.models.faster_rcnn import get_faster_rcnn_model
 from ICA_Detection.tasks.detection.models.retinanet.model import resnet152
-from ICA_Detection.tasks.detection.models.ssd import get_ssd_model
 
 # Data loader function
 from ICA_Detection.splits.holdout.holdout_detection_models import holdout_coco

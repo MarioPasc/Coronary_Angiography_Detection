@@ -1,4 +1,4 @@
-# ICA_Detection/tasks/detection/torchvision/detection
+# ICA_Detection/tasks/utils
 
 The original code for this module was taken from [torchvision reference module for detection](https://github.com/pytorch/vision/tree/main/references/detection). Several modifications have been made to some of these functions in order to implement additional functionality.
 

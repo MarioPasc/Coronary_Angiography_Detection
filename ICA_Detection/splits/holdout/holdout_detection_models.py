@@ -8,11 +8,6 @@ import torch
 
 DEBUG: bool = False
 
-from ICA_Detection.tasks.detection.torchvision.detection import (
-    utils,
-    group_by_aspect_ratio,
-)
-
 
 class SplitCocoDataset(CocoDetection):
     """
