@@ -30,7 +30,7 @@ class DatasetGenerator:
 
     @staticmethod
     def integrate_datasets(
-        datasets: List[str], root_dirs: Dict[str, str], include_syntax: bool = True
+        datasets: List[str], root_dirs: Dict[str, str],
     ) -> Dict[str, Any]:
         """
         Integrate standardized JSON outputs from multiple datasets.
@@ -44,7 +44,7 @@ class DatasetGenerator:
         Returns:
             Dict[str, Any]: Combined standardized JSON with a top-level "Standard_dataset" key.
         """
-        return integrate_datasets(datasets, root_dirs, include_syntax=include_syntax)
+        return integrate_datasets(datasets, root_dirs)
 
     @staticmethod
     def create_preprocessing_plan(
@@ -158,7 +158,7 @@ def main() -> None:
     # - CADICA: https://data.mendeley.com/datasets/p9bpx9ctcv/2
 
     # datasets_to_process = ["CADICA", "ARCADE", "KEMEROVO"]
-    datasets_to_process = ["CADICA"]
+    datasets_to_process = ["CADICA", "ARCADE", "KEMEROVO"]
 
     splits_dict = {"train": 0.7, "val": 0.3, "test": 0.0}
 
@@ -182,13 +182,15 @@ def main() -> None:
         "KEMEROVO": "/media/hddb/mario/data/COMBINED",
     }
 
-    arcade_task = "stenosis"
 
     print("Integrating datasets...")
     final_json: Dict[str, Any] = DatasetGenerator.integrate_datasets(
         datasets_to_process,
         root_dirs,
     )
+    
+    
+    
     with open(output_combined_json, "w") as f:
         json.dump(final_json, f, indent=4)
     print(f"Combined standardized JSON saved to {output_combined_json}")

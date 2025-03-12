@@ -24,10 +24,10 @@ DATASETS_TO_PROCESS = ["ARCADE"]
 SPLITS_DICT = {"train": 0.7, "val": 0.3, "test": 0.0}
 
 # Output folder to store the final combined, preprocessed dataset and splits
-OUTPUT_FOLDER = "/home/mario/Python/Datasets/COMBINED" # Portátil
+OUTPUT_FOLDER = "/home/mario/Python/Datasets/COMBINED/tasks" # Portátil
 # OUTPUT_FOLDER = "/media/hddb/mario/data/COMBINED" # ICAI
 # OUTPUT_FOLDER = "/mnt/home/users/tic_163_uma/mpascual/fscratch/datasets" # Picasso
-# OUTPUT_FOLDER = "/home/mariopasc/Python/Datasets/COMBINED"  # Sobremesa
+# OUTPUT_FOLDER = "/home/mariopasc/Python/Datasets/COMBINED/tasks"  # Sobremesa
 
 # Root directories where the datasets are stored
 ROOT_DIR_SOURCE_DATASETS = (
@@ -83,7 +83,15 @@ logger.addHandler(file_handler)
 # - CADICA: https://data.mendeley.com/datasets/p9bpx9ctcv/2
 
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-output_combined_json = os.path.join(OUTPUT_FOLDER, "combined_standardized.json")
+
+detection_foler = os.path.join(OUTPUT_FOLDER, "stenosis_detection")
+segmentation_foler = os.path.join(OUTPUT_FOLDER, "arteries_segmentation")
+os.makedirs(detection_foler, exist_ok=True)
+os.makedirs(segmentation_foler, exist_ok=True)
+
+output_combined_detection = os.path.join(detection_foler, "combined_standardized.json")
+output_combined_segmentation = os.path.join(segmentation_foler, "combined_standardized.json")
+
 output_planned_json = os.path.join(OUTPUT_FOLDER, "planned_standardized.json")
 
 root_dirs = {
@@ -96,10 +104,19 @@ print("Integrating datasets...")
 final_json: Dict[str, Any] = DatasetGenerator.integrate_datasets(
     DATASETS_TO_PROCESS, root_dirs
 )
-with open(output_combined_json, "w") as f:
-    json.dump(final_json, f, indent=4)
-print(f"Combined standardized JSON saved to {output_combined_json}")
 
+# We must separate the detection task from the segmentation task.
+detection_json: Dict[str, Any] = final_json.get("detection", [])
+segmentation_json: Dict[str, Any] = final_json.get("segmentation", [])
+
+with open(output_combined_detection, "w") as f:
+    json.dump(detection_json, f, indent=4)
+print(f"Detection JSON saved to {output_combined_detection}")
+with open(output_combined_segmentation, "w") as f:
+    json.dump(segmentation_json, f, indent=4)
+print(f"Segmentation JSON saved to {output_combined_segmentation}")
+
+"""
 # --- Preprocessing Planning Step ---
 with open(output_combined_json, "r") as f:
     data = json.load(f)
@@ -146,3 +163,4 @@ DatasetGenerator.execute_holdout_pipeline(
     output_splits_json=os.path.join(json_folder, "splits.json"),
     include_datasets=DATASETS_TO_PROCESS,
 )
+"""

@@ -67,7 +67,7 @@ def integrate_datasets(
             print(f"Dataset '{ds}' not recognized. Skipping.")
 
     return {"detection": {"Stenosis_Detection": combined_entries},
-            "segmentation": {"Arteries_Segmentation":data_segmentation}}
+            "segmentation": data_segmentation}
 
 
 if __name__ == "__main__":
