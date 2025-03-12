@@ -102,9 +102,6 @@ class RetinaSplitCocoDataset(Dataset):
         # Open image with PIL
         img = Image.open(full_img_path).convert("RGB")  # Ensure 3 channels
 
-        # Convert to NumPy float32 array in [0,1] range
-        img = np.array(img, dtype=np.float32) / 255.0
-
         return img
 
     def load_annotations(self, image_id):
@@ -168,6 +165,44 @@ class RetinaSplitCocoDataset(Dataset):
         you can adapt accordingly or just keep 80 if using the standard categories.
         """
         return len(self.classes)
+
+
+def collater(data):
+
+    imgs = [s["img"] for s in data]
+    annots = [s["annot"] for s in data]
+    scales = [s["scale"] for s in data]
+
+    widths = [int(s.shape[0]) for s in imgs]
+    heights = [int(s.shape[1]) for s in imgs]
+    batch_size = len(imgs)
+
+    max_width = np.array(widths).max()
+    max_height = np.array(heights).max()
+
+    padded_imgs = torch.zeros(batch_size, max_width, max_height, 3)
+
+    for i in range(batch_size):
+        img = imgs[i]
+        padded_imgs[i, : int(img.shape[0]), : int(img.shape[1]), :] = img
+
+    max_num_annots = max(annot.shape[0] for annot in annots)
+
+    if max_num_annots > 0:
+
+        annot_padded = torch.ones((len(annots), max_num_annots, 5)) * -1
+
+        if max_num_annots > 0:
+            for idx, annot in enumerate(annots):
+                # print(annot.shape)
+                if annot.shape[0] > 0:
+                    annot_padded[idx, : annot.shape[0], :] = annot
+    else:
+        annot_padded = torch.ones((len(annots), 1, 5)) * -1
+
+    padded_imgs = padded_imgs.permute(0, 3, 1, 2)
+
+    return {"img": padded_imgs, "annot": annot_padded, "scale": scales}
 
 
 def holdout_coco_retina(
@@ -248,28 +283,20 @@ def holdout_coco_retina(
     )
 
     # 4) Build DataLoaders
-    #
-    # If you want the original RetinaNet code's collater,
-    # you might re-use their collate function that expects sample dicts.
-    # Some code (like a default PyTorch collate) might need small tweaks.
-    #
-    # A simple custom collate that just returns a list of dicts:
-    def collate_fn(batch):
-        return batch
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=shuffle_train,
-        collate_fn=collate_fn,
+        collate_fn=collater,
     )
     val_loader = DataLoader(
-        val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn
+        val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collater
     )
     test_loader = None
     if len(test_ids) > 0:
         test_loader = DataLoader(
-            test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn
+            test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collater
         )
 
     if DEBUG:

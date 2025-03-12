@@ -44,7 +44,14 @@ def train_one_epoch(
             optimizer, start_factor=warmup_factor, total_iters=warmup_iters
         )
 
-    for images, targets in metric_logger.log_every(data_loader, print_freq, header):
+    for batch in metric_logger.log_every(data_loader, print_freq, header):
+
+        images = []
+        targets = []
+        for sample in batch:
+            images.append(sample[0])  # PIL/np array
+            targets.append(sample[1])  # Nx5
+
         images = images.to(device)
 
         # Convert each target dict -> Nx5 for FocalLoss
