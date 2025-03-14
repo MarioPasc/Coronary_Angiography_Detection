@@ -1,11 +1,7 @@
 import math
 import sys
-import time
 import os
 import json
-import numpy as np
-
-from typing import Dict, Any, List, Tuple
 
 import torch
 import torchvision.models.detection.mask_rcnn
@@ -13,9 +9,6 @@ import torchvision.models.detection.mask_rcnn
 from ICA_Detection.tasks.detection.utils import utils
 from ICA_Detection.tasks.detection.utils.coco_eval import CocoEvaluator
 from ICA_Detection.tasks.detection.utils.coco_utils import get_coco_api_from_dataset
-
-DEBUG: bool = False
-
 
 def train_one_epoch(
     model,
@@ -55,14 +48,14 @@ def train_one_epoch(
         targets = batch['annot']
         scales = batch['scale']
 
-        if DEBUG:
-            print(f"[DEBUG] type(batch): {type(batch)}")
-            print(f"[DEBUG] len(batch): {len(batch)}")
-            print(f"[DEBUG] batch keys: {batch.keys()}")
-            print(f"[DEBUG] images shape: {images.shape}")
-            print(f"[DEBUG] targets shape: {targets.shape}")
-            print(f"[DEBUG] scales: {scales}")
-
+        """
+        print(f"[DEBUG] type(batch): {type(batch)}")
+        print(f"[DEBUG] len(batch): {len(batch)}")
+        print(f"[DEBUG] batch keys: {batch.keys()}")
+        print(f"[DEBUG] images shape: {images.shape}")
+        print(f"[DEBUG] targets shape: {targets.shape}")
+        print(f"[DEBUG] scales: {scales}")
+        """
         images = images.to(device)
         targets = targets.to(device)
 
