@@ -139,7 +139,6 @@ def main(args):
     # Example: RetinaNet with resnet152 backbone
     if args.model_type.lower() == "retina_net":
         model = resnet152(num_classes=args.num_classes, pretrained=args.pretrained)
-        model = retina_wrapper.RetinaNetWrapper(retinanet_model=model)
     else:
         raise ValueError(f"Only 'retina_net' supported in this example.")
 

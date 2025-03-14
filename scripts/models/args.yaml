@@ -1,7 +1,7 @@
-json_path: "/home/mariopasc/Python/Datasets/COMBINED/tasks/stenosis_detection/datasets/coco/coco_detection.json"
-splits_info_path: "/home/mariopasc/Python/Datasets/COMBINED/tasks/stenosis_detection/json/splits.json"
-images_root: "/home/mariopasc/Python/Datasets/COMBINED/tasks/stenosis_detection/images"
-output_dir: "/home/mariopasc/Python/Datasets/COMBINED/detection"
+json_path: "/home/mario/Python/Datasets/COMBINED/tasks/stenosis_detection/datasets/coco/coco_detection.json"
+splits_info_path: "/home/mario/Python/Datasets/COMBINED/tasks/stenosis_detection/json/splits.json"
+images_root: "/home/mario/Python/Datasets/COMBINED/tasks/stenosis_detection/images"
+output_dir: "/home/mario/Python/Datasets/COMBINED/detection"
 
 model_type: "retina_net"
 pretrained: true

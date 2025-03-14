@@ -46,19 +46,32 @@ def train_one_epoch(
 
     for batch in metric_logger.log_every(data_loader, print_freq, header):
 
-        images = []
-        targets = []
-        for sample in batch:
-            images.append(sample[0])  # PIL/np array
-            targets.append(sample[1])  # Nx5
+        # All the images are stacked within the img entry of the batch
+        # therefore, it is normal to have a single image tensor and a
+        # single target tensor for each batch.
+        # This means that the batch is a dictionary with only 3 keys, not
+        # a list of dictionaries.
+        images = batch['img']
+        targets = batch['annot']
+        scales = batch['scale']
+
+        if DEBUG:
+            print(f"[DEBUG] type(batch): {type(batch)}")
+            print(f"[DEBUG] len(batch): {len(batch)}")
+            print(f"[DEBUG] batch keys: {batch.keys()}")
+            print(f"[DEBUG] images shape: {images.shape}")
+            print(f"[DEBUG] targets shape: {targets.shape}")
+            print(f"[DEBUG] scales: {scales}")
 
         images = images.to(device)
+        targets = targets.to(device)
 
         # Convert each target dict -> Nx5 for FocalLoss
         formatted_targets = []
         for t in targets:
-            boxes = t["boxes"].to(device)
-            labels = t["labels"].to(device)
+            valid_indices = t[:, 0] != -1  # Filter out the padded annotations
+            boxes = t[valid_indices, :4].to(device)
+            labels = t[valid_indices, 4].to(device)
             if boxes.shape[0] == 0:
                 annotation_tensor = (
                     torch.zeros((1, 5), dtype=torch.float32, device=device) - 1
@@ -73,7 +86,7 @@ def train_one_epoch(
             formatted_targets.append(annotation_tensor)
 
         with torch.amp.autocast(enabled=(scaler is not None), device_type="cuda"):
-            classification_loss, regression_loss = model(images, formatted_targets)
+            classification_loss, regression_loss = model([images, formatted_targets])
             total_loss = classification_loss + regression_loss
 
         # Reduce for DDP if needed

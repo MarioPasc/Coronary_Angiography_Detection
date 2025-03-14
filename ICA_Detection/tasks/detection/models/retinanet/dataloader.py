@@ -74,20 +74,17 @@ class RetinaSplitCocoDataset(Dataset):
         return len(self.image_ids)
 
     def __getitem__(self, idx):
-        """
-        Returns a dictionary:
-          {
-            'img': <float32 np.array of shape (H, W, 3)>,
-            'annot': <np.array of shape (N, 5)>
-          }
-        where the last column of annot is the class label.
-        """
-        image_id = self.image_ids[idx]
-        img = self.load_image(image_id)
-        annot = self.load_annotations(image_id)
 
-        if self.transform is not None:
+        img = self.load_image(idx)
+        annot = self.load_annotations(idx)
+        sample = {'img': img, 'annot': annot}
+        if self.transform:
+            # We are going to be using torchvision/references/detection 
+            # transforms, therefore we must make a distintion between images
+            # and labels when passing
             sample = self.transform(img, annot)
+            # Now, convert to the RetinaNet dictionary inputs
+            sample = {'img': sample[0], 'annot': sample[1]}
 
         return sample
 
@@ -168,39 +165,41 @@ class RetinaSplitCocoDataset(Dataset):
 
 
 def collater(data):
-
     imgs = [s["img"] for s in data]
     annots = [s["annot"] for s in data]
-    scales = [s["scale"] for s in data]
+    scales = [s.get('scale', 1.0) for s in data]
 
-    widths = [int(s.shape[0]) for s in imgs]
-    heights = [int(s.shape[1]) for s in imgs]
+    widths = [int(s.shape[2]) for s in imgs]  # Corrected to get width from the third dimension
+    heights = [int(s.shape[1]) for s in imgs]  # Corrected to get height from the second dimension
     batch_size = len(imgs)
 
     max_width = np.array(widths).max()
     max_height = np.array(heights).max()
 
-    padded_imgs = torch.zeros(batch_size, max_width, max_height, 3)
+    padded_imgs = torch.zeros(batch_size, 3, max_height, max_width)
+
+    if True:
+        print(f"[DEBUG] Batch size: {batch_size}")
+        print(f"[DEBUG] Max width: {max_width}, Max height: {max_height}")
+        print(f"[DEBUG] Padded images shape: {padded_imgs.shape}")
 
     for i in range(batch_size):
         img = imgs[i]
-        padded_imgs[i, : int(img.shape[0]), : int(img.shape[1]), :] = img
+        if DEBUG: print(f"[DEBUG] Image {i} shape: {img.shape}")
+        padded_imgs[i, :, : int(img.shape[1]), : int(img.shape[2])] = img  # Corrected to use height and width from the correct dimensions
 
     max_num_annots = max(annot.shape[0] for annot in annots)
 
     if max_num_annots > 0:
-
         annot_padded = torch.ones((len(annots), max_num_annots, 5)) * -1
 
-        if max_num_annots > 0:
-            for idx, annot in enumerate(annots):
-                # print(annot.shape)
-                if annot.shape[0] > 0:
-                    annot_padded[idx, : annot.shape[0], :] = annot
+        for idx, annot in enumerate(annots):
+            if annot.shape[0] > 0:
+                annot_padded[idx, : annot.shape[0], :] = torch.tensor(annot)
     else:
         annot_padded = torch.ones((len(annots), 1, 5)) * -1
 
-    padded_imgs = padded_imgs.permute(0, 3, 1, 2)
+    if DEBUG: print(f"[DEBUG] Annotation padded shape: {annot_padded.shape}")
 
     return {"img": padded_imgs, "annot": annot_padded, "scale": scales}
 
