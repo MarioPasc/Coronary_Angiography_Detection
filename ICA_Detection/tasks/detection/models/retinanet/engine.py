@@ -172,7 +172,10 @@ def evaluate(
     if not dataset_root:
         dataset_root = ""
 
-    for images, targets in metric_logger.log_every(data_loader, 100, header):
+    for batch in metric_logger.log_every(data_loader, 100, header):
+        images = batch['img']
+        targets = batch['annot']
+
         # Move images to device
         images = images.to(device)
 
@@ -181,11 +184,6 @@ def evaluate(
         # for the entire batch, let's call it:
         scores_batch, class_idxs_batch, transformed_anchors_batch = model(images)
 
-        # Depending on your code, these might be flattened across the batch
-        # or returned as separate lists for each image. The snippet from the
-        # question suggests a single, flattened array. We'll assume batch_size == 1
-        # for simplicity. If you want multi-image batch, you need logic to unflatten
-        # them per image. For now, let's keep it simple.
 
         # If you do have batch_size=1, then scores_batch is shape [N], etc.
         # We threshold them:
@@ -289,13 +287,17 @@ def compute_validation_loss(
     num_batches = 0
 
     with torch.no_grad():
-        for images, targets in data_loader:
+        for batch in data_loader:
+            images = batch['img']
+            targets = batch['annot']
+
             images = images.to(device)
 
             formatted_targets = []
             for t in targets:
-                boxes = t["boxes"].to(device)
-                labels = t["labels"].to(device)
+                valid_indices = t[:, 0] != -1  # Filter out the padded annotations
+                boxes = t[valid_indices, :4].to(device)
+                labels = t[valid_indices, 4].to(device)
                 if boxes.shape[0] == 0:
                     annotation_tensor = (
                         torch.zeros((1, 5), dtype=torch.float32, device=device) - 1
