@@ -1,244 +1,112 @@
-import torch
-import torch.nn as nn
-import torchvision
-from torchvision.models.detection import RetinaNet
-from torchvision.models.detection.anchor_utils import AnchorGenerator
-from torchvision.ops import FeaturePyramidNetwork, nms
-from torchvision.models.detection.transform import GeneralizedRCNNTransform
-from torchvision.models.detection.backbone_utils import _validate_trainable_layers
+import os
+import json
+from typing import List, Tuple
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from PIL import Image
 
-
-def freeze_backbone_layers(backbone, freeze_until=2):
+def load_json(json_path: str) -> dict:
     """
-    Freezes the specified number of layers in a backbone.
-    freeze_until: an integer from 0 to 5, where
-        0 => freeze none
-        1 => freeze initial layers (conv1/bn1)
-        2 => also freeze layer1
-        3 => also freeze layer2
-        4 => also freeze layer3
-        5 => also freeze layer4 (freeze all)
-    """
-    # For ResNet backbones
-    if hasattr(backbone, "layer1"):
-        for name, param in backbone.named_parameters():
-            # Freeze conv1/bn1
-            if freeze_until >= 1 and (
-                name.startswith("conv1") or name.startswith("bn1")
-            ):
-                param.requires_grad = False
-            # Freeze layer1
-            elif freeze_until >= 2 and name.startswith("layer1"):
-                param.requires_grad = False
-            # Freeze layer2
-            elif freeze_until >= 3 and name.startswith("layer2"):
-                param.requires_grad = False
-            # Freeze layer3
-            elif freeze_until >= 4 and name.startswith("layer3"):
-                param.requires_grad = False
-            # Freeze layer4
-            elif freeze_until >= 5 and name.startswith("layer4"):
-                param.requires_grad = False
-    # For MobileNet, EfficientNet, or other backbones
-    # Implemented as a simple proportion-based freezing
-    else:
-        all_params = list(backbone.named_parameters())
-        total_layers = len(all_params)
-
-        if freeze_until > 0:
-            # Calculate how many layers to freeze based on freeze_until (1-5)
-            # as a proportion of total layers
-            freeze_count = int((freeze_until / 5) * total_layers)
-
-            # Freeze the first freeze_count layers
-            for i, (name, param) in enumerate(all_params):
-                if i < freeze_count:
-                    param.requires_grad = False
-
-
-def get_backbone_model(backbone_name, pretrained=True):
-    """
-    Creates and returns a backbone model based on the name.
+    Load JSON file.
 
     Args:
-        backbone_name (str): Name of the backbone (resnet50, resnet101, mobilenet_v2, etc.)
-        pretrained (bool): Whether to use pretrained weights
+        json_path (str): Path to the JSON file.
 
     Returns:
-        model: The backbone model
-        out_channels_list: List of output channels for each layer
+        dict: Parsed JSON content.
     """
-    if backbone_name == "resnet50":
-        backbone = torchvision.models.resnet50(pretrained=pretrained)
-        out_channels_list = [256, 512, 1024, 2048]
-        return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
+    with open(json_path, 'r') as f:
+        data = json.load(f)
+    return data
 
-    elif backbone_name == "resnet101":
-        backbone = torchvision.models.resnet101(pretrained=pretrained)
-        out_channels_list = [256, 512, 1024, 2048]
-        return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
-
-    elif backbone_name == "mobilenet_v2":
-        backbone = torchvision.models.mobilenet_v2(pretrained=pretrained)
-        # Remove the classifier
-        backbone = backbone.features
-        # MobileNetV2 structure differs from ResNet
-        out_channels_list = [24, 32, 96, 1280]  # Approximate values for key layers
-        # These indices correspond roughly to the end of each "inverted residual" block group
-        return_layers = {"3": "0", "6": "1", "13": "2", "18": "3"}
-
-    elif backbone_name == "efficientnet_b0":
-        backbone = torchvision.models.efficientnet_b0(pretrained=pretrained)
-        # Remove the classifier
-        backbone = backbone.features
-        # EfficientNet structure
-        out_channels_list = [24, 40, 112, 1280]  # Approximate values for key layers
-        # These indices target the end of the MBConv blocks
-        return_layers = {"2": "0", "3": "1", "5": "2", "8": "3"}
-
-    else:
-        raise ValueError(f"Unsupported backbone: {backbone_name}")
-
-    # Remove unnecessary layers (GAP, FC, etc.)
-    if backbone_name.startswith("resnet"):
-        modules = list(backbone.children())[:-2]
-        backbone = nn.Sequential(*modules)
-
-    return backbone, out_channels_list, return_layers
-
-
-def get_retina_net_model(
-    pretrained=True,
-    num_classes=2,
-    freeze_until=2,
-    backbone_name="resnet50",
-    fpn_channels=256,
-    anchor_sizes=None,
-    anchor_aspect_ratios=None,
-    nms_threshold=0.5,
-    score_threshold=0.05,
-):
+def load_image(image_path: str) -> Image.Image:
     """
-    Creates and returns a RetinaNet model with customizable hyperparameters.
+    Load an image from the given path.
 
     Args:
-        pretrained (bool): Whether to start with a model pre-trained on COCO (RetinaNet+backbone)
-        num_classes (int): Number of classes (including background)
-        freeze_until (int): How many layers of the backbone to freeze (0 to 5)
-        backbone_name (str): Name of the backbone to use (resnet50, resnet101, mobilenet_v2, efficientnet_b0)
-        fpn_channels (int): Number of channels in the FPN
-        anchor_sizes (list): List of anchor sizes (in pixels), default: [32, 64, 128, 256, 512]
-        anchor_aspect_ratios (list): List of anchor aspect ratios, default: [0.5, 1.0, 2.0]
-        nms_threshold (float): IoU threshold for NMS, default: 0.5
-        score_threshold (float): Score threshold for detections, default: 0.05
+        image_path (str): Path to the image file.
 
     Returns:
-        RetinaNet: The model ready for training or inference
+        Image.Image: Loaded image.
     """
-    # Set default values if not provided
-    if anchor_sizes is None:
-        anchor_sizes = [32, 64, 128, 256, 512]
+    return Image.open(image_path)
 
-    if anchor_aspect_ratios is None:
-        anchor_aspect_ratios = [0.5, 1.0, 2.0]
+def plot_bboxes(image: Image.Image, bboxes: List[List[float]], labels: List[int], color: str, ax: plt.Axes) -> None:
+    """
+    Plot bounding boxes on the image.
 
-    if pretrained and backbone_name == "resnet50":
-        # Use the pre-trained RetinaNet with ResNet50 backbone
-        model = torchvision.models.detection.retinanet_resnet50_fpn(
-            weights="DEFAULT",
-            trainable_backbone_layers=5
-            - freeze_until,  # Convert freeze_until to trainable layers
-        )
+    Args:
+        image (Image.Image): The image to plot on.
+        bboxes (List[List[float]]): List of bounding boxes in [x, y, w, h] format.
+        labels (List[int]): List of labels corresponding to the bounding boxes.
+        color (str): Color of the bounding boxes.
+        ax (plt.Axes): Matplotlib Axes object to plot on.
+    """
+    for bbox, label in zip(bboxes, labels):
+        if bbox[0] == -1:
+            continue
+        rect = patches.Rectangle((bbox[0], bbox[1]), bbox[2] - bbox[0], bbox[3] - bbox[1], linewidth=2, edgecolor=color, facecolor='none')
+        ax.add_patch(rect)
+        ax.text(bbox[0], bbox[1] - 10, f'Label: {label}', color=color, fontsize=12, weight='bold')
 
-        # Apply custom NMS threshold
-        model.nms_thresh = nms_threshold
-        model.score_thresh = score_threshold
+def save_annotated_image(image: Image.Image, save_path: str) -> None:
+    """
+    Save the annotated image.
 
-        # Freeze backbone layers according to freeze_until
-        freeze_backbone_layers(model.backbone.body, freeze_until)
+    Args:
+        image (Image.Image): The image to save.
+        save_path (str): Path to save the image.
+    """
+    image.save(save_path)
 
-        # Update anchor generator if custom sizes or aspect ratios are provided
-        if anchor_sizes != [32, 64, 128, 256, 512] or anchor_aspect_ratios != [
-            0.5,
-            1.0,
-            2.0,
-        ]:
-            anchor_generator = AnchorGenerator(
-                sizes=tuple((s,) for s in anchor_sizes),
-                aspect_ratios=tuple((ar,) for ar in anchor_aspect_ratios),
-            )
-            model.anchor_generator = anchor_generator
+def annotate_image(image_folder: str, image_name: str, json_data: dict, save_folder: str) -> None:
+    """
+    Annotate an image with predicted and ground truth bounding boxes.
 
-        # Modify FPN channels if different from default
-        if fpn_channels != 256:
-            # This requires modifying internal FPN components, which is complex
-            # We'll keep the original FPN in this case, but note the requested change
-            print(
-                f"Warning: Changing FPN channels for pretrained model not implemented. Using default (256)."
-            )
+    Args:
+        image_folder (str): Folder containing the images.
+        image_name (str): Name of the image to annotate.
+        json_data (dict): JSON data containing bounding box information.
+        save_folder (str): Folder to save the annotated images.
+    """
+    image_path = os.path.join(image_folder, image_name)
+    image = load_image(image_path)
+    fig, ax = plt.subplots(1)
+    ax.imshow(image, cmap="gray")
 
-        # Replace the classification head to handle custom number of classes
-        in_features = model.head.classification_head.conv[0][0].in_channels
-        num_anchors = model.head.classification_head.num_anchors
+    epoch_data = json_data.get("epoch_4", {})
+    image_data = epoch_data.get(image_name, {})
 
-        # Replace the 4-block conv layers
-        model.head.classification_head.conv = nn.Sequential(
-            nn.Conv2d(in_features, in_features, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(in_features, in_features, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(in_features, in_features, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(in_features, in_features, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-        )
+    predicted_bboxes = image_data.get("predicted_bboxes", [])
+    predicted_labels = image_data.get("predicted_labels", [])
+    gt_bboxes = image_data.get("gt_bboxes", [])
+    gt_labels = image_data.get("gt_labels", [])
 
-        # Replace the final classification conv
-        model.head.classification_head.cls_logits = nn.Conv2d(
-            in_features,
-            num_anchors * num_classes,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-        )
+    plot_bboxes(image, predicted_bboxes, predicted_labels, 'r', ax)
+    plot_bboxes(image, gt_bboxes, gt_labels, 'g', ax)
 
-        # Update num_classes attribute
-        model.head.classification_head.num_classes = num_classes
+    save_path = os.path.join(save_folder, f'annotated_{image_name}')
+    plt.axis('off')
+    plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
 
-    else:
-        # Build a RetinaNet model with custom backbone
-        # 1) Get the backbone model
-        backbone, out_channels_list, return_layers = get_backbone_model(
-            backbone_name, pretrained=pretrained
-        )
+def main(image_folder: str, json_path: str, save_folder: str) -> None:
+    """
+    Main function to annotate images based on JSON data.
 
-        # 2) Freeze layers as requested
-        freeze_backbone_layers(backbone, freeze_until)
+    Args:
+        image_folder (str): Folder containing the images.
+        json_path (str): Path to the JSON file.
+        save_folder (str): Folder to save the annotated images.
+    """
+    os.makedirs(save_folder, exist_ok=True)
+    json_data = load_json(json_path)
 
-        # 3) Create a Feature Pyramid Network
-        backbone_with_fpn = torchvision.models.detection.backbone_utils.BackboneWithFPN(
-            backbone,
-            return_layers=return_layers,
-            in_channels_list=out_channels_list,
-            out_channels=fpn_channels,
-            extra_blocks=torchvision.ops.feature_pyramid_network.LastLevelP6P7(
-                fpn_channels, fpn_channels
-            ),
-        )
+    for image_name in json_data.get("epoch_4", {}).keys():
+        annotate_image(image_folder, image_name, json_data, save_folder)
 
-        # 4) Define anchor generator with custom sizes and aspect ratios
-        anchor_generator = AnchorGenerator(
-            sizes=tuple((s,) for s in anchor_sizes),
-            aspect_ratios=tuple((ar,) for ar in anchor_aspect_ratios),
-        )
-
-        # 5) Build the RetinaNet model
-        model = RetinaNet(
-            backbone=backbone_with_fpn,
-            num_classes=num_classes,
-            anchor_generator=anchor_generator,
-            score_thresh=score_threshold,
-            nms_thresh=nms_threshold,
-        )
-
-    return model
+if __name__ == "__main__":
+    image_folder = "/home/mario/Python/Datasets/COMBINED/tasks/stenosis_detection/images"
+    json_path = "/home/mario/x2go_shared/epoch_4_predictions.json"
+    save_folder = "/home/mario/Python/Datasets/COMBINED/detection/retina_net"
+    main(image_folder, json_path, save_folder)
