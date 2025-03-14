@@ -7,8 +7,11 @@ import torch
 import torchvision.models.detection.mask_rcnn
 
 from ICA_Detection.tasks.detection.utils import utils
-from ICA_Detection.tasks.detection.utils.coco_eval import CocoEvaluator
-from ICA_Detection.tasks.detection.utils.coco_utils import get_coco_api_from_dataset
+
+import json
+import torch
+from pycocotools.cocoeval import COCOeval
+
 
 def train_one_epoch(
     model,
@@ -127,148 +130,134 @@ def _get_iou_types(model):
 
 
 @torch.inference_mode()
-def evaluate(
-    model,
-    data_loader,
-    device,
-    epoch,
-    json_path=None,
-    score_thresh=0.05,
-    iou_thresh=0.5,
-):
+def evaluate(model, data_loader, device, epoch, json_path=None, score_thresh=0.05):
     """
-    Runs inference on each batch using the model in eval mode.
-    Your RetinaNet in eval mode returns:
-        scores, class_indices, transformed_anchors
-    for each image in the batch.
-
-    We then feed these results into a COCO evaluator to measure mAP, etc.
-    Optionally, we save a JSON with predictions & GT.
-
-    If your model returns only a single set of (scores, classes, boxes)
-    for the entire batch, we need to split them out per-image.
-    Otherwise, if your model is coded to return a list of (scores, classes, boxes)
-    for each image, we can just parse it directly.
+    Evaluates a detection model on a COCO dataset using pycocotools to compute mAP.
+    
+    In inference mode, the model's forward pass returns a list of three tensors:
+      - finalScores: Tensor of detection scores.
+      - finalAnchorBoxesIndexes: Tensor of predicted class indices.
+      - finalAnchorBoxesCoordinates: Tensor of bounding boxes in [xmin, ymin, xmax, ymax] format.
+    
+    The function applies a score threshold, converts the bounding boxes to COCO format
+    ([x, y, w, h]), adjusts for image scaling, accumulates predictions into a JSON file,
+    and runs the COCO evaluation.
+    
+    Parameters:
+        model (torch.nn.Module): The detection model.
+        data_loader (torch.utils.data.DataLoader): DataLoader yielding evaluation samples.
+        device (torch.device): Device on which to run the model.
+        epoch (int): Current epoch (for logging and result organization).
+        json_path (str, optional): Path to save the prediction JSON file.
+        score_thresh (float): Confidence threshold for filtering detections.
+    
+    Returns:
+        coco_eval (COCOeval): The COCO evaluation object with evaluation metrics.
     """
-
-    n_threads = torch.get_num_threads()
-    torch.set_num_threads(1)
+    model.eval()  # set model to evaluation mode
     cpu_device = torch.device("cpu")
+    results = []   # list to accumulate predictions in COCO format
 
-    model.eval()
-
-    metric_logger = utils.MetricLogger(delimiter="  ")
-    header = f"Evaluation (epoch {epoch}):"
-
-    # Prepare COCO evaluator
-    coco = get_coco_api_from_dataset(data_loader.dataset)
-    iou_types = _get_iou_types(model)
-    coco_evaluator = CocoEvaluator(coco, iou_types)
-
-    all_results = {}
-    all_results[f"epoch_{epoch}"] = {}
-
-    dataset_root = getattr(data_loader.dataset, "root", "")
-    if not dataset_root:
-        dataset_root = ""
-
-    for batch in metric_logger.log_every(data_loader, 100, header):
-        images = batch['img']
-        targets = batch['annot']
-
-        # Move images to device
-        images = images.to(device)
-
-        # Because your model’s forward in eval mode returns
-        #   [finalScores, finalAnchorBoxesIndexes, finalAnchorBoxesCoordinates]
-        # for the entire batch, let's call it:
-        scores_batch, class_idxs_batch, transformed_anchors_batch = model(images)
-
-
-        # If you do have batch_size=1, then scores_batch is shape [N], etc.
-        # We threshold them:
-        keep_idxs = scores_batch > score_thresh
-        scores = scores_batch[keep_idxs]
-        classes = class_idxs_batch[keep_idxs]
-        boxes = transformed_anchors_batch[keep_idxs]
-
-        # Move to CPU for evaluation
-        scores = scores.detach().to(cpu_device)
-        classes = classes.detach().to(cpu_device)
-        boxes = boxes.detach().to(cpu_device)
-
-        # We also get image_id from the target:
-        if len(targets) == 1 and "image_id" in targets[0]:
-            image_id = targets[0]["image_id"].item()
+    # Iterate over the evaluation dataset; here we assume batch size = 1.
+    for idx, data in enumerate(data_loader):
+        # Extract image and scale factor from the collated batch.
+        # Note: collater returns a list for 'scale', so we take the first element.
+        image = data['img'].to(device)
+        scale = data.get('scale', [1.0])[0]
+        
+        # Run inference without gradient computation.
+        with torch.no_grad():
+            outputs = model(image)
+        
+        # Process the model's output.
+        # The forward pass is expected to return a list of three tensors.
+        if isinstance(outputs, list) and len(outputs) == 3 and isinstance(outputs[0], torch.Tensor):
+            scores, labels, boxes = outputs
         else:
-            # fallback
-            image_id = -1
+            # Fallback if a different output format is returned.
+            output = outputs[0]
+            scores = output.get('scores', torch.Tensor([]))
+            labels = output.get('labels', torch.Tensor([]))
+            boxes = output.get('boxes', torch.Tensor([]))
+        
+        # Move predictions to CPU.
+        scores = scores.cpu()
+        labels = labels.cpu()
+        boxes = boxes.cpu()
+        
+        # Apply score threshold filtering.
+        keep = scores > score_thresh
+        scores = scores[keep]
+        labels = labels[keep]
+        boxes  = boxes[keep]
+        
+        # Obtain the image_id from the dataset.
+        # Here we assume the order in the DataLoader corresponds to dataset.image_ids.
+        image_id = data_loader.dataset.image_ids[idx]
+        
+        # Skip this image if no detections remain.
+        if boxes.shape[0] == 0:
+            continue
+        
+        # Convert boxes from [xmin, ymin, xmax, ymax] to [x, y, w, h].
+        boxes_converted = boxes.clone()
+        boxes_converted[:, 2] = boxes_converted[:, 2] - boxes_converted[:, 0]  # width
+        boxes_converted[:, 3] = boxes_converted[:, 3] - boxes_converted[:, 1]  # height
 
-        # Build the dictionary to feed coco_evaluator
-        # Format: {image_id: { "boxes": Tensor, "scores": Tensor, "labels": Tensor } }
-        res = {}
-        res[image_id] = {
-            "boxes": boxes,
-            "scores": scores,
-            "labels": classes,
-        }
-
-        coco_evaluator.update(res)
-
-        # Optionally store predictions & GT in JSON
-        if json_path is not None:
-            # We'll retrieve the original file name from COCO
-            img_info = data_loader.dataset.coco.loadImgs(image_id)[0]
-            file_name = img_info["file_name"]
-            full_image_path = os.path.join(dataset_root, file_name)
-
-            # Ground truth from targets
-            if "boxes" in targets[0] and "labels" in targets[0]:
-                gt_boxes = targets[0]["boxes"].tolist()
-                gt_labels = targets[0]["labels"].tolist()
-            else:
-                gt_boxes = []
-                gt_labels = []
-
-            all_results[f"epoch_{epoch}"][file_name] = {
-                "image_id": image_id,
-                "file_name": file_name,
-                "image_path": full_image_path,
-                "predicted_bboxes": boxes.tolist(),
-                "predicted_scores": scores.tolist(),
-                "predicted_labels": classes.tolist(),
-                "gt_bboxes": gt_boxes,
-                "gt_labels": gt_labels,
+        # Adjust bounding boxes for the image scale.
+        if isinstance(scale, (int, float)):
+            boxes_converted = boxes_converted / scale
+        else:
+            boxes_converted = boxes_converted / scale
+        
+        # Map predicted labels to COCO category IDs using the dataset's mapping function.
+        if hasattr(data_loader.dataset, 'label_to_coco_label'):
+            # Use the method provided by the dataset.
+            map_label = lambda lbl: data_loader.dataset.label_to_coco_label(lbl)
+        else:
+            map_label = lambda lbl: int(lbl)
+        
+        # Build a COCO-formatted prediction for each detection.
+        for j in range(boxes_converted.shape[0]):
+            result = {
+                'image_id': image_id,
+                'category_id': map_label(int(labels[j])),
+                'score': float(scores[j]),
+                'bbox': boxes_converted[j].tolist(),  # in [x, y, w, h] format
             }
+            results.append(result)
+        
+        print(f'Processed {idx + 1}/{len(data_loader)}', end='\r')
+    
+    # Determine JSON file path for saving results.
+    if json_path is None:
+        json_path = f'{data_loader.dataset.set_name}_bbox_results.json' if hasattr(data_loader.dataset, 'set_name') else 'bbox_results.json'
+    
+    # Save predictions to the JSON file.
+    with open(json_path, 'w') as f:
+        json.dump(results, f, indent=4)
+    
+    # Load ground truth annotations via the COCO API.
+    if hasattr(data_loader.dataset, 'coco'):
+        coco_true = data_loader.dataset.coco
+    else:
+        print("Dataset does not provide COCO ground truth information.")
+        return
+    
+    coco_pred = coco_true.loadRes(json_path)
+    
+    # Run the COCO evaluation.
+    coco_eval = COCOeval(coco_true, coco_pred, 'bbox')
+    # Restrict evaluation to the processed images.
+    coco_eval.params.imgIds = [data_loader.dataset.image_ids[i] for i in range(len(data_loader.dataset))]
+    coco_eval.evaluate()
+    coco_eval.accumulate()
+    coco_eval.summarize()
+    
+    # Set the model back to training mode.
+    model.train()
+    return coco_eval
 
-    # Final aggregator steps
-    metric_logger.synchronize_between_processes()
-    print("Averaged stats:", metric_logger)
-
-    coco_evaluator.synchronize_between_processes()
-    coco_evaluator.accumulate()
-    coco_evaluator.summarize()
-    torch.set_num_threads(n_threads)
-
-    # Save JSON if requested
-    if json_path is not None:
-        os.makedirs(os.path.dirname(json_path), exist_ok=True)
-        if os.path.exists(json_path):
-            try:
-                with open(json_path, "r") as f:
-                    existing_results = json.load(f)
-            except json.JSONDecodeError:
-                existing_results = {}
-        else:
-            existing_results = {}
-
-        existing_results.update(all_results)
-        with open(json_path, "w") as f:
-            json.dump(existing_results, f, indent=2)
-
-        print(f"[INFO] Saved detection results to {json_path}")
-
-    return coco_evaluator
 
 
 def compute_validation_loss(
