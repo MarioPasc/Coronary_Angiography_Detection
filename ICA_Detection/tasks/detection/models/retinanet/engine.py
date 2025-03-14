@@ -312,7 +312,7 @@ def compute_validation_loss(
 
                 formatted_targets.append(annotation_tensor)
 
-            classification_loss, regression_loss = model(images, formatted_targets)
+            classification_loss, regression_loss = model([images, formatted_targets])
             batch_loss = classification_loss + regression_loss
             total_loss += batch_loss.item()
             num_batches += 1
