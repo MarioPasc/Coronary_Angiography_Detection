@@ -229,6 +229,11 @@ def evaluate(model, data_loader, device, epoch, json_path=None, score_thresh=0.0
         
         print(f'Processed {idx + 1}/{len(data_loader)}', end='\r')
     
+    # Check if results are empty
+    if not results:
+        print("No predictions were made.")
+        return
+    
     # Determine JSON file path for saving results.
     if json_path is None:
         json_path = f'{data_loader.dataset.set_name}_bbox_results.json' if hasattr(data_loader.dataset, 'set_name') else 'bbox_results.json'
