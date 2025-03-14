@@ -74,9 +74,9 @@ class RetinaSplitCocoDataset(Dataset):
         return len(self.image_ids)
 
     def __getitem__(self, idx):
-
-        img = self.load_image(idx)
-        annot = self.load_annotations(idx)
+        image_id = self.image_ids[idx]
+        img = self.load_image(image_id)
+        annot = self.load_annotations(image_id)
         sample = {'img': img, 'annot': annot}
         if self.transform:
             # We are going to be using torchvision/references/detection 
