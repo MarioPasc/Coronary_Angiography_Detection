@@ -130,7 +130,7 @@ def _get_iou_types(model):
 
 
 @torch.inference_mode()
-def evaluate(model, data_loader, device, epoch, json_path=None, score_thresh=0.05):
+def evaluate(model, data_loader, device, epoch, json_path=None, score_thresh=0.05, dataset_root=None):
     """
     Evaluates a detection model on a COCO dataset using pycocotools to compute mAP.
     
@@ -150,6 +150,7 @@ def evaluate(model, data_loader, device, epoch, json_path=None, score_thresh=0.0
         epoch (int): Current epoch (for logging and result organization).
         json_path (str, optional): Path to save the prediction JSON file.
         score_thresh (float): Confidence threshold for filtering detections.
+        dataset_root (str, optional): Root directory of the dataset for constructing full image paths.
     
     Returns:
         coco_eval (COCOeval): The COCO evaluation object with evaluation metrics.
@@ -157,6 +158,7 @@ def evaluate(model, data_loader, device, epoch, json_path=None, score_thresh=0.0
     model.eval()  # set model to evaluation mode
     cpu_device = torch.device("cpu")
     results = []   # list to accumulate predictions in COCO format
+    all_results = {f"epoch_{epoch}": {}}  # dictionary to store per-epoch predictions
 
     # Iterate over the evaluation dataset; here we assume batch size = 1.
     for idx, data in enumerate(data_loader):
@@ -164,6 +166,7 @@ def evaluate(model, data_loader, device, epoch, json_path=None, score_thresh=0.0
         # Note: collater returns a list for 'scale', so we take the first element.
         image = data['img'].to(device)
         scale = data.get('scale', [1.0])[0]
+        targets = data['annot']
         
         # Run inference without gradient computation.
         with torch.no_grad():
@@ -227,6 +230,26 @@ def evaluate(model, data_loader, device, epoch, json_path=None, score_thresh=0.0
             }
             results.append(result)
         
+        # Retrieve the original file name from COCO
+        img_info = data_loader.dataset.coco.loadImgs(image_id)[0]
+        file_name = img_info["file_name"]
+        full_image_path = os.path.join(dataset_root, file_name) if dataset_root else file_name
+
+        # Ground truth from targets
+        gt_boxes = targets[0][:, :4].tolist()
+        gt_labels = targets[0][:, 4].tolist()
+
+        all_results[f"epoch_{epoch}"][file_name] = {
+            "image_id": image_id,
+            "file_name": file_name,
+            "image_path": full_image_path,
+            "predicted_bboxes": boxes.tolist(),
+            "predicted_scores": scores.tolist(),
+            "predicted_labels": labels.tolist(),
+            "gt_bboxes": gt_boxes,
+            "gt_labels": gt_labels,
+        }
+        
         print(f'Processed {idx + 1}/{len(data_loader)}', end='\r')
     
     # Check if results are empty
@@ -241,6 +264,11 @@ def evaluate(model, data_loader, device, epoch, json_path=None, score_thresh=0.0
     # Save predictions to the JSON file.
     with open(json_path, 'w') as f:
         json.dump(results, f, indent=4)
+    
+    # Save per-epoch predictions to a separate JSON file.
+    per_epoch_json_path = f'epoch_{epoch}_predictions.json'
+    with open(per_epoch_json_path, 'w') as f:
+        json.dump(all_results, f, indent=4)
     
     # Load ground truth annotations via the COCO API.
     if hasattr(data_loader.dataset, 'coco'):
