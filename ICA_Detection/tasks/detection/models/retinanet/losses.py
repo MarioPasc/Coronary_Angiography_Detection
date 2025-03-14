@@ -53,7 +53,11 @@ class FocalLoss(nn.Module):
             classification = classifications[j, :, :]
             regression = regressions[j, :, :]
 
-            bbox_annotation = annotations[j, :, :]
+            print(f"[DEBUG] classification: {classification.shape}")
+            print(f"[DEBUG] regression: {regression.shape}")
+            print(f"[DEBUG] annotations: {annotations}")
+
+            bbox_annotation = annotations[j]
             bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
 
             classification = torch.clamp(classification, 1e-4, 1.0 - 1e-4)
