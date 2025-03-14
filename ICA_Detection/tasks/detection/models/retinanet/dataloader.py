@@ -178,7 +178,7 @@ def collater(data):
 
     padded_imgs = torch.zeros(batch_size, 3, max_height, max_width)
 
-    if True:
+    if DEBUG:
         print(f"[DEBUG] Batch size: {batch_size}")
         print(f"[DEBUG] Max width: {max_width}, Max height: {max_height}")
         print(f"[DEBUG] Padded images shape: {padded_imgs.shape}")

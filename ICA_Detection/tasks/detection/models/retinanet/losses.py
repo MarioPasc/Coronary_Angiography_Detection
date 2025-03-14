@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+DEBUG: bool = False
 
 def calc_iou(a, b):
     area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
@@ -53,9 +54,10 @@ class FocalLoss(nn.Module):
             classification = classifications[j, :, :]
             regression = regressions[j, :, :]
 
-            print(f"[DEBUG] classification: {classification.shape}")
-            print(f"[DEBUG] regression: {regression.shape}")
-            print(f"[DEBUG] annotations: {annotations}")
+            if DEBUG:
+                print(f"[DEBUG] classification: {classification.shape}")
+                print(f"[DEBUG] regression: {regression.shape}")
+                print(f"[DEBUG] annotations: {annotations}")
 
             bbox_annotation = annotations[j]
             bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
