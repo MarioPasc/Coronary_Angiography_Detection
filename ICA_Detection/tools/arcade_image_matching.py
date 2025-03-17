@@ -259,8 +259,8 @@ if __name__ == "__main__":
     # Match images using all three techniques in sequence
     result = match_images(
         stenosis_dir, syntax_dir, 
-        use_pixel_diff=True, pixel_diff_threshold=5.0,
-        use_ssim=True, ssim_threshold=0.90
+        use_pixel_diff=False, pixel_diff_threshold=5.0,
+        use_ssim=False, ssim_threshold=0.90
     )
     
     # Save just the image matches to a separate file for ease of use
