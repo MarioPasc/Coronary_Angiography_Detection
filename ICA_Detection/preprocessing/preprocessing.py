@@ -248,7 +248,13 @@ def process_images_by_task(
         # 3g. Save or convert bounding box annotations (detection task)
         # -----------------------------------------------------------------
         # TODO: Guardar también la segmentación en formato YOLO
-        if task == "detection":
+        
+        # We are going to modify this only for now to save a detection dataset instead of segmentation
+        # in the segmentation task. This is because we are going to do some trials to apply
+        # detection with mask-guided attention with the YOLO model, and we need to have the detection 
+        # dataset
+        # if task == "detection"
+        if task == "detection" or task == "segmentation": 
             labels_formats = entry.get("preprocessing_plan", {}).get("dataset_formats", {})
             # If 'lesion' might be True or False in the detection context
             # we only save labels for entries that have at least one bbox

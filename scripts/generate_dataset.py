@@ -58,6 +58,10 @@ PLAN_STEPS_SEGMENTATION = {
     },
     "dtype_standarization": {"desired_dtype": "uint8"},
     "format_standarization": {"desired_format": "png"},
+    "dataset_formats": {"YOLO": True, "COCO": True},
+}
+
+"""
     "clahe": {
         "window_size": 5,
         "sigma": 1.0,
@@ -65,8 +69,7 @@ PLAN_STEPS_SEGMENTATION = {
         "tileGridSize": (8, 8),
     },
     "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
-    "dataset_formats": {"YOLO": True, "COCO": True},
-}
+"""
 
 # ==========================
 # ========= SCRIPT =========
