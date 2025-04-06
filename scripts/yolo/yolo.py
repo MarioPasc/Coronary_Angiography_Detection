@@ -49,6 +49,7 @@ def train_model(
     model: YOLO = YOLO(weights)
 
     print(f"Starting training with config: {config_path}")
+    print("All augmentations disabled")
     results: Dict[str, Any] = model.train(
         data=config_path,
         epochs=epochs,
@@ -57,6 +58,24 @@ def train_model(
         device=device,
         project=project,
         name=name,
+        # Disable all augmentation options
+        hsv_h=0.0,
+        hsv_s=0.0,
+        hsv_v=0.0,
+        degrees=0.0,
+        translate=0.0,
+        scale=0.0,
+        shear=0.0,
+        perspective=0.0,
+        flipud=0.0,
+        fliplr=0.0,
+        bgr=0.0,
+        mosaic=0.0,
+        mixup=0.0,
+        copy_paste=0.0,
+        auto_augment=None,
+        erasing=0.0,
+        crop_fraction=0.0,
     )
 
     print(f"Training completed. Results saved to: {os.path.join(project, name)}")
@@ -70,7 +89,7 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     config_path: str = (
-        "/home/mariopasc/Python/Datasets/COMBINED/tasks/stenosis_detection/datasets/yolo/yolo_ica_detection.yaml"
+        "/home/mariopasc/Python/Datasets/COMBINED/YOLO_MGA/detection/yolo_ica_detection.yaml"
     )
 
     parser.add_argument(
@@ -85,12 +104,15 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--epochs", type=int, default=100, help="Number of training epochs"
     )
-    parser.add_argument("--batch", type=int, default=16, help="Batch size for training")
+    parser.add_argument("--batch", type=int, default=8, help="Batch size for training")
     parser.add_argument(
-        "--img-size", type=int, default=640, help="Image size for training"
+        "--img-size", type=int, default=512, help="Image size for training"
     )
     parser.add_argument(
-        "--device", type=str, default="", help="Device to use (cuda device or cpu)"
+        "--device",
+        type=str,
+        default="cuda:0",
+        help="Device to use (cuda device or cpu)",
     )
     parser.add_argument(
         "--project",
