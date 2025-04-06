@@ -192,10 +192,15 @@ class MaskGuidedTrainer:
             batch_size = output.shape[0]
             modified_outputs = []
 
-            # Log layer information
-            if layer_name:
-                logging.debug(
-                    f"Processing layer {layer_name}, output shape: {output.shape}"
+            # Check if we should visualize for this batch
+            should_visualize_batch = (
+                hasattr(self, "visualize_current_batch")
+                and self.visualize_current_batch
+            )
+
+            if should_visualize_batch:
+                logging.info(
+                    f"MGA hook processing for visualization: layer {layer_name}, batch size {batch_size}"
                 )
 
             # Process each image in the batch
@@ -205,17 +210,23 @@ class MaskGuidedTrainer:
 
                 # Capture for visualization if this is the first item in the batch
                 # and we're visualizing this batch
-                should_visualize = (
-                    i == 0
-                    and hasattr(self, "visualize_current_batch")
-                    and self.visualize_current_batch
-                )
+                should_visualize = i == 0 and should_visualize_batch
 
-                # Get current image name from trainer.batch
                 try:
-                    # This part is tricky and depends on how ultralytics stores paths
-                    # We'll need to extract them from the current batch
-                    img_path = self._get_current_image_path(i)
+                    # Get current image path from batch
+                    img_path = None
+                    if hasattr(self, "current_batch_paths") and i < len(
+                        self.current_batch_paths
+                    ):
+                        img_path = self.current_batch_paths[i]
+
+                        # Explicitly store for visualization if needed
+                        if should_visualize:
+                            self.visualization_data["original_input"] = img_path
+                            logging.info(
+                                f"MGA hook stored path for visualization: {img_path}"
+                            )
+
                     if img_path is None:
                         logging.warning(f"No image path found for batch item {i}")
                         self.stats["images_without_masks"] += 1
@@ -225,20 +236,10 @@ class MaskGuidedTrainer:
                     img_basename = Path(img_path).stem
                     mask_path = self._find_mask_path(img_basename)
 
-                    if mask_path is None:
-                        logging.info(f"No mask found for image: {img_basename}")
-                        self.stats["images_without_masks"] += 1
-                        modified_outputs.append(output[i : i + 1])
-                        continue
-
-                    logging.info(
-                        f"Found mask for image: {img_basename} -> {Path(mask_path).name}"
-                    )
-                    self.stats["images_with_masks"] += 1
-
                     # Store original image path for visualization
                     if should_visualize:
                         self.visualization_data["original_input"] = img_path
+                        logging.info(f"Stored original input path: {img_path}")
 
                     # Load and process mask
                     mask = Image.open(mask_path).convert("L")
@@ -319,60 +320,78 @@ class MaskGuidedTrainer:
 
         return hook
 
-    # Override preprocess_batch to capture image paths
-    def preprocess_batch(self, batch):
-        print(f"Processing batch {self.batch_count} with keys: {batch.keys()}")
-
-        # Store image paths before preprocessing
-        if "im_file" in batch:
-            self.current_batch_paths = batch["im_file"]
-            # Log sample of paths
-            print(f"Sample paths: {self.current_batch_paths[:3]}")
-
-            # Update MGA trainer with these paths
-            if hasattr(self, "mga_trainer"):
-                self.mga_trainer.current_batch_paths = self.current_batch_paths
-            else:
-                print("WARNING: No mga_trainer attribute found!")
-
-        # Increment batch count
-        self.batch_count += 1
-
-        # Print current image shape for debugging
-        if "img" in batch:
-            print(f"Input image shape: {batch['img'].shape}")
-
-        # Call the original preprocessing
-        result = super().preprocess_batch(batch)
-
-        return result
-
     def visualize_mga_process(self, batch_idx):
-        """Create a 4x4 visualization grid of the MGA process"""
-        if not all(
-            key in self.visualization_data for key in ["original_input", "mask"]
-        ):
-            print("Visualization data not available")
+        """Create a 4x3 visualization grid of the MGA process"""
+        # First check if we have an original input path
+        if self.visualization_data["original_input"] is None:
+            if (
+                hasattr(self, "current_batch_paths")
+                and len(self.current_batch_paths) > 0
+            ):
+                self.visualization_data["original_input"] = self.current_batch_paths[0]
+                logging.info(
+                    f"Using fallback image path: {self.current_batch_paths[0]}"
+                )
+            else:
+                logging.error("No image paths available for visualization")
+                return
+
+        # Try to find the mask if it's not already loaded
+        if self.visualization_data["mask"] is None:
+            img_basename = Path(self.visualization_data["original_input"]).stem
+            mask_path = self._find_mask_path(img_basename)
+
+            if mask_path:
+                try:
+                    self.visualization_data["mask"] = Image.open(mask_path).convert("L")
+                    logging.info(f"Loaded mask: {mask_path}")
+                except Exception as e:
+                    logging.error(f"Failed to load mask: {e}")
+                    # Create a blank mask as fallback
+                    img = Image.open(self.visualization_data["original_input"])
+                    width, height = img.size
+                    self.visualization_data["mask"] = Image.new(
+                        "L", (width, height), 255
+                    )
+                    logging.warning(f"Created blank mask for visualization")
+            else:
+                # No mask found, create a blank one
+                img = Image.open(self.visualization_data["original_input"])
+                width, height = img.size
+                self.visualization_data["mask"] = Image.new("L", (width, height), 255)
+                logging.warning(
+                    f"Created blank mask for visualization because no mask file was found"
+                )
+
+        # Now we should have both image and mask (real or fallback)
+        if self.visualization_data["original_input"] is None:
+            logging.error("Cannot visualize: original_input is None")
             return
 
-        # Create a figure
-        plt.figure(figsize=(15, 15))
+        # Create a figure - make it taller to accommodate 4 rows
+        plt.figure(figsize=(15, 20))
 
         # 1. Original input image
-        plt.subplot(3, 3, 1)
-        input_img = Image.open(self.visualization_data["original_input"])
-        plt.imshow(input_img)
-        plt.title("Input Image")
+        plt.subplot(4, 3, 1)
+        try:
+            input_img = Image.open(self.visualization_data["original_input"])
+            plt.imshow(input_img)
+            plt.title("Input Image")
+        except Exception as e:
+            logging.error(
+                f"Error opening image {self.visualization_data['original_input']}: {e}"
+            )
+            plt.text(0.5, 0.5, "Image load error", ha="center", va="center")
         plt.axis("off")
 
         # 2. Original mask
-        plt.subplot(3, 3, 2)
+        plt.subplot(4, 3, 2)
         plt.imshow(self.visualization_data["mask"], cmap="gray")
         plt.title("Segmentation Mask")
         plt.axis("off")
 
         # 3. Leave predictions empty or plot later if available
-        plt.subplot(3, 3, 3)
+        plt.subplot(4, 3, 3)
         plt.title("Predictions (not implemented)")
         plt.axis("off")
 
@@ -382,7 +401,7 @@ class MaskGuidedTrainer:
 
         # 4-6. Feature maps before masking
         for i, (layer, title) in enumerate(zip(layers, layer_titles)):
-            plt.subplot(3, 3, 4 + i)
+            plt.subplot(4, 3, 4 + i)
             if layer in self.visualization_data["feature_maps"]:
                 # Get the feature map and visualize the mean across channels
                 feature_map = (
@@ -391,20 +410,23 @@ class MaskGuidedTrainer:
                 plt.imshow(feature_map.numpy(), cmap="viridis")
                 plt.title(f"Feature Map {title}")
                 plt.axis("off")
+            else:
+                plt.title(f"No Feature Map for {title}")
 
         # 7-9. Downsized masks
         for i, (layer, title) in enumerate(zip(layers, layer_titles)):
-
-            plt.subplot(3, 3, 7 + i)
+            plt.subplot(4, 3, 7 + i)
             if layer in self.visualization_data["downsized_masks"]:
                 mask = self.visualization_data["downsized_masks"][layer][0].cpu()
                 plt.imshow(mask.numpy(), cmap="gray")
                 plt.title(f"Mask for {title}")
                 plt.axis("off")
+            else:
+                plt.title(f"No Mask for {title}")
 
         # 10-12. Masked feature maps
         for i, (layer, title) in enumerate(zip(layers, layer_titles)):
-            plt.subplot(3, 3, 10 + i)
+            plt.subplot(4, 3, 10 + i)
             if layer in self.visualization_data["masked_feature_maps"]:
                 # Get the masked feature map and visualize the mean across channels
                 feature_map = (
@@ -415,6 +437,8 @@ class MaskGuidedTrainer:
                 plt.imshow(feature_map.numpy(), cmap="viridis")
                 plt.title(f"Masked FM {title}")
                 plt.axis("off")
+            else:
+                plt.title(f"No Masked FM for {title}")
 
         # Save the visualization
         save_dir = os.path.join(
@@ -429,11 +453,50 @@ class MaskGuidedTrainer:
 
     def _find_mask_path(self, img_basename):
         """Find corresponding mask file for an image"""
-        for mask_file in os.listdir(self.masks_folder):
-            mask_basename = Path(mask_file).stem
-            if mask_basename == img_basename:
-                return os.path.join(self.masks_folder, mask_file)
-        return None
+        # Log what we're looking for
+        logging.info(f"Looking for mask with basename: {img_basename}")
+
+        # List all files in the masks folder
+        try:
+            mask_files = os.listdir(self.masks_folder)
+
+            # First try exact match
+            for mask_file in mask_files:
+                mask_basename = Path(mask_file).stem
+                if mask_basename == img_basename:
+                    mask_path = os.path.join(self.masks_folder, mask_file)
+                    logging.info(f"Found exact match mask: {mask_path}")
+                    return mask_path
+
+            # If no exact match, try with different extensions
+            for mask_file in mask_files:
+                mask_basename = Path(mask_file).stem
+                if mask_basename.startswith(img_basename):
+                    mask_path = os.path.join(self.masks_folder, mask_file)
+                    logging.info(f"Found partial match mask: {mask_path}")
+                    return mask_path
+
+            # If still not found, try to extract just the numerical part
+            # This assumes filenames have a pattern with numbers at the end
+            import re
+
+            number_match = re.search(r"(\d+)$", img_basename)
+            if number_match:
+                number = number_match.group(1)
+                for mask_file in mask_files:
+                    if number in Path(mask_file).stem:
+                        mask_path = os.path.join(self.masks_folder, mask_file)
+                        logging.info(f"Found number match mask: {mask_path}")
+                        return mask_path
+
+            # No match found - log available mask files for debugging
+            logging.error(f"No matching mask found for {img_basename}")
+            logging.error(f"Available masks (first 5): {mask_files[:5]}")
+
+            return None
+        except Exception as e:
+            logging.error(f"Error searching for mask: {e}")
+            return None
 
     def train(self):
         """Run the training with Mask-Guided Attention"""
@@ -461,42 +524,79 @@ class MaskGuidedTrainer:
                 logging.info(f"Starting MGA training with {world_size} GPUs")
                 return super()._do_train(world_size)
 
-            # Override preprocess_batch to capture image paths
             def preprocess_batch(self, batch):
                 # Store image paths before preprocessing
                 if "im_file" in batch:
                     self.current_batch_paths = batch["im_file"]
+
                     # Update MGA trainer with these paths
                     if hasattr(self, "mga_trainer"):
-                        self.mga_trainer.current_batch_paths = self.current_batch_paths
-
-                        # Log image paths
-                        logging.debug(
-                            f"Batch {self.batch_count} images: {[Path(p).name for p in self.current_batch_paths[:3]]}"
+                        self.mga_trainer.current_batch_paths = (
+                            self.current_batch_paths.copy()
+                        )
+                        logging.info(
+                            f"Set mga_trainer.current_batch_paths with {len(self.current_batch_paths)} items"
                         )
 
-                    # Increment batch count
-                    self.batch_count += 1
+                        if len(self.current_batch_paths) > 0:
+                            logging.info(
+                                f"Sample paths: {[Path(p).name for p in self.current_batch_paths[:2]]}"
+                            )
 
-                    # Check if we should visualize this batch
-                    should_visualize = (
-                        self.batch_count % self.mga_trainer.visualize_interval == 0
-                    )
-                    self.mga_trainer.visualize_current_batch = should_visualize
-                    self.mga_trainer.current_batch_idx = self.batch_count
+                        # Increment batch count
+                        self.batch_count += 1
 
-                    if should_visualize:
-                        logging.info(f"Will visualize batch {self.batch_count}")
+                        # Check if we should visualize this batch
+                        should_visualize = (
+                            self.batch_count % self.mga_trainer.visualize_interval == 0
+                        )
+                        self.mga_trainer.visualize_current_batch = should_visualize
+                        self.mga_trainer.current_batch_idx = self.batch_count
+
+                        if should_visualize:
+                            logging.info(f"Will visualize batch {self.batch_count}")
+                            # Pre-store the first image path for visualization
+                            if len(self.current_batch_paths) > 0:
+                                self.mga_trainer.visualization_data[
+                                    "original_input"
+                                ] = self.current_batch_paths[0]
+                                logging.info(
+                                    f"Pre-stored image path: {self.current_batch_paths[0]}"
+                                )
+
+                                # Immediately try to find and store the mask
+                                img_basename = Path(self.current_batch_paths[0]).stem
+                                mask_path = self.mga_trainer._find_mask_path(
+                                    img_basename
+                                )
+                                if mask_path:
+                                    try:
+                                        self.mga_trainer.visualization_data["mask"] = (
+                                            Image.open(mask_path).convert("L")
+                                        )
+                                        logging.info(f"Pre-loaded mask: {mask_path}")
+                                    except Exception as e:
+                                        logging.error(f"Failed to pre-load mask: {e}")
+                    else:
+                        logging.warning("No mga_trainer attribute found!")
 
                 # Call the original preprocessing
                 result = super().preprocess_batch(batch)
 
                 # After batch is processed, create visualization if needed
-                if (
-                    hasattr(self, "mga_trainer")
-                    and self.mga_trainer.visualize_current_batch
+                if hasattr(self, "mga_trainer") and getattr(
+                    self.mga_trainer, "visualize_current_batch", False
                 ):
-                    self.mga_trainer.visualize_mga_process(self.batch_count)
+                    try:
+                        self.mga_trainer.visualize_mga_process(self.batch_count)
+                        logging.info("Visualization completed successfully")
+                    except Exception as e:
+                        logging.error(f"Error creating visualization: {e}")
+                        import traceback
+
+                        logging.error(
+                            traceback.format_exc()
+                        )  # Print full stack trace for better debugging
                     # Reset flag after visualization
                     self.mga_trainer.visualize_current_batch = False
 
@@ -504,9 +604,6 @@ class MaskGuidedTrainer:
 
         # Create a reference to self for use in the callbacks
         mga_trainer = self
-
-        # Replace the default trainer with our custom one
-        model.trainer = MGADetectionTrainer
 
         # Initialize training
         logging.info(
@@ -568,9 +665,9 @@ if __name__ == "__main__":
         model_cfg=model_path,
         data_yaml=data_yaml,
         masks_folder=masks_folder,
-        epochs=5,
+        epochs=100,
         imgsz=512,
-        visualize_interval=50,  # Generate visualization every 50 batches
+        visualize_interval=101,  # Generate visualization every 50 batches
     )
 
     trained_model = mga_trainer.train()

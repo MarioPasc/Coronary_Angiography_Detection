@@ -21,7 +21,7 @@ def train_model(
     epochs: int = 100,
     batch_size: int = 16,
     img_size: int = 640,
-    device: str = "",
+    device: str = "cpu",
     project: str = "runs/train",
     name: str = "exp",
 ) -> Dict[str, Any]:
