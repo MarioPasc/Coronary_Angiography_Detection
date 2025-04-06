@@ -24,18 +24,16 @@ SPLITS_DICT = {"train": 0.7, "val": 0.3, "test": 0.0}
 SEED = 42
 
 # Output folder to store the final combined, preprocessed dataset and splits
-OUTPUT_FOLDER = "/home/mario/Python/Datasets/COMBINED/tasks" # Portátil
+OUTPUT_FOLDER = "/home/mario/Python/Datasets/COMBINED/tasks"  # Portátil
 # OUTPUT_FOLDER = "/media/hddb/mario/data/COMBINED" # ICAI
 # OUTPUT_FOLDER = "/mnt/home/users/tic_163_uma/mpascual/fscratch/datasets" # Picasso
-# OUTPUT_FOLDER = "/home/mariopasc/Python/Datasets/COMBINED/tasks"  # Sobremesa
+OUTPUT_FOLDER = "/home/mariopasc/Python/Datasets/COMBINED/tasks"  # Sobremesa
 
 # Root directories where the datasets are stored
-
+ROOT_DIR_SOURCE_DATASETS = "/home/mario/Python/Datasets/COMBINED/source"  # Portátil
 ROOT_DIR_SOURCE_DATASETS = (
     "/home/mariopasc/Python/Datasets/COMBINED/source"  # Sobremesa
 )
-ROOT_DIR_SOURCE_DATASETS = "/home/mario/Python/Datasets/COMBINED/source"  # Portátil
-
 
 # Preprocessing steps to be performed on the datasets
 
@@ -56,6 +54,13 @@ PLAN_STEPS_SEGMENTATION = {
         "desired_Y": 512,
         "method": "bilinear",
     },
+    "clahe": {
+        "window_size": 5,
+        "sigma": 1.0,
+        "clipLimit": 3.0,
+        "tileGridSize": (8, 8),
+    },
+    "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
     "dtype_standarization": {"desired_dtype": "uint8"},
     "format_standarization": {"desired_format": "png"},
     "dataset_formats": {"YOLO": True, "COCO": True},
