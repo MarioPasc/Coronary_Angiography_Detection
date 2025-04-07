@@ -77,7 +77,7 @@ class HookManager:
         self.hooks = []
 
     def _apply_mask_with_skip(
-        self, feature_map: torch.Tensor, mask: torch.Tensor, alpha: float
+        self, feature_map: torch.Tensor, mask: torch.Tensor, alpha: float = -1
     ) -> torch.Tensor:
         """
         Apply mask to feature map with skip connection.
@@ -87,14 +87,24 @@ class HookManager:
         Args:
             feature_map: Input feature map
             mask: Binary mask to apply
-            alpha: Skip connection strength (0.0-1.0)
+            alpha: Skip connection strength, we have two cases:
+                - alpha = -1: Disables this feature, computing the output as:
+                  output = feature_map + feature_map * mask
+                - alpha is in [0, 1]: Computes the output as:
+                  output = feature_map * alpha + (1-alpha) * (feature_map * mask)
+                  This allows for a weighted combination of the original and masked
+                  feature maps.
+                  0 = only masked features, 1 = only original features
 
         Returns:
             Modified feature map
         """
         # Apply the mask with skip connection
-        masked_feature_map = feature_map * mask
-        output = feature_map * alpha + (1 - alpha) * masked_feature_map
+        if alpha == -1:
+            masked_feature_map = feature_map * mask
+            output = feature_map * alpha + (1 - alpha) * masked_feature_map
+        else:
+            output = feature_map + feature_map * mask
         return output
 
     def _get_mga_hook(self, layer_name: Optional[str] = None) -> Callable:

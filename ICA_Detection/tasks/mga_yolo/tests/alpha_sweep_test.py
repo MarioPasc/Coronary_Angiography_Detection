@@ -67,7 +67,7 @@ def parse_arguments() -> argparse.Namespace:
         "--alphas",
         type=float,
         nargs="+",
-        default=np.linspace(0, 1, 15),
+        default=np.linspace(0.5, 1, 15),
         help="Alpha values to test",
     )
     parser.add_argument(

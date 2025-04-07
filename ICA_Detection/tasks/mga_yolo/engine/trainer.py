@@ -41,7 +41,7 @@ class MaskGuidedTrainer:
         self.masks_folder = config.masks_folder
         self.epochs = config.epochs
         self.imgsz = config.imgsz
-        self.alpha = getattr(config, "alpha", 0.0)  # Default to 0.0 if not specified
+        self.alpha = config.alpha
         self.current_batch_paths: List[str] = []
         self.mga_active = True  # Flag to indicate MGA is active
 
@@ -52,7 +52,7 @@ class MaskGuidedTrainer:
         }
 
         logging.info("MGA-YOLO: Mask-Guided Attention YOLO trainer initialized")
-        logging.info(f"MGA-YOLO: Using alpha={self.alpha} for skip connection blend")
+        print(f"MGA-YOLO: Using alpha={self.alpha} for skip connection blend")
 
         # Load data configuration to get dataset structure
         with open(config.data_yaml, "r") as f:
@@ -142,7 +142,7 @@ class MaskGuidedTrainer:
         logging.info(f"MGA-YOLO STATS [Batch {batch_count}]:")
         logging.info(f"  - Runtime: {elapsed_time:.2f} seconds")
         logging.info(f"  - Alpha blend: {self.alpha:.4f}")
-        logging.info(f"  - Target layers: {', '.join(self.config.target_layers)}")
+        logging.info(f"  - Target layers: {', '.join(self.config.target_layers)}")  # type: ignore
         logging.info(f"  - MGA active: {self.mga_active}")
 
     def train(self) -> YOLO:
@@ -194,7 +194,7 @@ class MaskGuidedTrainer:
                 self.mga_trainer = mga_trainer
                 logging.info(f"MGA-YOLO: Starting MGA training with {world_size} GPUs")
                 logging.info(
-                    f"MGA-YOLO: Feature modification active on {len(self.mga_trainer.config.target_layers)} layers"
+                    f"MGA-YOLO: Feature modification active on {len(self.mga_trainer.config.target_layers)} layers"  # type: ignore
                 )
                 return super()._do_train(world_size)
 

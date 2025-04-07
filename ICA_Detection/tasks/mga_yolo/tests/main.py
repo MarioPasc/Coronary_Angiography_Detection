@@ -26,11 +26,11 @@ def main():
         model_cfg=model_path,
         data_yaml="/home/mariopasc/Python/Datasets/COMBINED/YOLO_MGA/detection/yolo_ica_detection.yaml",
         masks_folder="/home/mariopasc/Python/Datasets/COMBINED/YOLO_MGA/masks",
-        epochs=10,
+        epochs=100,
         imgsz=512,
         project_dir="/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train",
-        experiment_name="mga_yolo",
-        alpha=0.5,
+        experiment_name="mga_yolo_paper_skipconnection",
+        alpha=-1,
     )
 
     # Initialize and run training

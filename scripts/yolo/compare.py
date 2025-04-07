@@ -10,8 +10,11 @@ path_non_mga = (
     "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/exp/results.csv"
 )
 
+mga_skipconnection = "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_yolo_paper_skipconnection/results.csv"
+
 df_mga = pd.read_csv(path_mga)
 df_non_mga = pd.read_csv(path_non_mga)
+df_mga_skipconnection = pd.read_csv(mga_skipconnection)
 
 
 # Calculate F1-Score = 2 * (precision * recall) / (precision + recall)
@@ -24,6 +27,7 @@ def compute_f1(df):
 # Compute F1 for both models
 df_mga["F1-Score"] = compute_f1(df_mga)
 df_non_mga["F1-Score"] = compute_f1(df_non_mga)
+df_mga_skipconnection["F1-Score"] = compute_f1(df_mga_skipconnection)
 
 # Define metrics to compare
 metrics = [
@@ -43,13 +47,21 @@ fig, axs = plt.subplots(3, 3, figsize=(18, 12))
 axs = axs.flatten()
 
 for i, metric in enumerate(metrics):
-    axs[i].plot(df_mga["epoch"], df_mga[metric], label="YOLO-MGA", linewidth=2)
+    axs[i].plot(
+        df_mga["epoch"], df_mga[metric], label="YOLO-MGA ScalarProduct", linewidth=2
+    )
     axs[i].plot(
         df_non_mga["epoch"],
         df_non_mga[metric],
         label="YOLOv8",
         linewidth=2,
         linestyle="--",
+    )
+    axs[i].plot(
+        df_mga_skipconnection["epoch"],
+        df_mga_skipconnection[metric],
+        label="YOLO-MGA SkipConnection",
+        linewidth=2,
     )
     axs[i].set_title(metric, fontsize=12)
     axs[i].set_xlabel("Epoch")
