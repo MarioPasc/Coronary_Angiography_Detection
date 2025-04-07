@@ -28,9 +28,9 @@ def main():
         masks_folder="/home/mariopasc/Python/Datasets/COMBINED/YOLO_MGA/masks",
         epochs=10,
         imgsz=512,
-        visualize_interval=101,
         project_dir="/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train",
         experiment_name="mga_yolo",
+        alpha=0.5,
     )
 
     # Initialize and run training

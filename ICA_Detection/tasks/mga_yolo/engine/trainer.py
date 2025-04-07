@@ -4,8 +4,7 @@ import yaml
 import os
 import logging
 from pathlib import Path
-from PIL import Image
-import traceback
+import time
 
 from ICA_Detection.external.ultralytics.ultralytics import YOLO
 from ICA_Detection.external.ultralytics.ultralytics.models.yolo.detect.train import (
@@ -15,7 +14,6 @@ from ICA_Detection.external.ultralytics.ultralytics.utils import callbacks
 
 from ICA_Detection.tasks.mga_yolo.models.hooks import HookManager
 from ICA_Detection.tasks.mga_yolo.cfg.defaults import MaskGuidedAttentionConfig
-from ICA_Detection.tasks.mga_yolo.utils.visualize import create_mga_visualization
 
 
 class MaskGuidedTrainer:
@@ -35,13 +33,26 @@ class MaskGuidedTrainer:
         Args:
             config: Configuration object for MGA training
         """
+        # Print distinctive ASCII art banner to clearly mark MGA usage
+        self._print_mga_banner()
+
         self.config = config
         self.model = YOLO(config.model_cfg)
         self.masks_folder = config.masks_folder
         self.epochs = config.epochs
         self.imgsz = config.imgsz
-        self.visualize_interval = config.visualize_interval
+        self.alpha = getattr(config, "alpha", 0.0)  # Default to 0.0 if not specified
         self.current_batch_paths: List[str] = []
+        self.mga_active = True  # Flag to indicate MGA is active
+
+        # Track mask application statistics
+        self.mask_stats = {
+            "total_batches": 0,
+            "start_time": time.time(),
+        }
+
+        logging.info("MGA-YOLO: Mask-Guided Attention YOLO trainer initialized")
+        logging.info(f"MGA-YOLO: Using alpha={self.alpha} for skip connection blend")
 
         # Load data configuration to get dataset structure
         with open(config.data_yaml, "r") as f:
@@ -56,24 +67,52 @@ class MaskGuidedTrainer:
             masks_folder=config.masks_folder,
             target_layers=config.target_layers,
             get_image_path_fn=self._get_current_image_path,
+            alpha=self.alpha,
         )
 
         # Log configuration details
         logging.info(
-            f"MGA Trainer initialized with masks folder: {config.masks_folder}"
+            f"MGA-YOLO: Trainer initialized with masks folder: {config.masks_folder}"
         )
+        logging.info(f"MGA-YOLO: Alpha value for skip connection: {self.alpha}")
         self._log_mask_information()
+
+        # Log distinctive message confirming MGA setup
+        for layer in config.target_layers:
+            logging.info(f"MGA-YOLO: Feature modification registered for layer {layer}")
+
+    def _print_mga_banner(self) -> None:
+        """Print a distinctive banner to clearly mark MGA-YOLO usage."""
+        banner = """
+        ╔═══════════════════════════════════════════════╗
+        ║                                               ║
+        ║    MGA-YOLO: Mask-Guided Attention YOLO       ║
+        ║                                               ║
+        ╚═══════════════════════════════════════════════╝
+        """
+        logging.info(banner)
+        print(banner)
 
     def _log_mask_information(self) -> None:
         """Log information about available masks for debugging."""
         try:
             mask_files = os.listdir(self.masks_folder)
-            logging.info(f"Found {len(mask_files)} mask files in {self.masks_folder}")
+            logging.info(
+                f"MGA-YOLO: Found {len(mask_files)} mask files in {self.masks_folder}"
+            )
             if len(mask_files) > 0:
                 sample_masks = mask_files[: min(5, len(mask_files))]
-                logging.info(f"Sample mask filenames: {sample_masks}")
+                logging.info(f"MGA-YOLO: Sample mask filenames: {sample_masks}")
+
+                # Add distinctive logging to show mask format
+                if mask_files:
+                    first_mask = os.path.join(self.masks_folder, mask_files[0])
+                    mask_size = os.path.getsize(first_mask)
+                    logging.info(
+                        f"MGA-YOLO: Example mask '{mask_files[0]}' has size {mask_size} bytes"
+                    )
         except Exception as e:
-            logging.error(f"Error accessing mask folder: {e}")
+            logging.error(f"MGA-YOLO: Error accessing mask folder: {e}")
 
     def _get_current_image_path(self, batch_idx: int) -> Optional[str]:
         """
@@ -92,36 +131,19 @@ class MaskGuidedTrainer:
             return path
         return None
 
-    def visualize_mga_process(self, batch_idx: int) -> None:
+    def _log_mga_statistics(self, batch_count: int) -> None:
         """
-        Create a visualization of the MGA process for the current batch.
-
-        This method creates a grid visualization showing:
-        - Original input image
-        - Segmentation mask
-        - Feature maps before masking
-        - Resized masks for each feature level
-        - Feature maps after masking
+        Log distinctive statistics about MGA processing.
 
         Args:
-            batch_idx: Current batch index for naming the visualization file
+            batch_count: Current batch count
         """
-        # Get visualization data from hook manager
-        visualization_data = self.hook_manager.get_visualization_data()
-
-        # Create visualization directory
-        save_dir = os.path.join(
-            self.config.project_dir, self.config.experiment_name, "visualizations"
-        )
-        os.makedirs(save_dir, exist_ok=True)
-
-        # Create and save visualization
-        try:
-            create_mga_visualization(visualization_data, batch_idx, save_dir)
-            logging.info(f"Visualization saved for batch {batch_idx}")
-        except Exception as e:
-            logging.error(f"Error creating visualization: {e}")
-            logging.error(traceback.format_exc())
+        elapsed_time = time.time() - self.mask_stats["start_time"]
+        logging.info(f"MGA-YOLO STATS [Batch {batch_count}]:")
+        logging.info(f"  - Runtime: {elapsed_time:.2f} seconds")
+        logging.info(f"  - Alpha blend: {self.alpha:.4f}")
+        logging.info(f"  - Target layers: {', '.join(self.config.target_layers)}")
+        logging.info(f"  - MGA active: {self.mga_active}")
 
     def train(self) -> YOLO:
         """
@@ -137,6 +159,7 @@ class MaskGuidedTrainer:
         """
         # Prepare the model with MGA hooks
         model = self.hook_manager.register_hooks(self.model)
+        logging.info("MGA-YOLO: Hooks successfully registered to model")
 
         # Store reference to self for the custom trainer
         mga_trainer = self
@@ -146,10 +169,8 @@ class MaskGuidedTrainer:
             """
             Custom YOLO trainer that injects MGA processing during training.
 
-            This trainer overrides methods to:
-            - Capture image paths from batches
-            - Trigger mask application via hooks
-            - Generate visualizations at specified intervals
+            This trainer overrides methods to capture image paths from batches
+            and pass them to the hook manager for mask application.
             """
 
             def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -158,7 +179,7 @@ class MaskGuidedTrainer:
                 self.current_batch_paths: List[str] = []
                 self.mga_trainer: Optional[MaskGuidedTrainer] = None
                 self.batch_count: int = 0
-                logging.info("MGADetectionTrainer initialized")
+                logging.info("MGA-YOLO: Custom MGA detection trainer initialized")
 
             def _do_train(self, world_size: int = 1) -> Dict[str, Any]:
                 """
@@ -171,18 +192,18 @@ class MaskGuidedTrainer:
                     Training results dictionary
                 """
                 self.mga_trainer = mga_trainer
-                logging.info(f"Starting MGA training with {world_size} GPUs")
+                logging.info(f"MGA-YOLO: Starting MGA training with {world_size} GPUs")
+                logging.info(
+                    f"MGA-YOLO: Feature modification active on {len(self.mga_trainer.config.target_layers)} layers"
+                )
                 return super()._do_train(world_size)
 
             def preprocess_batch(self, batch: Dict[str, Any]) -> Dict[str, Any]:
                 """
                 Preprocess batch and handle MGA integration.
 
-                This method:
-                1. Extracts image paths from the batch
-                2. Updates the MGA trainer and hook manager with these paths
-                3. Determines if the current batch should be visualized
-                4. Triggers visualization after batch processing if needed
+                This method extracts image paths from the batch and
+                updates the hook manager with these paths for mask matching.
 
                 Args:
                     batch: Dictionary containing batch data
@@ -206,66 +227,33 @@ class MaskGuidedTrainer:
                             self.current_batch_paths
                         )
 
-                        logging.debug(
-                            f"Set batch paths with {len(self.current_batch_paths)} items"
-                        )
-
-                        # Log sample paths for debugging
-                        if len(self.current_batch_paths) > 0:
-                            sample_paths = [
-                                Path(p).name for p in self.current_batch_paths[:2]
-                            ]
-                            logging.debug(f"Sample paths: {sample_paths}")
-
                         # Increment batch count
                         self.batch_count += 1
+                        self.mga_trainer.mask_stats["total_batches"] = self.batch_count
 
-                        # Check if we should visualize this batch
-                        should_visualize = (
-                            self.batch_count % self.mga_trainer.visualize_interval == 0
-                        )
-
-                        # Update visualization state in hook manager
-                        self.mga_trainer.hook_manager.set_visualization_state(
-                            should_visualize, self.batch_count
-                        )
-
-                        if should_visualize:
-                            logging.info(f"Will visualize batch {self.batch_count}")
+                        # Periodically log progress with distinctive MGA statistics
+                        if self.batch_count % 50 == 0:
+                            logging.info(
+                                f"MGA-YOLO: Processed {self.batch_count} batches"
+                            )
+                            self.mga_trainer._log_mga_statistics(self.batch_count)
                     else:
-                        logging.warning("No mga_trainer attribute found!")
+                        logging.warning("MGA-YOLO: No mga_trainer attribute found!")
 
                 # Call the original preprocessing
                 result = super().preprocess_batch(batch)
-
-                # After batch is processed, create visualization if needed
-                if (
-                    hasattr(self, "mga_trainer")
-                    and self.mga_trainer is not None
-                    and self.mga_trainer.hook_manager.visualize_current_batch
-                ):
-                    try:
-                        self.mga_trainer.visualize_mga_process(self.batch_count)
-                        logging.info("Visualization completed successfully")
-                    except Exception as e:
-                        logging.error(f"Error creating visualization: {e}")
-                        logging.error(traceback.format_exc())
-
-                    # Reset visualization flag
-                    self.mga_trainer.hook_manager.visualize_current_batch = False
-
                 return result
 
-        # Log training configuration
+        # Log training configuration with distinctive MGA markers
         logging.info(
-            f"Starting training with Mask-Guided Attention for {self.epochs} epochs"
+            f"MGA-YOLO: Starting training with Mask-Guided Attention for {self.epochs} epochs"
         )
-        logging.info(f"Masks folder: {self.masks_folder}")
+        logging.info(f"MGA-YOLO: Masks folder: {self.masks_folder}")
+        logging.info(f"MGA-YOLO: Image size: {self.imgsz}")
         logging.info(
-            f"Will generate visualizations every {self.visualize_interval} batches"
+            f"MGA-YOLO: Target layers for modification: {self.config.target_layers}"
         )
-        logging.info(f"Image size: {self.imgsz}")
-        logging.info(f"Target layers for MGA: {self.config.target_layers}")
+        logging.info(f"MGA-YOLO: Alpha value for skip connection: {self.alpha}")
 
         # Start training
         results = model.train(  # type: ignore
@@ -275,12 +263,17 @@ class MaskGuidedTrainer:
             project=self.config.project_dir,
             name=self.config.experiment_name,
             device=self.config.device,
+            batch=self.config.batch,
             trainer=MGADetectionTrainer,
             **self.config.augmentation_config,
         )
 
-        # Log final statistics
-        logging.info("Training complete!")
-        logging.info(f"Final MGA Stats: {self.hook_manager.get_stats()}")
+        # Log completion with distinctive MGA information
+        training_time = time.time() - self.mask_stats["start_time"]
+        logging.info(f"MGA-YOLO: Training complete in {training_time:.2f} seconds!")
+        logging.info(
+            f"MGA-YOLO: Processed {self.mask_stats['total_batches']} total batches"
+        )
+        logging.info(f"MGA-YOLO: Used alpha={self.alpha} for feature blending")
 
         return model

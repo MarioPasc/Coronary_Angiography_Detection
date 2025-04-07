@@ -14,6 +14,8 @@ class MaskGuidedAttentionConfig:
     visualize_interval: int = 100
     target_layers: Union[List[str], None] = None
     device: str = "cuda:0"
+    alpha: float = 0
+    batch: int = 4
 
     # Training configuration
     project_dir: str = "./runs/train"
