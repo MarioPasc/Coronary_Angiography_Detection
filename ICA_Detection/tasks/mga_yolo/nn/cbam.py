@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from typing import Literal
+
 
 class CBAM(nn.Module):
     """Convolutional Block Attention Module (CBAM).
@@ -9,19 +11,41 @@ class CBAM(nn.Module):
     This module combines channel attention and spatial attention mechanisms to
     enhance feature representation by focusing on 'what' and 'where' information.
 
-    Reference:
-        "CBAM: Convolutional Block Attention Module"
-        https://arxiv.org/abs/1807.06521
-
     Args:
         channels (int): Number of input channels.
         reduction_ratio (int): Reduction ratio for the channel attention module.
+        method (str): Method to fuse the spatial attention and channel attention outputs.
+                      Options: "sequential", "concat", or "add". Default: "skipconn":
+                        1. "sequential": This is the original CBAM method. It applied CAM
+                           first and then SAM, over the element-wise multiplation of CAM
+                           and the input features. Finally, the output of SAM is multiplied
+                           with the CAM output [1].
+                        2. "concat": Concatenate the outputs of CAM and SAM. Concat doubles
+                           the dimension of channels [2].
+                        3. "add": Add the outputs of CAM and SAM. This is a simple
+                           summation of the two outputs [2].
+
+    References:
+        [1] "CBAM: Convolutional Block Attention Module"
+            Access via https://arxiv.org/abs/1807.06521
+        [2] "MGA-YOLOv4: a multi-scale pedestrian detection method based on mask-guided attention"
+            Access via https://link.springer.com/article/10.1007/s10489-021-03061-3
     """
 
-    def __init__(self, channels: int, r: int) -> None:
+    def __init__(
+        self,
+        channels: int,
+        r: int,
+        method: Literal["sequential", "concat", "add"] = "sequential",
+    ) -> None:
         super(CBAM, self).__init__()
         self.channels = channels
         self.reduction_ratio = r
+        self.method = method
+        if self.method not in ["sequential", "concat", "add"]:
+            raise ValueError(
+                f"Unsupported method: {self.method}. Choose 'sequential', 'concat', 'add'."
+            )
         self.channel_attention = CAM(channels=self.channels, r=self.reduction_ratio)
         self.spatial_attention = SAM(bias=False)
 
@@ -34,9 +58,28 @@ class CBAM(nn.Module):
         Returns:
             torch.Tensor: Enhanced feature map with same shape as input
         """
-        x_refined = self.channel_attention(x)
-        x_refined = self.spatial_attention(x_refined)
-        return x_refined  # + x  # Residual connection
+        if self.method == "sequential":
+            cam_output = self.channel_attention(x)
+            cam_output = cam_output * x
+            sam_output = self.spatial_attention(cam_output)
+            x_refined = cam_output * sam_output
+        elif self.method == "concat":
+            cam_output = self.channel_attention(x)
+            sam_output = self.spatial_attention(x)
+            x_refined = torch.cat((cam_output, sam_output), dim=1)
+        elif self.method == "add":
+            cam_output = self.channel_attention(x)
+            sam_output = self.spatial_attention(x)
+            x_refined = cam_output + sam_output
+
+        # Skipped connection
+        if x.shape != x_refined.shape:
+            raise ValueError(
+                f"Input shape {x.shape} does not match refined shape {x_refined.shape}."
+            )
+
+        # We only return the attention-refined feature map
+        return x_refined
 
 
 class CAM(nn.Module):
@@ -101,7 +144,13 @@ class CAM(nn.Module):
         # Combine and create attention map
         attention = torch.sigmoid(max_out + avg_out)
 
-        return attention * x
+        # In the original CBAM paper, the output would be the elemt-wise multiplication
+        # of the input features and the attention map
+        # However, in MGA-YOLOv4, the attention map and input features are combined using
+        # a skip connection. We are keeping this for now.
+        # Same with SAM.
+
+        return x + attention * x
 
 
 class SAM(nn.Module):
@@ -146,4 +195,4 @@ class SAM(nn.Module):
         # Generate spatial attention map
         spatial_map = torch.sigmoid(self.conv(concat))
 
-        return spatial_map * x
+        return x + spatial_map * x

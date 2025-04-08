@@ -4,6 +4,10 @@ from typing import Optional, Literal
 
 from .cbam import CBAM
 
+import logging
+
+logger = logging.getLogger("mga_training.log")
+
 
 class MaskGuidedCBAM(nn.Module):
     """Mask-Guided Convolutional Block Attention Module.
@@ -15,34 +19,58 @@ class MaskGuidedCBAM(nn.Module):
     3. Fuse F~ with original features F using either element-wise
        multiplication or addition
 
-    Reference:
-        "CBAM: Convolutional Block Attention Module"
-        https://arxiv.org/abs/1807.06521
-
     Args:
         channels (int): Number of input channels.
         reduction_ratio (int): Reduction ratio for the channel attention module.
-        fusion_method (str): Method to fuse masked and original features.
-                             Options: "add" or "multiply". Default: "add".
+        cbam_method (str): Method to fuse the spatial attention and channel attention outputs.
+                             Options: "sequential", "concat", or "add". Default: "sequential".
+                             For more details, refer to the CBAM class.
+        mag_method (str): Method to fuse masked and original features.
+                          Let's say we have Pn {P3,P4,P5} as the feature map,
+                          M as the mask. We perform Fmasked = Pn⊗M.
+                          Then we apply CBAM on Fmasked to get F~.
+                          Finally, we fuse F~ with original features Pn using
+                          either element-wise multiplication or addition.
+                          Options: "add" or "multiply". Default: "multiply".
+                            - If "add", the output will be F~ + Pn.
+                            - If "multiply", the output will be F~ ⊗ Pn.
+
     """
 
     def __init__(
         self,
         channels: int,
-        reduction_ratio: int,
-        fusion_method: Literal["add", "multiply"] = "add",
+        reduction_ratio: int = 16,
+        cbam_method: Literal["sequential", "concat", "add"] = "sequential",
+        fusion_method: Literal["add", "multiply"] = "multiply",
     ) -> None:
         super(MaskGuidedCBAM, self).__init__()
 
         self.channels = channels
         self.reduction_ratio = reduction_ratio
-        self.cbam = CBAM(channels=self.channels, r=self.reduction_ratio)
+        self.cbam = CBAM(
+            channels=self.channels, r=self.reduction_ratio, method=cbam_method
+        )
 
         if fusion_method not in ["add", "multiply"]:
             raise ValueError(
                 f"Unsupported fusion method: {fusion_method}. Choose 'add' or 'multiply'."
             )
         self.fusion_method = fusion_method
+        # Setup logging
+        self._setup_logging()
+        logger.info(f"[MaskGuidedCBAM] HOLA!!!")
+
+    def _setup_logging(self) -> None:
+        """Configure logging for the hook manager."""
+        if not logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.setLevel(logging.INFO)
 
     def forward(
         self, feature_map: torch.Tensor, mask: Optional[torch.Tensor] = None
@@ -59,6 +87,7 @@ class MaskGuidedCBAM(nn.Module):
         """
         # If no mask is provided, just apply CBAM to the original feature map
         if mask is None:
+            print("Warning: No mask provided. Applying CBAM directly to feature map.")
             return self.cbam(feature_map)
 
         # Ensure mask has the right shape

@@ -30,7 +30,6 @@ def main():
         imgsz=512,
         project_dir="/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train",
         experiment_name="mga_cbam_yolo",
-        alpha=-1,
     )
 
     # Initialize and run training
