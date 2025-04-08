@@ -166,7 +166,7 @@ logs/
 videos/
 validation_yolo_format/
 *.ipynb_checkpoints
-*.ipynb
+#*.ipynb
 jupyter/
 *.pth
 *.pt
