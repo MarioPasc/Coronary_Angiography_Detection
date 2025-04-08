@@ -82,29 +82,48 @@ class HookManager:
         """
         Apply mask to feature map with skip connection.
 
-        Formula: output = feature_map*alpha + (1-alpha)*(feature_map * mask)
+        This implementation combines masking with CBAM attention as follows:
+        1. Create masked features: Fmasked = F⊗M
+        2. Apply CBAM: F~ = CBAM(Fmasked)
+        3. Fuse results with original features using alpha parameter
 
         Args:
             feature_map: Input feature map
             mask: Binary mask to apply
             alpha: Skip connection strength, we have two cases:
-                - alpha = -1: Disables this feature, computing the output as:
-                  output = feature_map + feature_map * mask
-                - alpha is in [0, 1]: Computes the output as:
-                  output = feature_map * alpha + (1-alpha) * (feature_map * mask)
-                  This allows for a weighted combination of the original and masked
-                  feature maps.
-                  0 = only masked features, 1 = only original features
+                - alpha = -1: Uses a residual connection (addition)
+                output = F~ + F
+                - alpha is in [0, 1]: Computes the weighted combination:
+                output = feature_map * alpha + (1-alpha) * F~
+                0 = only CBAM-enhanced features, 1 = only original features
 
         Returns:
             Modified feature map
         """
-        # Apply the mask with skip connection
+        # Get number of channels from feature map
+        channels = feature_map.shape[1]
+
+        # Import dynamically to avoid circular imports
+        from ICA_Detection.tasks.mga_yolo.nn.mga_cbam import MaskGuidedCBAM
+
+        # Create CBAM module with appropriate channel count
+        mga_cbam = MaskGuidedCBAM(
+            channels=channels,
+            reduction_ratio=16,  # Default reduction ratio
+            fusion_method="add",  # Use addition for fusion within CBAM
+        )
+
+        # Apply mask-guided CBAM
+        enhanced_features = mga_cbam(feature_map, mask)
+
+        # Apply the alpha parameter for final output
         if alpha == -1:
-            masked_feature_map = feature_map * mask
-            output = feature_map * alpha + (1 - alpha) * masked_feature_map
+            # Default case: just return the enhanced features with residual connection
+            output = enhanced_features
         else:
-            output = feature_map + feature_map * mask
+            # Alpha weighting between original and enhanced features
+            output = feature_map * alpha + (1 - alpha) * enhanced_features
+
         return output
 
     def _get_mga_hook(self, layer_name: Optional[str] = None) -> Callable:

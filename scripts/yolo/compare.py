@@ -1,18 +1,16 @@
 import matplotlib.pyplot as plt
 
-import pandas as pd
+import pandas as pd  # type: ignore
 
 # Load the two CSV files
-path_mga = (
-    "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_yolo/results.csv"
-)
+path_cbam = "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_cbam_yolo/results.csv"
 path_non_mga = (
     "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/exp/results.csv"
 )
 
 mga_skipconnection = "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_yolo_paper_skipconnection/results.csv"
 
-df_mga = pd.read_csv(path_mga)
+df_cbam = pd.read_csv(path_cbam)
 df_non_mga = pd.read_csv(path_non_mga)
 df_mga_skipconnection = pd.read_csv(mga_skipconnection)
 
@@ -25,7 +23,7 @@ def compute_f1(df):
 
 
 # Compute F1 for both models
-df_mga["F1-Score"] = compute_f1(df_mga)
+df_cbam["F1-Score"] = compute_f1(df_cbam)
 df_non_mga["F1-Score"] = compute_f1(df_non_mga)
 df_mga_skipconnection["F1-Score"] = compute_f1(df_mga_skipconnection)
 
@@ -48,9 +46,6 @@ axs = axs.flatten()
 
 for i, metric in enumerate(metrics):
     axs[i].plot(
-        df_mga["epoch"], df_mga[metric], label="YOLO-MGA ScalarProduct", linewidth=2
-    )
-    axs[i].plot(
         df_non_mga["epoch"],
         df_non_mga[metric],
         label="YOLOv8",
@@ -60,9 +55,11 @@ for i, metric in enumerate(metrics):
     axs[i].plot(
         df_mga_skipconnection["epoch"],
         df_mga_skipconnection[metric],
-        label="YOLO-MGA SkipConnection",
+        label="MGA SkipConnection",
         linewidth=2,
     )
+    axs[i].plot(df_cbam["epoch"], df_cbam[metric], label="MGA-CBAM-YOLO", linewidth=2)
+
     axs[i].set_title(metric, fontsize=12)
     axs[i].set_xlabel("Epoch")
     axs[i].set_ylabel(metric)

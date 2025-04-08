@@ -29,7 +29,7 @@ def main():
         epochs=100,
         imgsz=512,
         project_dir="/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train",
-        experiment_name="mga_yolo_paper_skipconnection",
+        experiment_name="mga_cbam_yolo",
         alpha=-1,
     )
 
