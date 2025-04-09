@@ -36,7 +36,7 @@ class CBAM(nn.Module):
         self,
         channels: int,
         r: int,
-        method: Literal["sequential", "concat", "add"] = "sequential",
+        method: Literal["sequential", "concat", "add"] = "add",
     ) -> None:
         super(CBAM, self).__init__()
         self.channels = channels

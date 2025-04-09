@@ -41,8 +41,8 @@ class MaskGuidedCBAM(nn.Module):
         self,
         channels: int,
         reduction_ratio: int = 16,
-        cbam_method: Literal["sequential", "concat", "add"] = "sequential",
-        fusion_method: Literal["add", "multiply"] = "multiply",
+        cbam_method: Literal["sequential", "concat", "add"] = "add",
+        fusion_method: Literal["add", "multiply"] = "add",
     ) -> None:
         super(MaskGuidedCBAM, self).__init__()
 

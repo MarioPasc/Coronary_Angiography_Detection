@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, List, Optional, Callable, Tuple, Union, Protocol, TypedDict
+from typing import Dict, List, Optional, Callable, Tuple, TypedDict
 import torch
 import torch.nn as nn
 from PIL import Image
@@ -9,7 +9,12 @@ import os
 import re
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
+
+# Add at the top with other imports
+import matplotlib.pyplot as plt
+import time
+
+# Add these methods to your HookManager class
 
 # Dynamic import to avoid circular imports
 from ICA_Detection.tasks.mga_yolo.nn.mga_cbam import MaskGuidedCBAM
@@ -175,6 +180,9 @@ class HookManager:
             input_feat: Tuple[torch.Tensor, ...],
             output: torch.Tensor,
         ) -> torch.Tensor:
+            # Store original dimensions for validation
+            original_shape = output.shape
+
             # The batch contains multiple images
             batch_size = output.shape[0]
             modified_outputs = []
@@ -240,6 +248,15 @@ class HookManager:
 
                     modified_outputs.append(masked_output)
 
+                    if i == 0 and self._should_visualize_feature_map(layer_name):
+                        self._visualize_feature_maps(
+                            feature_map,
+                            expanded_mask,
+                            masked_output,
+                            layer_name,
+                            img_basename,
+                        )
+
                 except Exception as e:
                     # Log error and fall back to original output
                     logger.exception(
@@ -249,7 +266,18 @@ class HookManager:
 
             # Combine modified outputs back into a batch
             if modified_outputs:
-                return torch.cat(modified_outputs, dim=0)
+                combined_output = torch.cat(modified_outputs, dim=0)
+
+                # Validate output dimensions
+                if combined_output.shape != original_shape:
+                    logger.error(
+                        f"[HookManager] Output dimension mismatch in layer {layer_name}! "
+                        f"Expected: {original_shape}, Got: {combined_output.shape}. "
+                        f"Using original output to prevent errors."
+                    )
+                    return output
+
+                return combined_output
             else:
                 return output
 
@@ -419,3 +447,105 @@ class HookManager:
             f"target_layers={self.target_layers}, "
             f"active_hooks={len(self.hooks)})"
         )
+
+    def _should_visualize_feature_map(self, layer_name: str) -> bool:
+        """
+        Determine if this layer's feature maps should be visualized.
+        By default, visualize only once per training run per layer.
+
+        Args:
+            layer_name: Name of the layer
+
+        Returns:
+            True if visualization should be created
+        """
+        # Map layer names to P3, P4, P5 designations
+        layer_map = {"model.15": "P3", "model.18": "P4", "model.21": "P5"}
+
+        p_layer = layer_map.get(layer_name, layer_name)
+
+        # Define visualization path
+        save_dir = Path("/home/mariopasc/Python/Datasets/COMBINED/detection/testing")
+        viz_path = save_dir / f"mga_visualization_{p_layer}.png"
+
+        # Check if visualization already exists
+        if viz_path.exists():
+            return False
+
+        return True
+
+    def _visualize_feature_maps(
+        self,
+        original_feature: torch.Tensor,
+        mask: torch.Tensor,
+        masked_output: torch.Tensor,
+        layer_name: str,
+        img_name: Optional[str] = None,
+    ) -> None:
+        """
+        Create and save visualizations of feature maps and masks.
+
+        Args:
+            original_feature: Original feature map tensor [1,C,H,W]
+            mask: Binary mask tensor [1,C,H,W]
+            masked_output: Modified feature map tensor [1,C,H,W]
+            layer_name: Name of the layer
+            img_name: Optional name of the image for the filename
+        """
+        try:
+            # Map layer names to P3, P4, P5 designations
+            layer_map = {"model.15": "P3", "model.18": "P4", "model.21": "P5"}
+            p_layer = layer_map.get(layer_name, layer_name)
+
+            # Create save directory if it doesn't exist
+            save_dir = Path(
+                "/home/mariopasc/Python/Datasets/COMBINED/detection/testing"
+            )
+            save_dir.mkdir(parents=True, exist_ok=True)
+            viz_path = save_dir / f"mga_visualization_{p_layer}.png"
+            if os.path.exists(viz_path):
+                return
+            # Check if file already exists to avoid re-creating
+            if viz_path.exists():
+                logger.info(f"[HookManager] Visualization already exists: {viz_path}")
+                return
+
+            # Process tensors for visualization
+            # Convert to numpy and take first channel for visualization
+            orig_viz = original_feature[0, 0].detach().cpu().numpy()
+            mask_viz = mask[0, 0].detach().cpu().numpy()
+            output_viz = masked_output[0, 0].detach().cpu().numpy()
+
+            # Create figure with 1x3 subplot
+            plt.figure(figsize=(15, 5))
+
+            # Plot original feature map
+            plt.subplot(1, 3, 1)
+            plt.imshow(orig_viz, cmap="viridis")
+            plt.title(f"Original Feature Map ({p_layer})")
+            plt.colorbar()
+
+            # Plot mask
+            plt.subplot(1, 3, 2)
+            plt.imshow(mask_viz, cmap="gray")
+            plt.title(f"Downsampled Mask ({p_layer})")
+            plt.colorbar()
+
+            # Plot masked output
+            plt.subplot(1, 3, 3)
+            plt.imshow(output_viz, cmap="viridis")
+            plt.title(f"Masked Output ({p_layer})")
+            plt.colorbar()
+
+            # Add suptitle with layer info
+            plt.suptitle(f"Mask-Guided Attention for {p_layer} Layer", fontsize=16)
+            plt.tight_layout()
+
+            # Save the figure
+            plt.savefig(viz_path, dpi=200, bbox_inches="tight")
+            plt.close()
+
+            logger.info(f"[HookManager] Saved visualization to {viz_path}")
+
+        except Exception as e:
+            logger.exception(f"[HookManager] Error creating visualization: {e}")
