@@ -121,18 +121,18 @@ class MaskGuidedTrainer:
         """Log information about available masks for debugging."""
         try:
             mask_files = os.listdir(self.masks_folder)
-            logger.info(
+            logger.debug(
                 f"[Trainer]: Found {len(mask_files)} mask files in {self.masks_folder}"
             )
             if len(mask_files) > 0:
                 sample_masks = mask_files[: min(5, len(mask_files))]
-                logger.info(f"[Trainer]: Sample mask filenames: {sample_masks}")
+                logger.debug(f"[Trainer]: Sample mask filenames: {sample_masks}")
 
                 # Add distinctive logger to show mask format
                 if mask_files:
                     first_mask = os.path.join(self.masks_folder, mask_files[0])
                     mask_size = os.path.getsize(first_mask)
-                    logger.info(
+                    logger.debug(
                         f"[Trainer]: Example mask '{mask_files[0]}' has size {mask_size} bytes"
                     )
         except Exception as e:

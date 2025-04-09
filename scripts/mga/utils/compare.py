@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd  # type: ignore
 
 # Load the two CSV files
-path_cbam = "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_cbam_yolo/results.csv"
+path_cbam = "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_cbam_yolo_add_multiply_noSkippConn/results.csv"
 path_non_mga = (
     "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/exp/results.csv"
 )

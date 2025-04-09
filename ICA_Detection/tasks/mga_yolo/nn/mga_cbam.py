@@ -42,7 +42,7 @@ class MaskGuidedCBAM(nn.Module):
         channels: int,
         reduction_ratio: int = 16,
         cbam_method: Literal["sequential", "concat", "add"] = "add",
-        fusion_method: Literal["add", "multiply"] = "add",
+        fusion_method: Literal["add", "multiply"] = "multiply",
     ) -> None:
         super(MaskGuidedCBAM, self).__init__()
 
@@ -102,7 +102,8 @@ class MaskGuidedCBAM(nn.Module):
         if self.fusion_method == "add":
             output = enhanced_features + feature_map  # F~ + F
         else:  # multiply
-            output = enhanced_features * feature_map  # F~ ⊗ F
+            # Let's try a skip connection
+            output = feature_map + enhanced_features * feature_map  # F~ ⊗ F
 
         return output
 

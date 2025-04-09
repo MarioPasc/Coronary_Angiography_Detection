@@ -28,8 +28,8 @@ def main():
         masks_folder="/home/mariopasc/Python/Datasets/COMBINED/YOLO_MGA/masks",
         epochs=100,
         imgsz=512,
-        project_dir="/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/experimentos_logging",
-        experiment_name="mga_cbam_yolo",
+        project_dir="/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/",
+        experiment_name="mga_cbam_yolo_add_multiply",
     )
 
     # Initialize and run training
