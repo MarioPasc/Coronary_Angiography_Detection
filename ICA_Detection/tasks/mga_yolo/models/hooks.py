@@ -11,6 +11,9 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 
+# Dynamic import to avoid circular imports
+from ICA_Detection.tasks.mga_yolo.nn.mga_cbam import MaskGuidedCBAM
+
 # Configure logging
 logger = logging.getLogger("mga_yolo.hooks")
 
@@ -79,9 +82,7 @@ class HookManager:
 
         # Setup logging
         self._setup_logging()
-        logger.info(
-            f"[HookManager] Initialized with {len(self.target_layers)} target layers"
-        )
+        logger.debug(f"[HookManager] Initialized")
 
     def _setup_logging(self) -> None:
         """Configure logging for the hook manager."""
@@ -124,13 +125,27 @@ class HookManager:
         # Register hooks
         if hasattr(model, "model") and isinstance(model.model, nn.Module):
             for name, module in model.model.named_modules():
+                """
+                This code line gives the structure of the YOLO model for training.
+                The main issue is that, when checking the layer names during inference,
+                we had the prefix "model.*", but, during training, we only have the name
+                of the layer: ["15", "18", "21"]
+
+                logger.debug(
+                    f"[HookManager] {name} -> {module}, {type(module)}, {self.target_layers}"
+                )
+                """
                 if isinstance(module, torch.nn.Module) and name in self.target_layers:
+
                     # Hook to apply masks
                     mga_hook = self._get_mga_hook(name)
                     self.hooks.append(module.register_forward_hook(mga_hook))
+                    logger.debug(f"Found {name} in model")
+                    logger.debug(f"Hook object @ {self.hooks[-1]}")
+
                     hooks_registered += 1
 
-        logger.info(f"[HookManager] Registered {hooks_registered} MGA hooks")
+        logger.debug(f"[HookManager] Registered {hooks_registered} MGA hooks")
         return model
 
     def clear_hooks(self) -> None:
@@ -143,72 +158,6 @@ class HookManager:
     def __del__(self) -> None:
         """Ensure hooks are cleared when object is deleted."""
         self.clear_hooks()
-
-    def _apply_mask_with_cbam(
-        self, feature_map: torch.Tensor, mask: torch.Tensor, layer_name: str
-    ) -> torch.Tensor:
-        """
-        Apply mask to feature map with CBAM attention.
-
-        Implementation follows the MGA-YOLO approach:
-        1. Create masked features: Fmasked = F⊗M
-        2. Apply CBAM: F~ = CBAM(Fmasked)
-
-        Args:
-            feature_map: Input feature map [B,C,H,W]
-            mask: Binary mask [B,C,H,W]
-            layer_name: Name of the layer for module caching
-
-        Returns:
-            Modified feature map with same shape as input
-        """
-        print(f"DEBUG: Applying CBAM to {layer_name}")  # Direct print for debugging
-        print(f"Current logger level: {logger.level}, handlers: {len(logger.handlers)}")
-
-        logger.info(
-            f"[HookManager] Applying CBAM to {layer_name} with mask shape {mask.shape}"
-        )
-
-        # Dynamic import to avoid circular imports
-        from ICA_Detection.tasks.mga_yolo.nn.mga_cbam import MaskGuidedCBAM
-
-        # Get number of channels from feature map
-        channels = feature_map.shape[1]
-
-        # Get or create CBAM module with appropriate channel count
-        cache_key = f"{layer_name}_{channels}"
-        if cache_key not in self._module_cache:
-            self._module_cache[cache_key] = MaskGuidedCBAM(
-                channels=channels,
-                reduction_ratio=self.config.reduction_ratio,
-            ).to(feature_map.device)
-
-        mga_cbam = self._module_cache[cache_key]
-
-        # Apply mask first
-        masked_feature = feature_map * mask
-
-        # Apply CBAM to masked feature
-        enhanced_feature = mga_cbam(masked_feature)
-
-        return enhanced_feature
-
-    def _apply_mask_with_skip(
-        self,
-        feature_map: torch.Tensor,
-        mask: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        Apply mask to feature map with simple skip connection.
-
-        Args:
-            feature_map: Input feature map
-            mask: Binary mask to apply
-
-        Returns:
-            Modified feature map
-        """
-        return feature_map * mask
 
     def _get_mga_hook(self, layer_name: str) -> Callable:
         """
@@ -230,6 +179,10 @@ class HookManager:
             batch_size = output.shape[0]
             modified_outputs = []
 
+            logger.debug(
+                f"[HookManager]: hook called for layer={layer_name} with shape={tuple(output.shape)}"
+            )
+
             # Process each image in the batch
             for i in range(batch_size):
                 try:
@@ -241,6 +194,7 @@ class HookManager:
                         img_path = self.current_batch_paths[i]
                     elif self.get_image_path_fn:
                         img_path = self.get_image_path_fn(i)
+                    logger.debug(f"{img_path}")
 
                     if img_path is None:
                         # No image path, use original output
@@ -250,6 +204,11 @@ class HookManager:
                     # Find corresponding mask
                     img_basename = Path(img_path).stem
                     mask_path = self._find_mask_path(img_basename)
+
+                    logger.debug("=========================")
+                    logger.debug(f"[HookManager] Image basename: {img_basename}")
+                    logger.debug(f"[HookManager] Mask path: {mask_path}")
+                    logger.debug("=========================")
 
                     if mask_path is None:
                         # No mask found, use original output
@@ -296,6 +255,47 @@ class HookManager:
 
         return hook
 
+    def _apply_mask_with_cbam(
+        self, feature_map: torch.Tensor, mask: torch.Tensor, layer_name: str
+    ) -> torch.Tensor:
+        """
+        Apply mask to feature map with CBAM attention.
+
+        Implementation follows the MGA-YOLO approach:
+        1. Create masked features: Fmasked = F⊗M
+        2. Apply CBAM: F~ = CBAM(Fmasked)
+
+        Args:
+            feature_map: Input feature map [B,C,H,W]
+            mask: Binary mask [B,C,H,W]
+            layer_name: Name of the layer for module caching
+
+        Returns:
+            Modified feature map with same shape as input
+        """
+        logger.debug(f"[HookManager] Applying CBAM. Parameters:")
+        logger.debug(f"  - Feature map shape: {feature_map.shape}")
+        logger.debug(f"  - Mask shape: {mask.shape}")
+        logger.debug(f"  - Layer name: {layer_name}")
+
+        # Get number of channels from feature map
+        channels = feature_map.shape[1]
+
+        # Get or create CBAM module with appropriate channel count
+        cache_key = f"{layer_name}_{channels}"
+        if cache_key not in self._module_cache:
+            self._module_cache[cache_key] = MaskGuidedCBAM(
+                channels=channels,
+                reduction_ratio=self.config.reduction_ratio,
+            ).to(feature_map.device)
+
+        mga_cbam = self._module_cache[cache_key]
+
+        # Apply CBAM to masked feature
+        enhanced_feature = mga_cbam(feature_map, mask)
+
+        return enhanced_feature
+
     def _find_mask_path(self, img_basename: str) -> Optional[str]:
         """
         Find corresponding mask file for an image.
@@ -318,6 +318,9 @@ class HookManager:
             # Strategy 1: Exact match
             for ext in [".png", ".jpg", ".jpeg", ".bmp"]:
                 mask_path = os.path.join(self.masks_folder, f"{img_basename}{ext}")
+                logging.debug(
+                    f"=====\n[HookManager] Img basename: {img_basename}\nMask path {mask_path}\n====="
+                )
                 if os.path.exists(mask_path):
                     return mask_path
 
@@ -371,6 +374,14 @@ class HookManager:
             # Convert to tensor [1, 1, H, W]
             mask_tensor = transforms.ToTensor()(resized_mask).unsqueeze(0)
 
+            logging.debug("=========================")
+            logging.debug(f"[HookManager] Mask path: {mask_path}")
+            logging.debug(
+                f"[HookManager] Pre-processed Mask shape: {transforms.ToTensor()(mask).size()}"
+            )
+            logging.debug(f"[HookManager] Resized Mask shape: {mask_tensor.size()}")
+            logging.debug("=========================")
+
             return mask_tensor
 
         except IOError:
@@ -387,6 +398,7 @@ class HookManager:
         Args:
             paths: List of image file paths in the current batch
         """
+        # logger.debug(f"[HookManager] Setting batch paths: {paths}")
         self.current_batch_paths = paths.copy() if paths else []
 
     def set_config(self, config: MaskGuidedAttentionConfig) -> None:

@@ -28,9 +28,9 @@ class MaskGuidedAttentionConfig:
         """Initialize default values after initialization."""
         if self.target_layers is None:
             self.target_layers = [
-                "model.15",
-                "model.18",
-                "model.21",
+                "15",
+                "18",
+                "21",  # LOS PUTOS NOMBRE AJHAJJA
             ]  # P3, P4, P5 features
 
         if self.augmentation_config is None:

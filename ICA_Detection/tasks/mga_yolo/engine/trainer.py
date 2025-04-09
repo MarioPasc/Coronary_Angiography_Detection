@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional, List, Union
-import torch
+from torch import nn
 import yaml
 import os
 import logging
@@ -67,6 +67,9 @@ class MaskGuidedTrainer:
             raise ValueError("Target layers must be specified in the config.")
 
         # Initialize hook manager for handling feature map modifications
+        logger.info(
+            f"Calling HookManager with parameters:\n - Mask folder {config.masks_folder}\n - Target layers {config.target_layers}"
+        )
         self.hook_manager = HookManager(
             masks_folder=config.masks_folder,
             target_layers=config.target_layers,
@@ -178,8 +181,8 @@ class MaskGuidedTrainer:
             Trained YOLO model
         """
         # Prepare the model with MGA hooks
-        model = self.hook_manager.register_hooks(self.model)
-        logger.info("[Trainer]: Hooks successfully registered to model")
+        hook_manager = self.hook_manager
+        masks_folder = self.masks_folder
 
         # Store reference to self for the custom trainer
         mga_trainer = self
@@ -200,6 +203,12 @@ class MaskGuidedTrainer:
                 self.mga_trainer: Optional[MaskGuidedTrainer] = None
                 self.batch_count: int = 0
                 logger.info("[Trainer]: Custom MGA detection trainer initialized")
+                self.add_callback("on_train_epoch_start", self._register_mga_hooks)
+
+            def _register_mga_hooks(self, trainer):
+                """Register MGA hooks after model is fully setup."""
+                logger.info("[Hook Callback]: Registering MGA hooks via callback")
+                hook_manager.register_hooks(self.model)
 
             def _do_train(self, world_size: int = 1) -> Dict[str, Any]:
                 """
@@ -234,19 +243,10 @@ class MaskGuidedTrainer:
                 # Store image paths before preprocessing
                 if "im_file" in batch:
                     self.current_batch_paths = batch["im_file"]
+                    hook_manager.set_batch_paths(self.current_batch_paths)
 
                     # Update MGA trainer and hook manager with paths
                     if hasattr(self, "mga_trainer") and self.mga_trainer is not None:
-                        # Copy paths to MGA trainer
-                        self.mga_trainer.current_batch_paths = (
-                            self.current_batch_paths.copy()
-                        )
-
-                        # Update hook manager with paths
-                        self.mga_trainer.hook_manager.set_batch_paths(
-                            self.current_batch_paths
-                        )
-
                         # Increment batch count
                         self.batch_count += 1
                         self.mga_trainer.mask_stats["total_batches"] = self.batch_count
@@ -264,16 +264,13 @@ class MaskGuidedTrainer:
                 result = super().preprocess_batch(batch)
                 return result
 
+        model = self.model
         # Log training configuration with distinctive MGA markers
         logger.info(
             f"[Trainer]: Starting training with Mask-Guided Attention for {self.epochs} epochs"
         )
         logger.info(f"[Trainer]: Masks folder: {self.masks_folder}")
         logger.info(f"[Trainer]: Image size: {self.imgsz}")
-        logger.info(
-            f"[Trainer]: Target layers for modification: {self.config.target_layers}"
-        )
-
         # Start training
         results = model.train(  # type: ignore
             data=self.config.data_yaml,

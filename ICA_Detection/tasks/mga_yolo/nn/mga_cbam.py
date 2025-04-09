@@ -59,7 +59,6 @@ class MaskGuidedCBAM(nn.Module):
         self.fusion_method = fusion_method
         # Setup logging
         self._setup_logging()
-        logger.info(f"[MaskGuidedCBAM] HOLA!!!")
 
     def _setup_logging(self) -> None:
         """Configure logging for the hook manager."""
@@ -89,17 +88,6 @@ class MaskGuidedCBAM(nn.Module):
         if mask is None:
             print("Warning: No mask provided. Applying CBAM directly to feature map.")
             return self.cbam(feature_map)
-
-        # Ensure mask has the right shape
-        if mask.dim() == 3:  # [B, H, W]
-            mask = mask.unsqueeze(1)  # [B, 1, H, W]
-
-        # Resize mask if dimensions don't match
-        _, _, h, w = feature_map.shape
-        _, _, mask_h, mask_w = mask.shape
-
-        if h != mask_h or w != mask_w:
-            mask = nn.functional.interpolate(mask, size=(h, w), mode="nearest")
 
         # Ensure mask is on the same device as feature map
         mask = mask.to(feature_map.device)  # type: ignore
