@@ -22,10 +22,10 @@ class MaskGuidedCBAM(nn.Module):
     Args:
         channels (int): Number of input channels.
         reduction_ratio (int): Reduction ratio for the channel attention module.
-        cbam_method (str): Method to fuse the spatial attention and channel attention outputs.
+        sam_cam_fusion (str): Method to fuse the spatial attention and channel attention outputs.
                              Options: "sequential", "concat", or "add". Default: "sequential".
                              For more details, refer to the CBAM class.
-        mag_method (str): Method to fuse masked and original features.
+        mga_pyramid_fusion (str): Method to fuse masked and original features.
                           Let's say we have Pn {P3,P4,P5} as the feature map,
                           M as the mask. We perform Fmasked = Pn⊗M.
                           Then we apply CBAM on Fmasked to get F~.
@@ -40,23 +40,25 @@ class MaskGuidedCBAM(nn.Module):
     def __init__(
         self,
         channels: int,
-        reduction_ratio: int = 16,
-        cbam_method: Literal["sequential", "concat", "add"] = "add",
-        fusion_method: Literal["add", "multiply"] = "multiply",
+        reduction_ratio: int,
+        sam_cam_fusion: Literal["sequential", "concat", "add"],
+        mga_pyramid_fusion: Literal["add", "multiply"],
     ) -> None:
         super(MaskGuidedCBAM, self).__init__()
 
         self.channels = channels
         self.reduction_ratio = reduction_ratio
         self.cbam = CBAM(
-            channels=self.channels, r=self.reduction_ratio, method=cbam_method
+            channels=self.channels,
+            r=self.reduction_ratio,
+            sam_cam_fusion=sam_cam_fusion,
         )
 
-        if fusion_method not in ["add", "multiply"]:
+        if mga_pyramid_fusion not in ["add", "multiply"]:
             raise ValueError(
-                f"Unsupported fusion method: {fusion_method}. Choose 'add' or 'multiply'."
+                f"Unsupported fusion method: {mga_pyramid_fusion}. Choose 'add' or 'multiply'."
             )
-        self.fusion_method = fusion_method
+        self.fusion_method = mga_pyramid_fusion
         # Setup logging
         self._setup_logging()
 
@@ -102,50 +104,6 @@ class MaskGuidedCBAM(nn.Module):
         if self.fusion_method == "add":
             output = enhanced_features + feature_map  # F~ + F
         else:  # multiply
-            # Let's try a skip connection
-            output = feature_map + enhanced_features * feature_map  # F~ ⊗ F
+            output = enhanced_features * feature_map  # F~ ⊗ F
 
         return output
-
-
-class MaskGuidedCBAMHook:
-    """Hook implementation for applying Mask-Guided CBAM to YOLO feature maps.
-
-    This class can be used with PyTorch's forward hooks to apply mask-guided
-    attention during model inference.
-    """
-
-    def __init__(
-        self,
-        channels: int,
-        reduction_ratio: int = 16,
-        fusion_method: Literal["add", "multiply"] = "add",
-    ) -> None:
-        """Initialize the hook.
-
-        Args:
-            channels (int): Number of feature map channels.
-            reduction_ratio (int): Reduction ratio for CBAM. Default: 16.
-            fusion_method (str): Method to fuse features. Default: "add".
-        """
-        self.mga_cbam = MaskGuidedCBAM(
-            channels=channels,
-            reduction_ratio=reduction_ratio,
-            fusion_method=fusion_method,
-        )
-
-    def __call__(
-        self, module: nn.Module, input_: tuple, output: torch.Tensor, mask: torch.Tensor
-    ) -> torch.Tensor:
-        """Apply mask-guided CBAM attention.
-
-        Args:
-            module: The PyTorch module being hooked
-            input_: Input to the module
-            output: Output from the module
-            mask: Attention mask
-
-        Returns:
-            torch.Tensor: Enhanced feature map
-        """
-        return self.mga_cbam(output, mask)

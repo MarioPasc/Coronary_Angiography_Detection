@@ -1,18 +1,15 @@
 import matplotlib.pyplot as plt
-
 import pandas as pd  # type: ignore
 
-# Load the two CSV files
-path_cbam = "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_cbam_yolo_add_multiply_noSkippConn/results.csv"
-path_non_mga = (
-    "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/exp/results.csv"
-)
-
-mga_skipconnection = "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_yolo_paper_skipconnection/results.csv"
-
-df_cbam = pd.read_csv(path_cbam)
-df_non_mga = pd.read_csv(path_non_mga)
-df_mga_skipconnection = pd.read_csv(mga_skipconnection)
+# Parameters dictionary - define models and their paths
+params = {
+    "models": {
+        "YOLOv8": "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/base/results.csv",
+        "MGA-CBAM ADD-MULT": "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_cbam_yolo_samcamADD_pyramidMULTIPLY/results.csv",
+        "MGA-CBAM ADD-ADD": "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_cbam_yolo_samcamADD_pyramidADD/results.csv",
+    },
+    "output_path": "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/comparison_metrics.png",
+}
 
 
 # Calculate F1-Score = 2 * (precision * recall) / (precision + recall)
@@ -22,10 +19,12 @@ def compute_f1(df):
     return 2 * (precision * recall) / (precision + recall)
 
 
-# Compute F1 for both models
-df_cbam["F1-Score"] = compute_f1(df_cbam)
-df_non_mga["F1-Score"] = compute_f1(df_non_mga)
-df_mga_skipconnection["F1-Score"] = compute_f1(df_mga_skipconnection)
+# Load all dataframes and compute F1 scores
+dfs = {}
+for model_name, path in params["models"].items():  # type: ignore
+    df = pd.read_csv(path)
+    df["F1-Score"] = compute_f1(df)
+    dfs[model_name] = df
 
 # Define metrics to compare
 metrics = [
@@ -45,20 +44,12 @@ fig, axs = plt.subplots(3, 3, figsize=(18, 12))
 axs = axs.flatten()
 
 for i, metric in enumerate(metrics):
-    axs[i].plot(
-        df_non_mga["epoch"],
-        df_non_mga[metric],
-        label="YOLOv8",
-        linewidth=2,
-        linestyle="--",
-    )
-    axs[i].plot(
-        df_mga_skipconnection["epoch"],
-        df_mga_skipconnection[metric],
-        label="MGA SkipConnection",
-        linewidth=2,
-    )
-    axs[i].plot(df_cbam["epoch"], df_cbam[metric], label="MGA-CBAM-YOLO", linewidth=2)
+    for model_name, df in dfs.items():
+        # Use dashed line for YOLOv8 to maintain original styling
+        line_style = "--" if model_name == "YOLOv8" else "-"
+        axs[i].plot(
+            df["epoch"], df[metric], label=model_name, linewidth=2, linestyle=line_style
+        )
 
     axs[i].set_title(metric, fontsize=12)
     axs[i].set_xlabel("Epoch")
@@ -67,7 +58,5 @@ for i, metric in enumerate(metrics):
     axs[i].grid(True)
 
 plt.tight_layout()
-plt.savefig(
-    "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/comparison_metrics.png"
-)
+plt.savefig(params["output_path"])
 plt.show()

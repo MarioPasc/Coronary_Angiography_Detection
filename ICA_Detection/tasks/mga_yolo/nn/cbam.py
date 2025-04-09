@@ -36,18 +36,27 @@ class CBAM(nn.Module):
         self,
         channels: int,
         r: int,
-        method: Literal["sequential", "concat", "add"] = "add",
+        sam_cam_fusion: Literal["sequential", "concat", "add"],
     ) -> None:
         super(CBAM, self).__init__()
         self.channels = channels
         self.reduction_ratio = r
-        self.method = method
+        self.method = sam_cam_fusion
         if self.method not in ["sequential", "concat", "add"]:
             raise ValueError(
                 f"Unsupported method: {self.method}. Choose 'sequential', 'concat', 'add'."
             )
         self.channel_attention = CAM(channels=self.channels, r=self.reduction_ratio)
         self.spatial_attention = SAM(bias=False)
+
+        # TODO: Preguntar Ezequiel!
+        # For concat mode, we need to reduce channels back to original size
+        if self.method == "concat":
+            self.reduce_channels = nn.Conv2d(
+                2 * self.channels,  # Doubled channels after concat
+                self.channels,  # Return to original channels
+                kernel_size=1,  # 1x1 convolution
+            )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply channel and spatial attention sequentially.
@@ -64,9 +73,19 @@ class CBAM(nn.Module):
             sam_output = self.spatial_attention(cam_output)
             x_refined = cam_output * sam_output
         elif self.method == "concat":
+            # Apply both attention modules in parallel
             cam_output = self.channel_attention(x)
             sam_output = self.spatial_attention(x)
-            x_refined = torch.cat((cam_output, sam_output), dim=1)
+
+            # Concatenate along channel dimension
+            # Since SAM output has only 1 channel per sample, we expand it
+
+            sam_expanded = sam_output.repeat(1, self.channels, 1, 1)
+            concat_output = torch.cat((cam_output, sam_expanded), dim=1)
+
+            # Reduce channels back to original size
+            x_refined = self.reduce_channels(concat_output)
+
         elif self.method == "add":
             cam_output = self.channel_attention(x)
             sam_output = self.spatial_attention(x)
@@ -101,22 +120,25 @@ class CAM(nn.Module):
                 f"Ensure channels > 0, r > 0, and channels is divisible by r."
             )
 
-        # TODO: We can play with:
-        #  1. Different reduction ratios (r)
-        #  2. Different MLP architectures (e.g., different activation functions)
-
         self.channels = channels
         self.r = r
-        self.mlp = nn.Sequential(
-            nn.Linear(
-                in_features=self.channels,
-                out_features=self.channels // self.r,
+
+        # Since the spatial dimensions are already reduced to 1×1
+        # by the global pooling operations, a 1×1 convolution is
+        # mathematically equivalent to a fully connected layer
+        # in this context.
+        self.conv_bottleneck = nn.Sequential(
+            nn.Conv2d(
+                in_channels=self.channels,
+                out_channels=self.channels // self.r,
+                kernel_size=1,
                 bias=True,
             ),
             nn.ReLU(inplace=True),
-            nn.Linear(
-                in_features=self.channels // self.r,
-                out_features=self.channels,
+            nn.Conv2d(
+                in_channels=self.channels // self.r,
+                out_channels=self.channels,
+                kernel_size=1,
                 bias=True,
             ),
         )
@@ -130,16 +152,20 @@ class CAM(nn.Module):
         Returns:
             torch.Tensor: Channel-refined feature map with same shape as input
         """
-        batch_size, channels, _, _ = x.size()
+        # batch_size, channels, _, _ = x.size()
 
         # Global max pooling
-        max_pool = F.adaptive_max_pool2d(x, output_size=1).view(batch_size, channels)
+        max_pool = F.adaptive_max_pool2d(
+            x, output_size=1
+        )  # .view(batch_size, channels)
         # Global average pooling
-        avg_pool = F.adaptive_avg_pool2d(x, output_size=1).view(batch_size, channels)
+        avg_pool = F.adaptive_avg_pool2d(
+            x, output_size=1
+        )  # .view(batch_size, channels)
 
         # Apply shared MLP to both pooled features
-        max_out = self.mlp(max_pool).view(batch_size, channels, 1, 1)
-        avg_out = self.mlp(avg_pool).view(batch_size, channels, 1, 1)
+        max_out = self.conv_bottleneck(max_pool)
+        avg_out = self.conv_bottleneck(avg_pool)
 
         # Combine and create attention map
         attention = torch.sigmoid(max_out + avg_out)

@@ -71,8 +71,7 @@ class MaskGuidedTrainer:
             f"Calling HookManager with parameters:\n - Mask folder {config.masks_folder}\n - Target layers {config.target_layers}"
         )
         self.hook_manager = HookManager(
-            masks_folder=config.masks_folder,
-            target_layers=config.target_layers,
+            config=self.config,
             get_image_path_fn=self._get_current_image_path,
         )
 
@@ -165,7 +164,7 @@ class MaskGuidedTrainer:
         elapsed_time = time.time() - self.mask_stats["start_time"]
         logger.info(f"[Trainer] STATS [Batch {batch_count}]:")
         logger.info(f"  - Runtime: {elapsed_time:.2f} seconds")
-        logger.info(f"  - Target layers: {', '.join(self.config.target_layers)}")  # type: ignore
+        logger.info(f"  - Target layers: {self.config.target_layers}")  # type: ignore
         logger.info(f"  - MGA active: {self.mga_active}")
 
     def train(self) -> YOLO:

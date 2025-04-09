@@ -14,10 +14,9 @@ from dataclasses import dataclass, field
 import matplotlib.pyplot as plt
 import time
 
-# Add these methods to your HookManager class
-
 # Dynamic import to avoid circular imports
 from ICA_Detection.tasks.mga_yolo.nn.mga_cbam import MaskGuidedCBAM
+from ICA_Detection.tasks.mga_yolo.cfg.defaults import MaskGuidedAttentionConfig
 
 # Configure logging
 logger = logging.getLogger("mga_yolo.hooks")
@@ -25,17 +24,6 @@ logger = logging.getLogger("mga_yolo.hooks")
 # Type definitions for better code clarity
 ImagePath = str
 LayerName = str
-
-
-@dataclass
-class MaskGuidedAttentionConfig:
-    """Configuration for Mask-Guided Attention modules."""
-
-    target_layers: List[str] = field(
-        default_factory=lambda: ["model.15", "model.18", "model.21"]
-    )
-    reduction_ratio: int = 16
-    kernel_size: int = 7  # For spatial attention convolution
 
 
 class FeatureMapBundle(TypedDict):
@@ -59,10 +47,8 @@ class HookManager:
 
     def __init__(
         self,
-        masks_folder: str,
-        target_layers: Optional[List[str]] = None,
+        config: MaskGuidedAttentionConfig,
         get_image_path_fn: Optional[Callable[[int], Optional[str]]] = None,
-        config: Optional[MaskGuidedAttentionConfig] = None,
     ) -> None:
         """
         Initialize the hook manager.
@@ -73,9 +59,10 @@ class HookManager:
             get_image_path_fn: Function to get image path from batch index
             config: Configuration for mask-guided attention
         """
-        self.masks_folder = masks_folder
-        self.config = config or MaskGuidedAttentionConfig()
-        self.target_layers = target_layers or self.config.target_layers
+        self.config: MaskGuidedAttentionConfig = config
+
+        self.masks_folder = config.masks_folder
+        self.target_layers = config.target_layers
         self.get_image_path_fn = get_image_path_fn
         self.hooks: List[torch.utils.hooks.RemovableHandle] = []
 
@@ -180,9 +167,6 @@ class HookManager:
             input_feat: Tuple[torch.Tensor, ...],
             output: torch.Tensor,
         ) -> torch.Tensor:
-            # Store original dimensions for validation
-            original_shape = output.shape
-
             # The batch contains multiple images
             batch_size = output.shape[0]
             modified_outputs = []
@@ -268,15 +252,6 @@ class HookManager:
             if modified_outputs:
                 combined_output = torch.cat(modified_outputs, dim=0)
 
-                # Validate output dimensions
-                if combined_output.shape != original_shape:
-                    logger.error(
-                        f"[HookManager] Output dimension mismatch in layer {layer_name}! "
-                        f"Expected: {original_shape}, Got: {combined_output.shape}. "
-                        f"Using original output to prevent errors."
-                    )
-                    return output
-
                 return combined_output
             else:
                 return output
@@ -284,7 +259,10 @@ class HookManager:
         return hook
 
     def _apply_mask_with_cbam(
-        self, feature_map: torch.Tensor, mask: torch.Tensor, layer_name: str
+        self,
+        feature_map: torch.Tensor,
+        mask: torch.Tensor,
+        layer_name: str,
     ) -> torch.Tensor:
         """
         Apply mask to feature map with CBAM attention.
@@ -301,13 +279,17 @@ class HookManager:
         Returns:
             Modified feature map with same shape as input
         """
-        logger.debug(f"[HookManager] Applying CBAM. Parameters:")
-        logger.debug(f"  - Feature map shape: {feature_map.shape}")
-        logger.debug(f"  - Mask shape: {mask.shape}")
-        logger.debug(f"  - Layer name: {layer_name}")
-
         # Get number of channels from feature map
         channels = feature_map.shape[1]
+
+        logger.debug(
+            f"Using Mask-Guided CBAM with {self.config.sam_cam_fusion} SAM-CAM fusion method."
+        )
+        logger.debug(
+            f"Using {self.config.mga_pyramid_fusion} fusion method for MGA pyramid fusion."
+        )
+        logger.debug(f"Using {self.config.reduction_ratio} reduction ratio for CBAM.")
+        logger.debug(f"Using {channels} channels for CBAM.")
 
         # Get or create CBAM module with appropriate channel count
         cache_key = f"{layer_name}_{channels}"
@@ -315,6 +297,8 @@ class HookManager:
             self._module_cache[cache_key] = MaskGuidedCBAM(
                 channels=channels,
                 reduction_ratio=self.config.reduction_ratio,
+                sam_cam_fusion=self.config.sam_cam_fusion,
+                mga_pyramid_fusion=self.config.mga_pyramid_fusion,
             ).to(feature_map.device)
 
         mga_cbam = self._module_cache[cache_key]
