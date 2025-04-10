@@ -16,13 +16,14 @@ momentum: 0.937
 weight_decay: 0.0005
 warmup_epochs: 3.0
 save_period: 10
+iou: 0.5
 
 # MGA-specific Parameters
 target_layers: 
   - "15"  # P3 layer
   - "18"  # P4 layer
   - "21"  # P5 layer
-reduction_ratio: 8
+reduction_ratio: 16
 kernel_size: 7
 # How do we combine the spatial and channel attention maps?
 # 1. add: Add the attention map to the original feature map: MGA = Att_spatial + Att_channel
@@ -33,7 +34,7 @@ mga_pyramid_fusion: "add"
 
 # Experiment Settings
 project_dir: /home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/
-experiment_name: mga_cbam_yolo_samcamADD_pyramidADD
+experiment_name: mga_cbam_yolo_samcamADD_pyramidADD_r16
 visualize_features: true
 
 # Augmentation Settings

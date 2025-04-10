@@ -276,6 +276,7 @@ class MaskGuidedTrainer:
             epochs=self.epochs,
             imgsz=self.imgsz,
             project=self.config.project_dir,
+            iou=self.config.iou,
             name=self.config.experiment_name,
             device=self.config.device,
             batch=self.config.batch,

@@ -18,6 +18,7 @@ class MaskGuidedAttentionConfig:
     imgsz: int = 640
     batch: int = 4
     device: str = "cuda:0"
+    iou: float = 0.5
 
     # MGA specific parameters
     target_layers: List[str] = field(default_factory=lambda: ["15", "18", "21"])

@@ -5,8 +5,8 @@ import pandas as pd  # type: ignore
 params = {
     "models": {
         "YOLOv8": "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/base/results.csv",
-        "MGA-CBAM ADD-MULT": "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_cbam_yolo_samcamADD_pyramidMULTIPLY/results.csv",
-        "MGA-CBAM ADD-ADD": "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_cbam_yolo_samcamADD_pyramidADD/results.csv",
+        "MGA-CBAM ADD-ADD R16": "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_cbam_yolo_samcamADD_pyramidADD_r8/results.csv",
+        "MGA-CBAM ADD-ADD R8": "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/mga_cbam_yolo_samcamADD_pyramidADD_r8/results.csv",
     },
     "output_path": "/home/mariopasc/Python/Datasets/COMBINED/detection/runs/train/comparison_metrics.png",
 }
