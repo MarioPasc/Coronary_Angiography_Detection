@@ -23,6 +23,7 @@ from ICA_Detection.tools.dataset_conversions import (
     construct_coco_segmentation
 )
 
+DEBUG: bool = False
 
 def process_images_by_task(
     json_path: str,
@@ -265,8 +266,10 @@ def process_images_by_task(
             # If 'lesion' might be True or False in the detection context
             # we only save labels for entries that have at least one bbox
             # (which also implies 'lesion' is True).
+            if DEBUG: print(f"DEBUG: UID: {uid}, Lesion: {entry.get('lesion')}") # DEBUG
             if entry.get("lesion", False):
                 annotations = entry.get("annotations", {})
+                if DEBUG: print(f"DEBUG: UID: {uid}, Annotations: {annotations}") # DEBUG
                 label_filename = annotations.get("name", f"{uid}.txt")
 
                 # Collect all bounding boxes named "bbox1", "bbox2", etc.
@@ -278,8 +281,15 @@ def process_images_by_task(
                 orig_width = img_info.get("width", 512)
                 orig_height = img_info.get("height", 512)
 
-                for ann_key, bbox in annotations.items():
+                bbox_container = annotations
+                if "stenosis" in annotations and isinstance(annotations["stenosis"], dict):
+                    bbox_container = annotations["stenosis"]
+                if DEBUG: print(f"DEBUG: UID: {uid}, Bbox Container: {bbox_container}") # New DEBUG line
+
+
+                for ann_key, bbox in bbox_container.items():
                     if ann_key.startswith("bbox"):
+                        if DEBUG: print(f"DEBUG: UID: {uid}, ann_key: {ann_key}, bbox: {bbox}") # DEBUG
                         # 1) Pascal VOC–style line: 
                         #    class_idx xmin ymin xmax ymax
                         xmin = bbox["xmin"]
@@ -298,6 +308,9 @@ def process_images_by_task(
                                 f"{yolo_bbox['width']} {yolo_bbox['height']}"
                             )
                             yolo_lines.append(yolo_line)
+                
+                if DEBUG: print(f"DEBUG: UID: {uid}, Pascal Lines: {pascal_lines}") # DEBUG
+                if DEBUG: print(f"DEBUG: UID: {uid}, YOLO Lines: {yolo_lines}") # DEBUG
 
                 # Write Pascal VOC–style labels
                 labels_pascal_out = os.path.join(labels_out, "pascal_voc")
@@ -313,6 +326,7 @@ def process_images_by_task(
                     os.makedirs(labels_yolo_out, exist_ok=True)
 
                     label_yolo_out_path = os.path.join(labels_yolo_out, label_filename)
+                    print(f"Saving YOLO labels to {label_yolo_out_path}")
                     with open(label_yolo_out_path, "w") as f_yolo:
                         f_yolo.write("\n".join(yolo_lines))
 
