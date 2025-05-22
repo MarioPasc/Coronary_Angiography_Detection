@@ -4,6 +4,7 @@ import time
 import logging
 import traceback
 import gc
+import os
 from typing import Any, Dict, Optional, Tuple, List
 
 import torch
@@ -128,6 +129,7 @@ class YOLOTrainer:
                 "imgsz": self.config.img_size,
                 "val": True,
                 "verbose": False,
+                "project": os.path.join(self.config.output_folder, self.config.study_name), # Updated project path
                 "name": f"trial_{trial.number}",
             })
 

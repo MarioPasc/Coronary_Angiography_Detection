@@ -159,11 +159,12 @@ class BayesianHyperparameterOptimizer:
 
         # 3) Save results
         # Consider making output paths configurable via BHOConfig
-        results_dir = "optimization_results" # Example output directory
+        results_dir = self.config.output_folder # Use output_folder from config
         import os
         os.makedirs(results_dir, exist_ok=True)
 
         csv_path = os.path.join(results_dir, f"{self.config.study_name}_results.csv")
+
         df = study.trials_dataframe()
         df.to_csv(csv_path, index=False)
         log.info(f"Results saved to {csv_path}")

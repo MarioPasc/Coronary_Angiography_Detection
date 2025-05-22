@@ -56,6 +56,7 @@ class BHOConfig:
     seed: int
     sampler: str
     hyperparameters: Dict[str, HyperparameterConfig]
+    output_folder: str 
 
     @staticmethod
     def from_yaml(path: str) -> "BHOConfig":
@@ -95,5 +96,6 @@ class BHOConfig:
             study_name=raw["study_name"],
             seed=raw["seed"],
             sampler=raw["sampler"],
-            hyperparameters=hparams
+            hyperparameters=hparams,
+            output_folder=raw.get("output_folder", "optimization_results") # Add with default
         )

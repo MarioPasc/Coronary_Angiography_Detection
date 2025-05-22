@@ -45,6 +45,10 @@ version = "0.1"
 [project.urls]
 Homepage = "https://github.com/MarioPasc/Coronary_Angiography_Detection"
 
+[project.scripts] # Add this section
+run_optimization = "ICA_Detection.optimization.utils.cli:main"
+
+
 [tool.setuptools.packages.find]
 include = ["ICA_Detection", "ICA_Detection.*", "ICA_Detection.external.ultralytics"]
 

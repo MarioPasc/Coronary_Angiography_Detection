@@ -10,6 +10,7 @@ storage: CADICA_BHO_TPE.db
 study_name: try_local
 seed: 42
 sampler: "random"
+output_folder: "my_experiment_outputs" # Add this line
 
 hyperparameters:
   optimizer:
