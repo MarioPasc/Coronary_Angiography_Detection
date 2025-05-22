@@ -33,7 +33,7 @@ class YOLOTrainer:
         config: BHOConfig,
         gpu_lock: Any,
         available_gpus: List[int],
-        logger: logging.Logger,
+        logger: logging.Logger = LOGGER,
     ) -> None:
         """
         Parameters
@@ -50,7 +50,7 @@ class YOLOTrainer:
         self.config = config
         self.gpu_lock = gpu_lock
         self.available_gpus = available_gpus
-        self.logger = logger.getChild("trainer")
+        self.logger = logger
 
         # Build raw hyperparameter config dict from dataclasses
         raw_hparams: Dict[str, Dict[str, Any]] = {

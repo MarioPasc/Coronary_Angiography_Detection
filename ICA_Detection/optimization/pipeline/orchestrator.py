@@ -1,12 +1,12 @@
 # optimization/pipeline/orchestrator.py
 
 from multiprocessing import Manager
-from optimization import LOGGER
-from optimization.cfgs.config import load_config
-from optimization.engine.hpo import BayesianHyperparameterOptimizer
-from typing import Optional
+from ICA_Detection.optimization import LOGGER
+from ICA_Detection.optimization.cfg.config import BHOConfig
+from ICA_Detection.optimization.engine.hpo import BayesianHyperparameterOptimizer
+from typing import Optional, List
 
-def run_hpo(config_path: str) -> None:
+def run_hpo(config_path: str, gpu_ids_str: Optional[str] = None) -> None:
     """
     Main entrypoint: load config, set up resources, and run HPO.
 
@@ -14,16 +14,35 @@ def run_hpo(config_path: str) -> None:
     ----------
     config_path : str
         Path to the YAML config file.
+    gpu_ids_str : Optional[str], optional
+        Comma-separated string of GPU IDs, by default None.
     """
-    cfg = load_config(config_path)
+    cfg = BHOConfig.from_yaml(config_path)
     LOGGER.info("Configuration loaded.")
+
+    gpus_to_use: List[int]
+    if gpu_ids_str:
+        try:
+            gpus_to_use = [int(gid.strip()) for gid in gpu_ids_str.split(',')]
+            if not gpus_to_use: # Handle empty string after split if input was just ","
+                raise ValueError("GPU ID list cannot be empty if --gpu-ids is provided with non-empty value.")
+            LOGGER.info(f"Using manually specified GPU IDs: {gpus_to_use}")
+        except ValueError as e:
+            LOGGER.error(f"Invalid GPU IDs format: '{gpu_ids_str}'. Error: {e}. Falling back to default [0].")
+            gpus_to_use = [0]
+    else:
+        # Default behavior: use GPU 0.
+        # You could extend this to read from cfg or detect all available GPUs if needed.
+        gpus_to_use = [0] 
+        LOGGER.info(f"No GPU IDs specified, defaulting to: {gpus_to_use}")
+
     manager = Manager()
     gpu_lock = manager.Lock()
-    available_gpus = manager.list(range(cfg.get("num_gpus", 1)))
+    available_gpus = manager.list(gpus_to_use) # Use the determined list of GPUs
+
     optimizer = BayesianHyperparameterOptimizer(
         config=cfg,
-        logger=LOGGER,
         gpu_lock=gpu_lock,
-        available_gpus=list(available_gpus)
+        available_gpus=list(available_gpus) # Pass the list of GPU IDs
     )
     optimizer.optimize()

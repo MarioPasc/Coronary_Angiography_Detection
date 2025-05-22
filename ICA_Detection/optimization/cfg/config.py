@@ -48,6 +48,7 @@ class BHOConfig:
     epochs: int
     img_size: int
     n_trials: int
+    startup_trials: int
     save_plots: bool
     direction: str
     storage: str
@@ -88,6 +89,7 @@ class BHOConfig:
             epochs=raw["epochs"],
             img_size=raw["img_size"],
             n_trials=raw["n_trials"],
+            startup_trials=raw.get("startup_trials", 0),
             save_plots=raw["save_plots"],
             storage=raw["storage"],
             study_name=raw["study_name"],
