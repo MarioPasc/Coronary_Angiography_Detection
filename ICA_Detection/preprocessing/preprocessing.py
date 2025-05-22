@@ -47,7 +47,13 @@ def process_images_by_task(
     # ---------------------------------------------------------------------
     with open(json_path, "r") as f:
         data = json.load(f)
-
+    
+    print(f"Processing JSON file: {Path(json_path)}")
+    if len(data.keys()) == 0:
+        print(f"The JSON file {Path(json_path).name} is empty. This is because we have no dataset for this task.")
+        print("Hint: You probably choose CADICA or KEMEROVO, which do not have a segmentation task.")
+        return
+    
     # Figure out if this is detection or segmentation by examining the JSON root
     if "Stenosis_Detection" in data:
         dataset_dict = data["Stenosis_Detection"]
@@ -192,7 +198,7 @@ def process_images_by_task(
                                 draw.polygon(points_tuples, fill=255)
 
                     # Resize the mask to the final size
-                    mask = mask.resize((desired_X, desired_Y), Image.NEAREST)
+                    mask = mask.resize((desired_X, desired_Y), Image.Resampling.NEAREST)
                     mask.save(mask_path)
 
             # ---------------- Detection branch ----------------

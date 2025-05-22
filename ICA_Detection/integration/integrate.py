@@ -32,7 +32,7 @@ def integrate_datasets(
         that contains entries from all selected datasets.
     """
     combined_entries: Dict[str, Any] = {}
-
+    data_segmentation: Dict[str, Any] = {}
     for ds in datasets:
         ds_upper = ds.upper()
         if ds_upper == "CADICA":
@@ -66,8 +66,12 @@ def integrate_datasets(
         else:
             print(f"Dataset '{ds}' not recognized. Skipping.")
 
-    return {"detection": {"Stenosis_Detection": combined_entries},
-            "segmentation": data_segmentation}
+    if data_segmentation:
+        return {"detection": {"Stenosis_Detection": combined_entries},
+                            "segmentation": data_segmentation}
+    else:
+        return {"detection": {"Stenosis_Detection": combined_entries},
+                "segmentation": {}}
 
 
 if __name__ == "__main__":
