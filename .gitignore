@@ -170,3 +170,4 @@ validation_yolo_format/
 jupyter/
 *.pth
 *.pt
+runs/*
