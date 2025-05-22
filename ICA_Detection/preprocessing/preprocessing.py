@@ -4,7 +4,7 @@ import os
 import cv2
 import json
 import shutil
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from tqdm import tqdm  # type: ignore
 from pathlib import Path
 import numpy as np
@@ -388,48 +388,3 @@ def generate_datasets(root_folder: str, config: Dict[str, Any], json_path: str, 
             construct_coco_segmentation(json_path=json_path, root_folder=str(root_path))
         else:
             construct_coco_detection(json_path=json_path, root_folder=str(root_path))
-
-        
-
-
-def main() -> None:
-    """
-    Example main function to run the pipeline.
-    """
-    # Example plan steps
-    plan_steps = {
-        "format_standarization": {"desired_format": "png"},
-        "dtype_standarization": {"desired_dtype": "uint8"},
-        "resolution_standarization": {
-            "desired_X": 512,
-            "desired_Y": 512,
-            "method": "bilinear",
-        },
-        "clahe": {
-            "window_size": 5,
-            "sigma": 1.0,
-            "clipLimit": 2.0,
-            "tileGridSize": (8, 8),
-        },
-        "filtering_smoothing_equalization": {"window_size": 5, "sigma": 1.0},
-        "dataset_formats": {"YOLO": True},
-    }
-
-    steps_order = list(plan_steps.keys())
-
-    # Example usage
-    # Suppose you have a separate JSON for detection:
-    detection_json = "/path/to/stenosis_detection.json"
-    detection_outdir = "/path/to/processed/stenosis_detection"
-    process_images_by_task(detection_json, detection_outdir, steps_order)
-
-    # And a separate JSON for segmentation:
-    segmentation_json = "/path/to/arteries_segmentation.json"
-    segmentation_outdir = "/path/to/processed/arteries_segmentation"
-    process_images_by_task(segmentation_json, segmentation_outdir, steps_order)
-
-    print("Preprocessing completed.")
-
-
-if __name__ == "__main__":
-    main()

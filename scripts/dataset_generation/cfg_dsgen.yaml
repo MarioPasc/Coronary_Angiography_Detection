@@ -1,0 +1,58 @@
+# Configuration for dataset generation script
+
+# Logging configuration
+logging:
+  log_file: "./dataset_generation.log"
+
+# Dataset processing parameters
+dataset_processing:
+  datasets_to_process: ["CADICA"] # Options: ["CADICA", "ARCADE", "KEMEROVO"]
+  root_dir_source_datasets: "/mnt/home/users/tic_163_uma/mpascual/fscratch/datasets/angio/source"
+  output_folder: /mnt/home/users/tic_163_uma/mpascual/fscratch/datasets/angio/tasks"
+
+# Data splitting parameters
+splitting:
+  splits_dict:
+    train: 0.67
+    val: 0.33
+    test: 0.0
+  seed: 42
+
+# Preprocessing plans
+preprocessing:
+  detection:
+    plan_name: "Stenosis_Detection"
+    steps:
+      resolution_standarization:
+        desired_X: 512
+        desired_Y: 512
+        method: "bilinear"
+      dtype_standarization:
+        desired_dtype: "uint8"
+      format_standarization:
+        desired_format: "png"
+      dataset_formats:
+        YOLO: True
+        COCO: True
+  segmentation:
+    plan_name: "Arteries_Segmentation"
+    steps:
+      resolution_standarization:
+        desired_X: 512
+        desired_Y: 512
+        method: "bilinear"
+      clahe:
+        window_size: 5
+        sigma: 1.0
+        clipLimit: 3.0
+        tileGridSize: [8, 8] # Represented as a list in YAML
+      filtering_smoothing_equalization:
+        window_size: 5
+        sigma: 1.0
+      dtype_standarization:
+        desired_dtype: "uint8"
+      format_standarization:
+        desired_format: "png"
+      dataset_formats:
+        YOLO: True
+        COCO: True
