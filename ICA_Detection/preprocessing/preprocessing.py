@@ -326,7 +326,7 @@ def process_images_by_task(
                     os.makedirs(labels_yolo_out, exist_ok=True)
 
                     label_yolo_out_path = os.path.join(labels_yolo_out, label_filename)
-                    print(f"Saving YOLO labels to {label_yolo_out_path}")
+                    # print(f"Saving YOLO labels to {label_yolo_out_path}")
                     with open(label_yolo_out_path, "w") as f_yolo:
                         f_yolo.write("\n".join(yolo_lines))
 
