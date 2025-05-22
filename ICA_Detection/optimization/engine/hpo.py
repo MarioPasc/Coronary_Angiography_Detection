@@ -3,6 +3,8 @@
 # optimization/engine/hpo.py
 from typing import List, Any, Dict
 
+import math
+
 import optuna # Ensure optuna is imported
 from ICA_Detection.optimization.cfg.config import BHOConfig
 from ICA_Detection.optimization.engine.trainer import YOLOTrainer
@@ -50,6 +52,39 @@ class BayesianHyperparameterOptimizer:
 
         self._safe_train = safe_train
 
+    def _default_cma_kwargs(self) -> Dict[str, Any]:
+        """
+        Build a rule-of-thumb CMA-ES config based solely on
+        self.config.hyperparameters (no distribution objects).
+        """
+        # total number of tunables
+        d = len(self.config.hyperparameters)
+
+        # detect any discrete params: categorical or int
+        has_discrete = any(
+            hp_cfg.type in ("categorical", "int")
+            for hp_cfg in self.config.hyperparameters.values()
+        )
+
+        # classical λ = 4 + floor(3 * ln(d))
+        popsize = 4 + math.floor(3 * math.log(max(1, d)))
+
+        return {
+            "seed": self.config.seed,               # reproducible
+            "x0": None,                             # midpoint by default
+            "sigma0": None,                         # range/6 internally
+            "popsize": popsize,
+            "n_startup_trials": popsize,            # bootstrap
+            "restart_strategy": "bipop",            # robust multimodal
+            "inc_popsize": 2,                       # double on restart
+            "consider_pruned_trials": False,        # default for MedianPruner
+            "use_separable_cma": (d > 50),          # speed for high-dim
+            "with_margin": has_discrete,            # avoid collapse on ints
+            "lr_adapt": False,                      # off unless noisy
+            "source_trials": None,                  # no warm-start
+        }
+
+
     def optimize(self) -> None:
         """
         Build study, run trials, then save CSV and plots.
@@ -71,6 +106,7 @@ class BayesianHyperparameterOptimizer:
             "random": optuna.samplers.RandomSampler,
             "gpsampler": optuna.samplers.GPSampler,
             "qmcsampler": optuna.samplers.QMCSampler,
+            "cmaes": optuna.samplers.CmaEsSampler,
         }
         
         sampler_name = self.config.sampler.lower()
@@ -113,6 +149,8 @@ class BayesianHyperparameterOptimizer:
                 warn_asynchronous_seeding= True, # Default is True
                 warn_independent_sampling= True  # Default is True
             )
+        elif sampler_name == "cmaes":
+            sampler_kwargs.update(self._default_cma_kwargs())
 
         try:
             sampler = sampler_constructor(**sampler_kwargs) 
