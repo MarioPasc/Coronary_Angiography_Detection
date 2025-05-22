@@ -7,7 +7,7 @@ import shutil
 from typing import Dict, Any, List, Tuple
 
 from ICA_Detection.generator.generator import DatasetGenerator
-from .prints import print_welcome_and_structure
+from ICA_Detection.tools.prints_dsgen import print_welcome_and_structure
 import time
 
 # ==========================
