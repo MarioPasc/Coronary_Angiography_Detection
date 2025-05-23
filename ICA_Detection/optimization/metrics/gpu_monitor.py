@@ -10,10 +10,12 @@ import logging
 from ICA_Detection.optimization import LOGGER
 
 class GPUUsageLogger:
-    def __init__(self, trial_number: int, logger: Optional[logging.Logger] = None):
+    def __init__(self, trial_number: int, output_dir: str, logger: Optional[logging.Logger] = None):
         self.trial_number = trial_number
         self.logger = logger or LOGGER
         self.nvml_initialized = False
+        self._rows: List[Dict[str, Any]] = []
+        self.csv_file = os.path.join(output_dir, f"gpu_usage_trial.csv")
         try:
             nvidia_smi.nvmlInit()
             self.nvml_initialized = True
@@ -76,7 +78,21 @@ class GPUUsageLogger:
             )
         except Exception as e:
             self.logger.error(f"Unexpected error during GPU monitoring for device index {device_idx_to_monitor} (Trial {self.trial_number}, Epoch {epoch}): {e}")
-
+        
+        row = {
+                "gpu_index": device_idx_to_monitor,
+                "gpu_name": nvidia_smi.nvmlDeviceGetName(handle).decode('utf-8') if 'handle' in locals() else None,
+                "trial_number": self.trial_number,
+                "epoch": epoch,
+                "gpu_utilization": util.gpu if 'util' in locals() else None,
+                "gpu_memory_used": mem_info.used // (1024**2) if 'mem_info' in locals() else None,
+                "gpu_memory_total": mem_info.total // (1024**2) if 'mem_info' in locals() else None,
+                "gpu_memory_free": mem_info.free // (1024**2) if 'mem_info' in locals() else None,
+                "gpu_memory_utilization": mem_info.used / mem_info.total * 100 if 'mem_info' in locals() else None,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        self._rows.append(row)
+        
     def close(self) -> None:
         if self.nvml_initialized:
             try:
@@ -84,12 +100,16 @@ class GPUUsageLogger:
             except nvidia_smi.NVMLError as e:
                 self.logger.warning(f"Error during NVML shutdown for trial {self.trial_number}: {e}")
             self.nvml_initialized = False
-
-def create_gpu_monitoring_callbacks(trial, logger):
+            if self._rows:
+                pd.DataFrame(self._rows).to_csv(
+                    self.csv_file, mode="a", header=not os.path.exists(self.csv_file), index=False
+                )
+        
+def create_gpu_monitoring_callbacks(trial, logger, output_dir: str = "./"):
     """
     Creates callbacks for monitoring GPU usage and tracking the current epoch dynamically.
     """
-    gpu_logger = GPUUsageLogger(trial.number)  # Existing GPU logger
+    gpu_logger = GPUUsageLogger(trial.number, output_dir)  # Existing GPU logger
     current_epoch = {"epoch": 0}  # Dictionary to store the current epoch count (mutable)
 
     def on_train_epoch_start(trainer):
@@ -108,6 +128,7 @@ def create_gpu_monitoring_callbacks(trial, logger):
         """Called when the training ends."""
         logger.info(f"Training completed at epoch {current_epoch['epoch']} for trial {trial.number}.")
         trainer.last_epoch = current_epoch["epoch"]  # Attach the last epoch
+        trial.set_user_attr("last_epoch", trainer.epoch)
         gpu_logger.close()
         logger.info(f"GPU monitoring closed for trial {trial.number}.")
 

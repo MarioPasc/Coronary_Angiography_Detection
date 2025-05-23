@@ -5,6 +5,8 @@ from ICA_Detection.optimization import LOGGER
 from ICA_Detection.optimization.cfg.config import BHOConfig
 from ICA_Detection.optimization.engine.hpo import BayesianHyperparameterOptimizer
 from typing import Optional, List
+import os 
+
 
 def run_hpo(config_path: str, gpu_ids_str: Optional[str] = None) -> None:
     """
@@ -40,9 +42,11 @@ def run_hpo(config_path: str, gpu_ids_str: Optional[str] = None) -> None:
     gpu_lock = manager.Lock()
     available_gpus = manager.list(gpus_to_use) # Use the determined list of GPUs
 
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpus_to_use))
+
     optimizer = BayesianHyperparameterOptimizer(
         config=cfg,
         gpu_lock=gpu_lock,
-        available_gpus=list(available_gpus) # Pass the list of GPU IDs
+        available_gpus=available_gpus 
     )
     optimizer.optimize()

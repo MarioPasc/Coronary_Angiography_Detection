@@ -2,6 +2,7 @@
 
 # optimization/engine/hpo.py
 from typing import List, Any, Dict
+from multiprocessing.managers import ListProxy
 
 import math
 
@@ -19,7 +20,7 @@ class BayesianHyperparameterOptimizer:
         self,
         config: BHOConfig,
         gpu_lock: Any,
-        available_gpus: List[int],
+        available_gpus: ListProxy,
     ) -> None:
         """
         Parameters
@@ -187,7 +188,6 @@ class BayesianHyperparameterOptimizer:
             self._safe_train,
             n_trials=self.config.n_trials,
             n_jobs=n_parallel_jobs, 
-            # Add callbacks here if needed at the study level, e.g., for early stopping across all trials
         )
 
         log.info("HPO finished.")

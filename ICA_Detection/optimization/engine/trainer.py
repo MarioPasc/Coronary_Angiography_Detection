@@ -6,6 +6,7 @@ import traceback
 import gc
 import os
 from typing import Any, Dict, Optional, Tuple, List
+from multiprocessing.managers import ListProxy
 
 import torch
 import optuna
@@ -33,7 +34,7 @@ class YOLOTrainer:
         self,
         config: BHOConfig,
         gpu_lock: Any,
-        available_gpus: List[int],
+        available_gpus: ListProxy,
         logger: logging.Logger = LOGGER,
     ) -> None:
         """
@@ -43,7 +44,7 @@ class YOLOTrainer:
             Parsed optimization config.
         gpu_lock : Lock
             Multiprocessing lock to serialize GPU assignment.
-        available_gpus : List[int]
+        available_gpus : ListProxy
             Pool of free GPU indices.
         logger : logging.Logger
             Logger for all messages.
@@ -109,6 +110,10 @@ class YOLOTrainer:
                 device = f"cuda:{gpu_id}"
                 trial.set_user_attr("gpu_id", gpu_id)
                 log.info(f"Assigned GPU {gpu_id}.")
+                torch.cuda.set_device(gpu_id)
+                log.debug(f"CUDA device set to {gpu_id}.")
+                # Set environment variable for CUDA_VISIBLE_DEVICES
+                os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
             else:
                 gpu_id = None
                 device = "cpu"
@@ -118,7 +123,7 @@ class YOLOTrainer:
         # 5) Build callbacks
         pruning_cb = create_pruning_callback(trial, LOGGER)
         epoch_start_cb, epoch_end_cb, train_end_cb = \
-            create_gpu_monitoring_callbacks(trial, log)
+            create_gpu_monitoring_callbacks(trial, log, self.config.output_folder)
 
         # 6) Run training
         try:
@@ -136,7 +141,7 @@ class YOLOTrainer:
             # Initialize model
             model = YOLO(self.config.model)
             model.model.to(device) # type: ignore[assignment]
-
+            
             # Attach callbacks
             model.add_callback("on_train_epoch_start", epoch_start_cb)
             model.add_callback("on_train_epoch_end", epoch_end_cb)
@@ -182,7 +187,11 @@ class YOLOTrainer:
             log.info(f"Trial completed: F1={f1:.4f}, time={elapsed:.1f}s")
 
             # Report and return
-            trial.report(f1, step=train_end_cb.__self__().last_epoch)  # uses last_epoch set in callback
+            trainer_obj = getattr(model, "trainer", None)           # None if training failed
+            last_epoch = getattr(trainer_obj, "last_epoch",
+                                getattr(trainer_obj, "epoch", -1)) # -1 if all else fails
+
+            trial.report(f1, step=last_epoch)
             return f1
 
         except Exception as e:
