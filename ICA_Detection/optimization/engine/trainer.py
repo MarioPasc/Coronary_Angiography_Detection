@@ -104,16 +104,30 @@ class YOLOTrainer:
         start_time = time.time()
 
         # 4) Acquire GPU
+        def _to_logical_id(physical_id: int) -> int:
+            """Translate host GPU id to the ordinal visible inside this process."""
+            env = os.environ.get("CUDA_VISIBLE_DEVICES")
+            if env:
+                vis = [int(x) for x in env.split(",")]
+                if physical_id not in vis:
+                    raise ValueError(f"GPU {physical_id} is masked out by CUDA_VISIBLE_DEVICES={env}")
+                return vis.index(physical_id)  # 1-liner mapping
+            return physical_id                # no masking → identity mapping
+
         with self.gpu_lock:
             if self.available_gpus:
                 gpu_id = self.available_gpus.pop(0)
+                
                 device = f"cuda:{gpu_id}"
                 trial.set_user_attr("gpu_id", gpu_id)
                 log.info(f"Assigned GPU {gpu_id}.")
-                torch.cuda.set_device(gpu_id)
-                log.debug(f"CUDA device set to {gpu_id}.")
-                # Set environment variable for CUDA_VISIBLE_DEVICES
-                os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+
+                physical_id = _to_logical_id(gpu_id)    
+                torch.cuda.set_device(physical_id)
+                log.info(f"CUDA_VISIBLE_DEVICES set to {os.environ['CUDA_VISIBLE_DEVICES']}")
+                log.info(f"Using GPU {gpu_id} (physical id: {physical_id}).")
+                log.info(f"CUDA device count: {torch.cuda.device_count()}")
+
             else:
                 gpu_id = None
                 device = "cpu"
