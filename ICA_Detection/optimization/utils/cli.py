@@ -20,7 +20,7 @@ def main() -> None:
         "--gpu-ids",
         type=str,
         default=None, # Default to None, meaning use orchestrator's default
-        help="Comma-separated list of GPU IDs to use (e.g., '0,1,2'). If not provided, defaults to [0]."
+        help="Comma-separated list of GPU IDs to use (e.g., '0,1,2'). If not provided, defaults to [0]. If -1, we use all available GPUs."
     )
     args = parser.parse_args()
     try:
