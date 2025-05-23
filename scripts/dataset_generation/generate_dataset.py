@@ -41,7 +41,7 @@ def main(config: Dict[str, Any]):
     """Main function to run the dataset generation pipeline."""
     start_time = time.time() # <--- RECORD START TIME
 
-    print_welcome_and_structure()
+    #print_welcome_and_structure()
     # Extract parameters from config
     log_file = config['logging']['log_file']
     datasets_to_process = config['dataset_processing']['datasets_to_process']
