@@ -105,34 +105,42 @@ class YOLOTrainer:
 
         # 4) Acquire GPU
         def _to_logical_id(physical_id: int) -> int:
-            """Translate host GPU id to the ordinal visible inside this process."""
+            """Translate host GPU id to the ordinal visible *inside this process*."""
             env = os.environ.get("CUDA_VISIBLE_DEVICES")
             if env:
                 vis = [int(x) for x in env.split(",")]
                 if physical_id not in vis:
-                    raise ValueError(f"GPU {physical_id} is masked out by CUDA_VISIBLE_DEVICES={env}")
-                return vis.index(physical_id)  # 1-liner mapping
-            return physical_id                # no masking → identity mapping
+                    raise ValueError(
+                        f"GPU {physical_id} is masked out by CUDA_VISIBLE_DEVICES={env}"
+                    )
+                return vis.index(physical_id)          # map physical→logical
+            return physical_id                         # no masking → identity
+
 
         with self.gpu_lock:
             if self.available_gpus:
-                gpu_id = self.available_gpus.pop(0)
-                
-                device = f"cuda:{gpu_id}"
+                gpu_id = self.available_gpus.pop(0)    # physical id
                 trial.set_user_attr("gpu_id", gpu_id)
-                log.info(f"Assigned GPU {gpu_id}.")
 
-                physical_id = _to_logical_id(gpu_id)    
-                torch.cuda.set_device(physical_id)
-                log.info(f"CUDA_VISIBLE_DEVICES set to {os.environ['CUDA_VISIBLE_DEVICES']}")
-                log.info(f"Using GPU {gpu_id} (physical id: {physical_id}).")
-                log.info(f"CUDA device count: {torch.cuda.device_count()}")
+                # ―― NEW: hide the **other** GPUs in this process ――
+                os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
+                logical_id = _to_logical_id(gpu_id)    # always 0 after the line above
+                torch.cuda.set_device(logical_id)
+
+                device = f"cuda:{logical_id}"
+                log.info(
+                    f"Assigned physical GPU {gpu_id} "
+                    f"⇒ logical id {logical_id}; "
+                    f"CUDA_VISIBLE_DEVICES={os.environ['CUDA_VISIBLE_DEVICES']}."
+                )
             else:
                 gpu_id = None
                 device = "cpu"
                 log.warning("No GPU available; falling back to CPU.")
+
         params["device"] = device
+
 
         # 5) Build callbacks
         pruning_cb = create_pruning_callback(trial, LOGGER)

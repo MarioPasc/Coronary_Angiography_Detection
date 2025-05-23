@@ -85,6 +85,16 @@ class BayesianHyperparameterOptimizer:
             "source_trials": None,                  # no warm-start
         }
 
+    # NOTE: We are going to leave this here, but the NSGA-II algorithm is for
+    # multi-objective optimization. If we want to use it, we will need to create
+    # a trainer and hpo version that can handle multiple objectives.
+    def _default_nsgaii_kwargs(self) -> Dict[str, Any]:
+        return dict(
+            population_size = getattr(self.config, "population_size", 50),
+            crossover_prob  = getattr(self.config, "crossover_prob", 0.9),
+            seed            = self.config.seed,
+        )
+
 
     def optimize(self) -> None:
         """
@@ -103,12 +113,14 @@ class BayesianHyperparameterOptimizer:
 
         # Store sampler constructors (classes)
         sampler_constructors: Dict[str, Any] = {
-            "tpe": optuna.samplers.TPESampler,
-            "random": optuna.samplers.RandomSampler,
+            "tpe":       optuna.samplers.TPESampler,
+            "random":    optuna.samplers.RandomSampler,
             "gpsampler": optuna.samplers.GPSampler,
             "qmcsampler": optuna.samplers.QMCSampler,
-            "cmaes": optuna.samplers.CmaEsSampler,
+            "cmaes":     optuna.samplers.CmaEsSampler,
+            "nsgaii":    optuna.samplers.NSGAIISampler,   
         }
+
         
         sampler_name = self.config.sampler.lower()
         sampler_constructor = sampler_constructors.get(sampler_name)
@@ -152,7 +164,8 @@ class BayesianHyperparameterOptimizer:
             )
         elif sampler_name == "cmaes":
             sampler_kwargs.update(self._default_cma_kwargs())
-
+        elif sampler_name == "nsgaii":
+            sampler_kwargs.update(self._default_nsgaii_kwargs())
         try:
             sampler = sampler_constructor(**sampler_kwargs) 
         except TypeError as e:
