@@ -98,7 +98,8 @@ class UltralyticsESTuner:
             self.cfg.epochs,
         )
         t0 = time.time()
-        model.tune(iterations=self.cfg.n_trials, space=space, optimizer="AdamW", **args)
+        LOGGER.info(f"Arguments: {args}")
+        model.tune(iterations=self.cfg.n_trials, space=space, **args)
         LOGGER.info("Evolution finished in %.1f min.", (time.time() - t0) / 60)
 
         # 4) move artefacts
