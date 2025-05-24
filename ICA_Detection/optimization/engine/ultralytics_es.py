@@ -87,7 +87,10 @@ class UltralyticsESTuner:
             if hp.type in {"uniform", "loguniform"}:
                 space[name] = (hp.low, hp.high)
             elif hp.type == "categorical":
-                space[name] = hp.choices
+                LOGGER.warning(
+                    "[ES] Skipping categorical hyper-param '%s' – "
+                    "Ultralytics tuner expects numeric ranges.", name
+                )
 
         # 3) run tuner
         model = self.model_cls(self.cfg.model)
