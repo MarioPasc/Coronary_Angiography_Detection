@@ -1,11 +1,17 @@
 # optimization/pipeline/orchestrator.py
+from __future__ import annotations
 
+from typing import Optional, List, Union
+import os 
 from multiprocessing import Manager
+
 from ICA_Detection.optimization import LOGGER
 from ICA_Detection.optimization.cfg.config import BHOConfig
 from ICA_Detection.optimization.engine.hpo import BayesianHyperparameterOptimizer
-from typing import Optional, List
-import os 
+from ICA_Detection.optimization.engine.ultralytics_es import (
+    UltralyticsESTuner,
+)
+
 
 def _parse_gpu_ids(gpu_ids_str: str | None) -> list[int]:
     """Convert CLI string to list[int]; -1 == detect from env."""
@@ -16,7 +22,9 @@ def _parse_gpu_ids(gpu_ids_str: str | None) -> list[int]:
         if not env:
             return []                      # run on CPU
         return [int(x) for x in env.replace(" ", "").split(",")]
-    return [int(x) for x in gpu_ids_str.split(",")]
+    if gpu_ids_str is None:
+        return []
+    return [int(x) for x in gpu_ids_str.split(",")] 
 
 
 def run_hpo(config_path: str, gpu_ids_str: Optional[str] = None) -> None:
@@ -62,9 +70,14 @@ def run_hpo(config_path: str, gpu_ids_str: Optional[str] = None) -> None:
 
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpus_to_use))
 
-    optimizer = BayesianHyperparameterOptimizer(
-        config=cfg,
-        gpu_lock=gpu_lock,
-        available_gpus=available_gpus 
-    )
+
+    optimizer: Union[UltralyticsESTuner, BayesianHyperparameterOptimizer]
+    if cfg.sampler.lower() == "ultralytics_es":
+        optimizer = UltralyticsESTuner(
+            config=cfg, gpu_lock=gpu_lock, available_gpus=available_gpus
+        )
+    else:
+        optimizer = BayesianHyperparameterOptimizer(
+            config=cfg, gpu_lock=gpu_lock, available_gpus=available_gpus
+        )
     optimizer.optimize()
