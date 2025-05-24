@@ -2,3 +2,7 @@
 	path = ICA_Detection/external/ultralytics
 	url = https://github.com/MarioPasc/ultralytics
 	branch = main
+[submodule "ICA_Detection/external/DCA_YOLOv8"]
+	path = ICA_Detection/external/DCA_YOLOv8
+	url = https://github.com/MarioPasc/DCA-YOLOv8
+	branch = main
