@@ -50,10 +50,10 @@ run_optimization = "ICA_Detection.optimization.utils.cli:main"
 
 
 [tool.setuptools.packages.find]
-include = ["ICA_Detection", "ICA_Detection.*", "ICA_Detection.external.ultralytics"]
+include = ["ICA_Detection", "ICA_Detection.*", "ICA_Detection.external.ultralytics", "ICA_Detection.external.DCA_YOLOv8"]
 
 [tool.setuptools.package-data]
-"CADICA_Detection.external.ultralytics" = ["*"]
+"ICA_Detection.external.ultralytics" = ["*"]
 
 [[tool.mypy.overrides]]
 ignore_missing_imports = true

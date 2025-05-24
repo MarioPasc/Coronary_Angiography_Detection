@@ -34,7 +34,7 @@ from ICA_Detection.optimization.utils.hyperparameters import (
     prepare_hyperparameters,
     extract_hyperparameters,
 )
-from ._gpu import acquire_gpu, release_gpu  # expect self param
+from ICA_Detection.optimization.engine.trainers._gpu import acquire_gpu, release_gpu  # expect self param
 
 
 class BaseTrainer:
@@ -118,6 +118,9 @@ class BaseTrainer:
         try:
             # initialise model
             model = self.MODEL_CLS(self.config.model)
+            self.logger.info(
+                f"[Trainer] Instantiated model {self.MODEL_CLS}."
+            )
             model.model.to(device)  # type: ignore[attr-defined]
 
             # attach callbacks
