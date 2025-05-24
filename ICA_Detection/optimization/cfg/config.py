@@ -1,7 +1,7 @@
 # optimization/cfgs/config.py
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 import yaml
 import os
 
@@ -57,6 +57,7 @@ class BHOConfig:
     sampler: str
     hyperparameters: Dict[str, HyperparameterConfig]
     output_folder: str 
+    model_source: Literal["ultralytics", "dca"]  # NEW, default="ultralytics"
 
     @staticmethod
     def from_yaml(path: str) -> "BHOConfig":
@@ -84,6 +85,7 @@ class BHOConfig:
             )
 
         return BHOConfig(
+            model_source=raw.get("model_source", "ultralytics"),  # Add with default
             model=raw["model"],
             data=raw["data"],
             direction=raw["direction"],

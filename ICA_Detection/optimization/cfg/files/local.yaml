@@ -1,16 +1,17 @@
+model_source: dca 
 model: /home/mpascual/research/tests/angio/yolov8l.pt
 data: /home/mpascual/research/datasets/angio/tasks/stenosis_detection/datasets/yolo/yolo_ica_detection.yaml
-epochs: 1000
+epochs: 10
 img_size: 512
 n_trials: 3
 save_plots: true
 direction: maximize
 startup_trials: 1
-storage: CADICA_BHO_TPE.db
-study_name: try_local
+storage: test_local.db
+study_name: test_local
 seed: 42
-sampler: "random"
-output_folder: "my_experiment_outputs" # Add this line
+sampler: "tpe"
+output_folder: /home/mpascual/research/tests/angio/results
 
 hyperparameters:
   optimizer:

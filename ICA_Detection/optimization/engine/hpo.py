@@ -8,7 +8,7 @@ import math
 
 import optuna # Ensure optuna is imported
 from ICA_Detection.optimization.cfg.config import BHOConfig
-from ICA_Detection.optimization.engine.trainer import YOLOTrainer
+from ICA_Detection.optimization.engine.trainers import get_trainer
 from ICA_Detection.optimization import LOGGER
 
 class BayesianHyperparameterOptimizer:
@@ -36,9 +36,8 @@ class BayesianHyperparameterOptimizer:
         self.logger = LOGGER
         self.gpu_lock = gpu_lock
         self.available_gpus = available_gpus
-        self.trainer = YOLOTrainer(
-            config, gpu_lock, available_gpus, self.logger # YOLOTrainer expects logger
-        )
+        TrainerCls = get_trainer(config.model_source)  # Get the appropriate trainer class
+        self.trainer = TrainerCls(config, gpu_lock, available_gpus)  # Initialize the trainer
 
         # Wrap the trainer's train method to ensure it never returns None
         def safe_train(trial: optuna.Trial) -> float:
