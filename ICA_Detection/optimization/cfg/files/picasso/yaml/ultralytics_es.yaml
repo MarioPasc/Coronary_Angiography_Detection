@@ -7,11 +7,11 @@ n_trials: 200
 save_plots: true
 direction: maximize
 startup_trials: 0
-storage: cadica_yolov8l_tpe.db
-study_name: cadica_yolov8l_tpe
+storage: cadica_yolov8l_ultralytics_es.db
+study_name: cadica_yolov8l_ultralytics_es
 seed: 42
-sampler: "tpe"
-output_folder: /mnt/home/users/tic_163_uma/mpascual/execs/ICA/tests/cadica/yolov8l/tpe
+sampler: "ultralytics_es"
+output_folder: /mnt/home/users/tic_163_uma/mpascual/execs/ICA/tests/cadica/yolov8l/ultralytics_es
 
 hyperparameters:
   optimizer:

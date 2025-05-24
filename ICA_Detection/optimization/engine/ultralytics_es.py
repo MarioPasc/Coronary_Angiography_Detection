@@ -1,9 +1,10 @@
 # optimization/engine/ultralytics_es.py
 """
-Run Ultralytics' built-in evolutionary hyper-parameter tuner (`model.tune`).
+Evolutionary hyper-parameter tuner (Ultralytics `model.tune`) that now supports
+*both* the stock YOLOv8 models and the DCA-YOLOv8 fork.
 
-The class mirrors the public interface of your Optuna optimizer so the
-orchestrator can switch by checking `cfg.sampler`.
+The orchestrator still chooses this tuner when `sampler: ultralytics_es`; which
+model family is trained depends on `config.model_source`.
 """
 
 from __future__ import annotations
@@ -11,72 +12,62 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import torch
-from ICA_Detection.external.ultralytics.ultralytics import YOLO
 
+# ---------------- dynamic model map ----------------------------------- #
+from ICA_Detection.external.ultralytics.ultralytics import YOLO as ULTRA_YOLO
+from ICA_Detection.external.DCA_YOLOv8.DCA_YOLOv8.ultralytics.models.yolo import (
+    YOLO as DCA_YOLO,
+)
+
+_MODEL_MAP = {
+    "ultralytics": ULTRA_YOLO,
+    "dca": DCA_YOLO,
+}
+
+# ---------------------------------------------------------------------- #
+
+from ICA_Detection.optimization import LOGGER
 from ICA_Detection.optimization.cfg.config import BHOConfig
 from ICA_Detection.optimization.cfg.defaults import DEFAULT_PARAMS
-from ICA_Detection.optimization import LOGGER
-
+from ICA_Detection.optimization.utils.gpu import acquire_gpu, release_gpu
 
 class UltralyticsESTuner:
-    """Single-process evolutionary search using Ultralytics `YOLO.tune()`."""
+    """Single-process evolutionary search using `model.tune()`."""
 
-    # ------------------------------------------------------------------ #
-    # construction
-    # ------------------------------------------------------------------ #
+    # construction ------------------------------------------------------ #
     def __init__(
         self,
         config: BHOConfig,
-        gpu_lock,               # multiprocessing.Manager().Lock
-        available_gpus,         # multiprocessing.Manager().list
+        gpu_lock: Any,  # multiprocessing.Manager().Lock
+        available_gpus: Any,
     ) -> None:
         self.cfg = config
         self.gpu_lock = gpu_lock
         self.available_gpus = available_gpus  # type: ignore[assignment]
 
-    # ------------------------------------------------------------------ #
-    # public entrypoint (called by orchestrator)
-    # ------------------------------------------------------------------ #
+        try:
+            self.model_cls = _MODEL_MAP[config.model_source]
+        except KeyError:  # pragma: no cover
+            raise ValueError(
+                f"Unsupported model_source '{config.model_source}'. "
+                f"Choose from {list(_MODEL_MAP)}."
+            ) from None
+
+    # public API -------------------------------------------------------- #
     def optimize(self) -> None:
         gpu_id: Optional[int] = None
         try:
-            gpu_id = self._acquire_gpu()
+            gpu_id = acquire_gpu(self)
             self._tune(gpu_id)
         finally:
-            self._release_gpu(gpu_id)
+            release_gpu(self, gpu_id)
 
-    # ------------------------------------------------------------------ #
-    # gpu helpers
-    # ------------------------------------------------------------------ #
-    def _acquire_gpu(self) -> Optional[int]:
-        """Return a *physical* GPU id, or None if none free."""
-        with self.gpu_lock:                      # atomic
-            if len(self.available_gpus) == 0:
-                LOGGER.warning("No GPU free → running on CPU.")
-                return None
-            gpu_id = self.available_gpus[0]      # ListProxy always supports __getitem__
-            del self.available_gpus[0]
-
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-        torch.cuda.set_device(0)                 # logical id 0 after masking
-        LOGGER.info("Using physical GPU %d (logical 0).", gpu_id)
-        return gpu_id
-
-    def _release_gpu(self, gpu_id: Optional[int]) -> None:
-        if gpu_id is None:
-            return
-        with self.gpu_lock:
-            self.available_gpus.append(gpu_id)
-        LOGGER.info("Released GPU %d.", gpu_id)
-
-    # ------------------------------------------------------------------ #
-    # tuning core
-    # ------------------------------------------------------------------ #
+    # tuning core ------------------------------------------------------- #
     def _tune(self, gpu_id: Optional[int]) -> None:
-        # ---- 1) build YOLO argument dict --------------------------------
+        # 1) build YOLO args
         args: Dict[str, Any] = DEFAULT_PARAMS.copy()
         args.update(
             data=self.cfg.data,
@@ -90,7 +81,7 @@ class UltralyticsESTuner:
             save=True,
         )
 
-        # ---- 2) derive search space -------------------------------------
+        # 2) search space
         space: Dict[str, Any] = {}
         for name, hp in self.cfg.hyperparameters.items():
             if hp.type in {"uniform", "loguniform"}:
@@ -98,16 +89,19 @@ class UltralyticsESTuner:
             elif hp.type == "categorical":
                 space[name] = hp.choices
 
-        # ---- 3) run tuner ----------------------------------------------
-        model = YOLO(self.cfg.model)
+        # 3) run tuner
+        model = self.model_cls(self.cfg.model)
         LOGGER.info(
-            "Ultralytics ES: iterations=%d, epochs=%d", self.cfg.n_trials, self.cfg.epochs
+            "[Ultralytics Evolutionary Strategy] %s | iterations=%d  epochs=%d",
+            self.cfg.model_source.upper(),
+            self.cfg.n_trials,
+            self.cfg.epochs,
         )
         t0 = time.time()
         model.tune(iterations=self.cfg.n_trials, space=space, optimizer="AdamW", **args)
         LOGGER.info("Evolution finished in %.1f min.", (time.time() - t0) / 60)
 
-        # ---- 4) copy summary artefacts ----------------------------------
+        # 4) move artefacts
         tune_dir = Path(model.save_dir) / "tune"
         dest = Path(self.cfg.output_folder) / "ultralytics_es"
         dest.mkdir(parents=True, exist_ok=True)

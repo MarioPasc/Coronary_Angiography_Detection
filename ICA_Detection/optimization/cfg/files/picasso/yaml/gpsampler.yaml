@@ -1,3 +1,4 @@
+model_source: ultralytics # Options: dca, ultralytics
 model: /mnt/home/users/tic_163_uma/mpascual/execs/ICA/tests/cadica/yolov8l/model/yolov8l.pt
 data: /mnt/home/users/tic_163_uma/mpascual/fscratch/datasets/angio/tasks/stenosis_detection/datasets/yolo/yolo_ica_detection.yaml
 epochs: 1000

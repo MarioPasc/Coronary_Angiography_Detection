@@ -9,4 +9,4 @@ from ICA_Detection.optimization.engine.trainers._base import BaseTrainer
 
 class DCAYOLOv8Trainer(BaseTrainer):
     MODEL_CLS = DCA_YOLO
-    DEFAULT_PARAMS = DEFAULT_PARAMS            # replace with a DCA-specific dict if desired
+    DEFAULT_PARAMS = DEFAULT_PARAMS            

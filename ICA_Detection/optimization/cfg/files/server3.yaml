@@ -1,3 +1,4 @@
+model_source: dca # Options: dca, ultralytics
 model: /home/mariopascual/Projects/CADICA/Research/tests/cadica/yolov8/model/yolov8l.pt
 data: /media/hddb/mario/data/COMBINED/tasks/stenosis_detection/datasets/yolo/yolo_ica_detection.yaml
 epochs: 1000

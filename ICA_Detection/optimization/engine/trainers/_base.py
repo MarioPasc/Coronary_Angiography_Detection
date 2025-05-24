@@ -34,7 +34,7 @@ from ICA_Detection.optimization.utils.hyperparameters import (
     prepare_hyperparameters,
     extract_hyperparameters,
 )
-from ICA_Detection.optimization.engine.trainers._gpu import acquire_gpu, release_gpu  # expect self param
+from ICA_Detection.optimization.utils.gpu import acquire_gpu, release_gpu  # expect self param
 
 
 class BaseTrainer:
