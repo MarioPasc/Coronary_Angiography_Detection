@@ -91,7 +91,7 @@ def build_kfold_splits(
 
         result[f"fold_{idx}"] = {
             "train": _split_info(train_ids, id_to_labels, id_to_paths),
-            "test": _split_info(test_ids, id_to_labels, id_to_paths),
+            "val": _split_info(test_ids, id_to_labels, id_to_paths), # we call it val, 
         }
     return result
 
