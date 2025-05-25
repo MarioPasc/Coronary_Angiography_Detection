@@ -1,4 +1,4 @@
-model_source: dca 
+model_source: ultralytics 
 model: /home/mpascual/research/tests/angio/yolov8l.pt
 data: /home/mpascual/research/datasets/angio/tasks/stenosis_detection/datasets/yolo/yolo_ica_detection.yaml
 epochs: 10
