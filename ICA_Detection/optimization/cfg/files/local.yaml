@@ -1,17 +1,17 @@
-model_source: ultralytics 
+model_source: dca 
 model: /home/mpascual/research/tests/angio/yolov8l.pt
 data: /home/mpascual/research/datasets/angio/tasks/stenosis_detection/datasets/yolo/yolo_ica_detection.yaml
 epochs: 10
 img_size: 512
-n_trials: 3
+n_trials: 1
 save_plots: true
 direction: maximize
-startup_trials: 1
+startup_trials: 0
 storage: test_local.db
 study_name: test_local
 seed: 42
 sampler: "ultralytics_es"
-output_folder: /home/mpascual/research/tests/angio/results
+output_folder: /home/mpascual/research/tests/angio/ultralytics_es_dca
 
 hyperparameters:
   optimizer:

@@ -59,7 +59,6 @@ DEFAULT_PARAMS = {
     'mixup': 0.0,
     'copy_paste': 0.0,
     'erasing': 0.0,
-    'crop_fraction': 0.0,
+    'fraction': 1.0,
     'auto_augment': "",
-    'bgr': 0.0,
 }
