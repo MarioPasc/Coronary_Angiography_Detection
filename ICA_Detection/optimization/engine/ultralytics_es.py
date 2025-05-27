@@ -13,6 +13,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 
+import matplotlib
+matplotlib.use("Agg")  # no GUI windows on headless servers
+
+
 # ---------------- dynamic model map ----------------------------------- #
 from ICA_Detection.external.ultralytics.ultralytics import YOLO as YOLO
 from ICA_Detection.external.DCA_YOLOv8.DCA_YOLOv8.ultralytics.models.yolo import (
@@ -153,7 +157,7 @@ class UltralyticsESTuner:
             project=str(Path(self.cfg.output_folder)),
             name="ultralytics_es",
             verbose=True,
-            plots=self.cfg.save_plots,
+            plots=False, # hard-coded for incompatibility with research server
             save=True,
         )
         for k, v in list(args.items()):
