@@ -108,6 +108,17 @@ def create_preprocessing_plan(
                 "sigma": fse_plan.get("sigma"),
             }
 
+        # DCA-YOLO preprocessing check
+        dca_plan = plan_steps.get("dca_yolo_preprocessing")
+        if dca_plan:
+            plan["dca_yolo_preprocessing"] = {
+                "low_threshold": dca_plan.get("low_threshold", 10),
+                "high_threshold": dca_plan.get("high_threshold", 35),
+                "alpha": dca_plan.get("alpha", 0.30),
+                "blur_kernel": dca_plan.get("blur_kernel", [5, 5]),
+            }
+
+
         # Ensure a labels_formats entry exists.
         if "dataset_formats" in plan_steps:
             plan["dataset_formats"] = plan_steps["dataset_formats"]

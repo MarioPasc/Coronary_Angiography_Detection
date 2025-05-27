@@ -16,6 +16,7 @@ from ICA_Detection.tools.dtype_standarization import apply_dtype_standarization
 from ICA_Detection.tools.resolution import apply_resolution
 from ICA_Detection.tools.fse import filtering_smoothing_equalization
 from ICA_Detection.tools.clahe import clahe_enhancement
+from ICA_Detection.tools.dca_yolo_preprocessing import apply_dca_yolo_preprocessing
 from ICA_Detection.tools.bbox_translation import common_to_yolo, rescale_bbox
 from ICA_Detection.tools.dataset_conversions import (
     construct_yolo,
@@ -212,7 +213,33 @@ def process_images_by_task(
                     annotations["bbox1"] = rescale_bbox(bbox, old_width, old_height, desired_X, desired_Y)
 
         # -----------------------------------------------------------------
-        # 3e. CLAHE (if any)
+        # 3e. DCA-YOLO preprocessing (edge-hist-fusion)
+        # -----------------------------------------------------------------
+        if (
+            "dca_yolo_preprocessing" in entry.get("preprocessing_plan", {})
+            and "dca_yolo_preprocessing" in steps_order
+        ):
+            dca_params = entry["preprocessing_plan"]["dca_yolo_preprocessing"]
+            low_t  = dca_params.get("low_threshold", 10)
+            high_t = dca_params.get("high_threshold", 35)
+            alpha  = dca_params.get("alpha", 0.30)
+            blur_k = tuple(dca_params.get("blur_kernel", [5, 5]))
+
+            ok = apply_dca_yolo_preprocessing(
+                current_img_path,   # in-place I/O
+                current_img_path,
+                low_threshold=low_t,
+                high_threshold=high_t,
+                alpha=alpha,
+                blur_kernel=blur_k,
+            )
+            if not ok:
+                print(f"Error applying DCA-YOLO preprocessing for {uid}.")
+                continue
+
+
+        # -----------------------------------------------------------------
+        # 3f. CLAHE (if any)
         # -----------------------------------------------------------------
         if (
             "clahe" in entry.get("preprocessing_plan", {})
@@ -233,7 +260,7 @@ def process_images_by_task(
             cv2.imwrite(current_img_path, enhanced)
 
         # -----------------------------------------------------------------
-        # 3f. Filtering Smoothing Equalization
+        # 3g. Filtering Smoothing Equalization
         # -----------------------------------------------------------------
         if (
             "filtering_smoothing_equalization" in entry.get("preprocessing_plan", {})
