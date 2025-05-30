@@ -183,29 +183,32 @@ class BayesianHyperparameterOptimizer:
             pruner=pruner,
             load_if_exists=True,
         )
+        # ──────────────────────────────────────────────────────────
+        # 2)  Run trials (or remaining trials)        
+        # ──────────────────────────────────────────────────────────
 
-        # 2) Run trials
-        # Determine number of parallel jobs.
-        # This assumes YOLOTrainer handles GPU acquisition from the shared list.
-        n_parallel_jobs = len(self.available_gpus) if self.available_gpus else 1
-        if n_parallel_jobs == 0: 
-            n_parallel_jobs = 1 # Ensure at least 1 job
-        if self.config.n_trials < n_parallel_jobs :
-             n_parallel_jobs = self.config.n_trials # Cannot have more jobs than trials
+        finished_trials = sum(t.state.is_finished() for t in study.trials)
+        desired_total   = self.config.n_trials          # after editing YAML / CLI
+        remaining       = max(0, desired_total - finished_trials)
 
+        if remaining == 0:
+            log.info(f"Study already has {finished_trials} finished trial(s) "
+                     f"≥ requested total {desired_total}. Nothing to do.")
+            return
 
-        log.info(f"Optimizing with {self.config.n_trials} trial(s), using up to {n_parallel_jobs} parallel job(s).")
-        
+        # parallelism cannot exceed ‘remaining’
+        n_parallel_jobs = len(self.available_gpus) or 1
+        n_parallel_jobs = min(n_parallel_jobs, remaining)
+
+        log.info(f"Resuming study: {finished_trials} finished, "
+                 f"running {remaining} more to reach {desired_total}. "
+                 f"Using up to {n_parallel_jobs} parallel job(s).")
+
         study.optimize(
             self._safe_train,
-            n_trials=self.config.n_trials,
-            n_jobs=n_parallel_jobs, 
+            n_trials=remaining,
+            n_jobs=n_parallel_jobs,
         )
-
-        log.info("HPO finished.")
-        log.info(f"Best trial number: {study.best_trial.number}")
-        log.info(f"Best trial value: {study.best_trial.value}")
-        log.info(f"Best params: {study.best_trial.params}")
 
         # 3) Save results
         # Consider making output paths configurable via BHOConfig
