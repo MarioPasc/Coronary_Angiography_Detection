@@ -51,18 +51,8 @@ The module includes submodules for distinct transformations:
 - **Connected Components Analysis (`connected_components.py`):** Includes functions for extracting, coloring, and filtering connected components by area.
 - **Format Standardization (`format_standarization.py`):** Converts image file formats by re-saving images with the correct extension using OpenCV.
 
-### 4. Detection Task Utilities
 
-This submodule provides utility functions specifically for object detection tasks. The codebase was originally derived from the [torchvision reference module for detection](https://github.com/pytorch/vision/tree/main/references/detection) and has been modified to incorporate additional functionalities.
-
-Key enhancements include:
-- Addition of a global `DEBUG` flag in scripts for enabling debug print statements.
-- Functionality in `engine.py` to save images and their predicted bounding boxes to a JSON file within the `evaluator`.
-- Implementation of an `early_stopping.py` script, which provides a simple loss-based early stopping mechanism, along with best checkpoint saving and loading capabilities.
-- A `compute_validation_loss` function in `engine.py` to calculate validation loss, as detection models typically only return losses during training. This is achieved by temporarily setting the model to `train()` mode within a `torch.no_grad()` context.
-
-
-### 5. Optimization Module
+### 4. Optimization Module
 
 The Optimization Module is dedicated to hyperparameter optimization (HPO) for object detection models, focusing on YOLO architectures. It provides a configurable framework for systematically searching for optimal hyperparameter sets to improve model performance. The module supports multiple HPO strategies and is designed for scalability and robust experiment management.
 
@@ -89,3 +79,8 @@ Key submodules and functionalities include:
         -   Parses the configuration file.
         -   Selects and initializes the appropriate optimizer (`BayesianHyperparameterOptimizer` or `UltralyticsESTuner`) based on the configuration.
         -   Manages GPU resources and launches the optimization process.
+
+- **Usage**. To use this module for HPO tuning of any YOLO-based model (YOLOv8, YOLOv9, YOLOv10, etc.) you may create a custom configuration file (see examples in `Coronary_Angiography_Detection/ICA_Detection/optimization/cfg/files/picasso/yaml/`) and run the following line from your conda environment-activated terminal:
+```bash
+run_optimization --config [config file path] --gpu-ids [gpu ids to use (e.g., 0,1,2)]
+```
