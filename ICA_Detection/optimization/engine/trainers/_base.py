@@ -17,6 +17,7 @@ import time
 import traceback
 from pathlib import Path
 from typing import Any, ClassVar, Dict, Optional
+import yaml
 
 import optuna
 import torch
@@ -169,3 +170,73 @@ class BaseTrainer:
             del locals()["model"]  # make sure gc collects
             torch.cuda.empty_cache()
             gc.collect()
+
+class KFoldTrainer:
+    """
+    Much simpler than `BaseTrainer`: no Optuna, no GPU lock;
+    just run one training session with a fully-specified args dict.
+    """
+
+    def __init__(self, model_cls: Any, args: Dict[str, Any]) -> None:
+        """
+        Parameters
+        ----------
+        model_cls
+            Constructor of the YOLO-family model to use (e.g. DCA_YOLO or YOLO).
+        args
+            Final keyword-arguments that will be sent to ``model.train(**args)``.
+            Caller must have *already* injected/overridden things like
+            ``data``, ``project``, ``name`` and ``device``.
+        """
+        self.model_cls = model_cls
+        self.args = args
+        self.logger = LOGGER
+
+    # ------------------------- helpers ----------------------------------- #
+    @staticmethod
+    def load_args_yaml(path: Path) -> Dict[str, Any]:
+        """Load a YAML file into a plain dict (no validation)."""
+        with open(path, "r", encoding="utf-8") as fh:
+            return yaml.safe_load(fh)
+
+    # ------------------------- public API --------------------------------- #
+    def train(self) -> Dict[str, float]:
+        """
+        Run training once and return a small metrics dict.
+
+        Returns
+        -------
+        dict
+            ``{precision, recall, f1_score, mAP50, mAP50_95, elapsed}``
+        """
+        start = time.time()
+        device: str = self.args.get("device", "cpu")
+
+        # 1) Instantiate model and move to device
+        model_path = self.args.get("model")
+        model = self.model_cls(model_path)
+        model.model.to(device)                                  # type: ignore[attr-defined]
+        self.logger.info("[KFoldTrainer] Model initialised on %s.", device)
+
+        # 2) Fire training
+        model.train(**self.args)
+
+        # 3) Gather metrics
+        m = model.metrics.box                                   # type: ignore[attr-defined]
+        precision, recall = m.mp, m.mr
+        map50, map50_95 = m.map50, m.map
+        f1 = (2 * precision * recall) / (precision + recall) if precision + recall else 0.0
+        elapsed = time.time() - start
+
+        self.logger.info(
+            "[KFoldTrainer] Finished: F1=%.4f  (precision=%.4f, recall=%.4f, mAP50=%.4f)  time=%.1fs",
+            f1, precision, recall, map50, elapsed,
+        )
+        return {
+            "precision": precision,
+            "recall": recall,
+            "f1_score": f1,
+            "mAP50": map50,
+            "mAP50_95": map50_95,
+            "elapsed": elapsed,
+        }

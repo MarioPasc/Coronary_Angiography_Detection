@@ -61,10 +61,10 @@ def run_pipeline(
 # ------------------------------- CLI --------------------------------- #
 # --------------------------------------------------------------------- #
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Run full K-fold dataset pipeline.")
+    ap = argparse.ArgumentParser(description="Create K-Fold dataset splits for CADICA YOLO.")
     ap.add_argument("--meta", required=True, type=Path, help="original metadata JSON")
     ap.add_argument("--out", required=True, type=Path, help="output root directory")
-    ap.add_argument("--k", type=int, default=5)
+    ap.add_argument("--k", type=int, default=3)
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 

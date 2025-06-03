@@ -22,7 +22,7 @@ source activate ica
 # Define the path to your scripts and config file
 SCRIPT_DIR="/mnt/home/users/tic_163_uma/mpascual/fscratch/repos/Coronary_Angiography_Detection/scripts/dataset_generation"
 PYTHON_SCRIPT="${SCRIPT_DIR}/generate_dataset.py"
-CONFIG_FILE="$./config.yaml"
+CONFIG_FILE=""
 
 # Print some information to the log
 echo "Starting dataset generation script..."
