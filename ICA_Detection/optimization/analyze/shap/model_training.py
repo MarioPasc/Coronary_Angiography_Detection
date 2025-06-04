@@ -39,7 +39,7 @@ def train_and_save_models(
 
     for family in ("yolo", "dca_yolo"):
         for size in MODEL_SIZES:
-            subset = df[(df["model_family"] == family) & (df["size"] == size)]
+            subset = (df[(df["model_family"] == family) & (df["size"] == size)].reset_index(drop=True))          # guarantees contiguous ordering
             if subset.empty:
                 LOGGER.warning("No trials for %s-%s – skipped", family, size)
                 continue
@@ -47,6 +47,7 @@ def train_and_save_models(
             X = subset[HP_COLS].copy()
             y = subset["f1_score"].astype(float)
 
+            # Cast categorical(s) – notably 'optimizer' from Ultralytics trials
             for col in cat_features:
                 X[col] = X[col].astype("category")
 

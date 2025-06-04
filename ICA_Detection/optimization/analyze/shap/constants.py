@@ -24,6 +24,20 @@ HP_COLS = [
     "dfl",
 ]
 
+DICT_HYPERPARAMETERS = {
+    "optimizer": "Optimizer",
+    "batch": "Batch",
+    "lr0": "Initial LR",
+    "lrf": "Final LR",
+    "momentum": "Momentum",
+    "weight_decay": "Weight Decay",
+    "warmup_epochs": "Warmup Epochs",
+    "warmup_momentum": "Warmup Momentum",
+    "box": "Box Loss",
+    "cls": "Cls Loss",
+    "dfl": "Distribution Focal Loss",
+}
+
 METRIC_COLS = [
     "f1_score",
     "precision",

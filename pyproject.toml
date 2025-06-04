@@ -34,7 +34,11 @@ dependencies = [
   "types-requests",
   "types-PyYAML",
   "pycocotools",
-  "requests"
+  "requests",
+  # shap
+  # lightgbm
+  # pyarrow
+  # fastparquet
 ]
 description = ""
 name = "ICA_Detection"
@@ -47,6 +51,7 @@ Homepage = "https://github.com/MarioPasc/Coronary_Angiography_Detection"
 
 [project.scripts] # Add this section
 run_optimization = "ICA_Detection.optimization.utils.cli:main"
+run_kfoldval_optimization = "ICA_Detection.optimization.engine.kfold_validation.engine:cli"
 
 
 [tool.setuptools.packages.find]

@@ -1,0 +1,7 @@
+base_dir:        /media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica
+kfold_dir:       /media/hddb/mario/data/COMBINED/tasks/stenosis_detection/kfold
+gpu_ids:         [0]          # or [0]
+out:             /home/mariopascual/Projects/CADICA/research/tests/cadica/kfold_metrics.csv
+workspace_dir:   ./kfold_results #/home/mariopascual/Projects/CADICA/research/tests/cadica   # optional
+remove_weights:  false
+verbose:         true

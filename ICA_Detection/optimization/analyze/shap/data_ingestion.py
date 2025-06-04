@@ -154,37 +154,79 @@ def _row_to_dict(r: TrialRow) -> Dict[str, float | int | str | None]:
 
 def _collect_ultralytics_rows(opt_dir: Path, family: str, size: str) -> List[TrialRow]:
     rows: List[TrialRow] = []
-    ultra_root = opt_dir / "ultralytics_es"
+    ultra_root = _find_ultra_root(opt_dir)
+    print(f"Ultralytics root: {ultra_root}")
+    if ultra_root is None:
+        LOGGER.warning("Cannot locate Ultralytics train folders in %s", opt_dir)
+        return rows
+
     if not ultra_root.exists():
         LOGGER.warning("Missing %s – skipped", ultra_root)
         return rows
 
     for train_dir in sorted(d for d in ultra_root.iterdir() if d.is_dir() and d.name.startswith("train")):
+        print(f"Processing {train_dir}")
         trial_id = train_dir.name
+        if trial_id == "train": trial_id = "0"
         args_f   = train_dir / "args.yaml"
         res_f    = train_dir / "results.csv"
         if not (args_f.exists() and res_f.exists()):
             LOGGER.debug("Missing files for %s", train_dir)
             continue
 
-        params = _filter_hp(yaml.safe_load(args_f))
+        print(f"Trial ID: {trial_id}, Args: {args_f}, Results: {res_f}")
+        params = _filter_hp(yaml.safe_load(args_f.read_text()))
 
+        # ---------------- metrics ---------------- #
         df_res = pd.read_csv(res_f)
         last   = df_res.iloc[-1]
+
+        # Ultralytics results often store precision / recall but not F1.
+        pr = last.get("metrics/precision(B)")
+        rc = last.get("metrics/recall(B)")
+        f1 = last.get("metrics/f1")  # some versions keep this
+        if (pd.isna(f1) or f1 is None) and pr is not None and rc is not None:
+            f1 = 2 * pr * rc / (pr + rc + 1e-9)
+
+        # Wall-clock seconds: try args.yaml → best_hyperparameters.yaml
+        seconds = yaml.safe_load(args_f.read_text()).get("time")
+        if seconds is None:
+            seconds = _ultra_seconds(ultra_root / "best_hyperparameters.yaml")
+
         metrics = {
-            "f1_score":      last.get("metrics/f1"),
-            "precision":     last.get("metrics/precision"),
-            "recall":        last.get("metrics/recall"),
-            "mAP50":         last.get("metrics/mAP50"),
-            "mAP50_95":      last.get("metrics/mAP50-95"),
+            "f1_score":      f1,
+            "precision":     pr,
+            "recall":        rc,
+            "mAP50":         last.get("metrics/mAP50(B)"),
+            "mAP50_95":      last.get("metrics/mAP50-95(B)"),
             "last_epoch":    int(last.get("epoch", -1)),
-            "execution_time": _ultra_seconds(ultra_root / "best_hyperparameters.yaml"),
+            "execution_time": seconds,
             "memory_before": None,
             "memory_after":  None,
         }
-        rows.append(TrialRow(family, size, "ultralytics_es",
-                             trial_id, params, metrics))
+        # ---------------- append row ---------------- #
+        rows.append(
+            TrialRow(
+                model_family=family,
+                size=size,
+                optimiser="ultralytics_es",
+                trial_id=trial_id,
+                params=params,
+                metrics=metrics,
+            )
+        )
     return rows
+
+def _find_ultra_root(opt_dir: Path) -> Path | None:
+    """Return the 'root' that contains many trainXX folders."""
+    if (opt_dir / "train").is_dir():                  # one-level layout
+        return opt_dir
+    # fallback: first folder that has >10 'train\d+' dirs
+    candidates = [p for p in opt_dir.iterdir() if p.is_dir()]
+    for c in candidates:
+        if sum(d.name.startswith("train") for d in c.iterdir()) > 10:
+            return c
+    return None
 
 
 def _ultra_seconds(yaml_f: Path) -> float | None:
