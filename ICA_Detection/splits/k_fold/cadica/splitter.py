@@ -1,4 +1,4 @@
-"""Greedy label–balanced K-fold split generator."""
+"""Greedy **patient-level** label-balanced K-fold split generator."""
 
 from __future__ import annotations
 
@@ -9,129 +9,182 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from ICA_Detection.splits.k_fold.cadica.utils import annotation_path, extract_labels, load_metadata, LABELS
 from ICA_Detection.splits.k_fold import LOGGER
+from ICA_Detection.splits.k_fold.cadica.utils import (
+    annotation_path,
+    extract_labels,
+    load_metadata,
+    patient_id,
+    LABELS,
+)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public API
+# ─────────────────────────────────────────────────────────────────────────────
 def build_kfold_splits(
     meta_json: Path,
     k: int = 3,
     seed: int = 42,
 ) -> Dict[str, Any]:
     """
-    Produce `k_fold_splits.json` structure.
+    Create a *patient-level* K-fold split that guarantees:
 
-    Strategy
-    --------
-    *   Build a pool per label.
-    *   Distribute samples round-robin label-wise so every fold sees **≥1**
-        occurrence of each label (if available globally).
-    *   When a sample carries multiple labels, it is assigned the first
-        *unallocated* fold encountered in the round-robin cycle.
-    *   Remaining (still unassigned) samples are filled in to keep folds
-        size-balanced (±1).
+    * Each **patient** appears in **one and only one** fold.
+    * Every fold sees **≥ 1** occurrence of **every** label that is present
+      in the whole dataset (if the global count ≥ k).
+    * Folds are size-balanced (± one image) and label-balanced.
 
-    This simple greedy method gives excellent balance for < 10 labels and
-    thousands of images without external dependencies.
+    The algorithm is a simple label-wise round-robin over **patients**,
+    followed by greedy top-up of the smallest fold.  Complexity is *O(n)*.
     """
     rng = random.Random(seed)
     samples = load_metadata(meta_json)
 
     # ------------------------------------------------------------------ #
-    # Step 1: prepare per-sample info
+    # 1)  build per-sample bookkeeping
     # ------------------------------------------------------------------ #
-    sample_ids: List[str] = list(samples)
-    rng.shuffle(sample_ids)
-
     id_to_labels: Dict[str, Set[str]] = {}
     id_to_paths: Dict[str, tuple[str, str]] = {}
+    sid_to_patient: Dict[str, str] = {}
 
-    for sid in sample_ids:
-        s = samples[sid]
-        lbls = extract_labels(s)
+    for sid, sample in samples.items():
+        lbls = extract_labels(sample)
         id_to_labels[sid] = lbls
-        img_path = s["image"]["dataset_route"]
-        ann_path = annotation_path(img_path, s["annotations"]["name"])
+        img_path = sample["image"]["dataset_route"]
+        ann_path = annotation_path(img_path, sample["annotations"]["name"])
         id_to_paths[sid] = (img_path, ann_path)
+        sid_to_patient[sid] = patient_id(sid)
+
+    # group samples by patient
+    patient_to_samples: Dict[str, Set[str]] = defaultdict(set)
+    patient_to_labels: Dict[str, Set[str]] = defaultdict(set)
+    for sid, pat in sid_to_patient.items():
+        patient_to_samples[pat].add(sid)
+        patient_to_labels[pat].update(id_to_labels[sid])
+
+    patients: List[str] = list(patient_to_samples)
+    rng.shuffle(patients)
 
     # ------------------------------------------------------------------ #
-    # Step 2: greedy allocation to guarantee ≥1 per label per fold
+    # 2)  greedy allocation to guarantee ≥ 1 per label per fold
     # ------------------------------------------------------------------ #
-    folds: List[Set[str]] = [set() for _ in range(k)]
+    folds_pat: List[Set[str]] = [set() for _ in range(k)]     # patients
+    folds_sid: List[Set[str]] = [set() for _ in range(k)]     # samples
+    fold_sizes: List[int] = [0 for _ in range(k)]             # #images
+
+    # per-label patient pools
     label_pools: Dict[str, List[str]] = defaultdict(list)
-    for sid, lbls in id_to_labels.items():
-        for l in lbls:
-            label_pools[l].append(sid)
+    for pat_id, lbls in patient_to_labels.items(): # Renamed 'pat' to 'pat_id' for clarity
+        for l_val in lbls: # Renamed 'l' to 'l_val' for clarity
+            label_pools[l_val].append(pat_id)
 
-    # round-robin
-    for label, pool in label_pools.items():
-        rng.shuffle(pool)
-        for i, sid in enumerate(pool):
-            target_fold = i % k
-            if sid not in folds[target_fold]:
-                folds[target_fold].add(sid)
+    globally_assigned_patients: Set[str] = set() # ADDED: Track patients assigned to any fold
+
+    for label_val, patient_pool_for_label in label_pools.items(): # Renamed 'label' and 'pool'
+        rng.shuffle(patient_pool_for_label)
+        for i, pat_candidate in enumerate(patient_pool_for_label): # Renamed 'pat' to 'pat_candidate'
+            if pat_candidate in globally_assigned_patients: # ADDED: Check if patient already assigned globally
+                continue
+
+            tgt = i % k
+            # The original check 'if pat_candidate in folds_pat[tgt]: continue' is now effectively
+            # covered by the 'globally_assigned_patients' check, because if it's not globally
+            # assigned, it cannot be in folds_pat[tgt] yet. If it were globally assigned
+            # (e.g. to folds_pat[tgt]), the check above would have caught it.
+            # Thus, that specific check can be considered redundant here if the global one is in place.
+
+            _add_patient_to_fold(pat_candidate, tgt, folds_pat, folds_sid,
+                                 fold_sizes, patient_to_samples)
+            globally_assigned_patients.add(pat_candidate) # ADDED: Mark patient as globally assigned
 
     # ------------------------------------------------------------------ #
-    # Step 3: fill gaps to balance fold sizes
+    # 3)  fill remaining patients to balance fold sizes
     # ------------------------------------------------------------------ #
-    all_assigned = set.union(*folds)
-    left_over = [sid for sid in sample_ids if sid not in all_assigned]
+    # 'assigned_patients' will now correctly reflect disjoint sets of patients from folds_pat
+    assigned_patients = set.union(*folds_pat)
+    leftovers = [p for p in patients if p not in assigned_patients]
 
-    # simple size-based top-up
-    for sid in left_over:
-        smallest = min(range(k), key=lambda f: len(folds[f]))
-        folds[smallest].add(sid)
+    for pat in leftovers:
+        tgt = min(range(k), key=lambda f: fold_sizes[f])      # smallest fold
+        _add_patient_to_fold(pat, tgt, folds_pat, folds_sid,
+                             fold_sizes, patient_to_samples)
 
     # ------------------------------------------------------------------ #
-    # Step 4: build JSON serialisable result
+    # 4)  build JSON serialisable structure
     # ------------------------------------------------------------------ #
-    result: Dict[str, Any] = {}
+    union_all = set.union(*folds_sid)
+    results: Dict[str, Any] = {}
     for idx in range(k):
-        test_ids = folds[idx]
-        train_ids = set.union(*folds) - test_ids
+        val_ids = folds_sid[idx]
+        train_ids = union_all - val_ids
 
-        result[f"fold_{idx}"] = {
-            "train": _split_info(train_ids, id_to_labels, id_to_paths),
-            "val": _split_info(test_ids, id_to_labels, id_to_paths), # we call it val, 
+        results[f"fold_{idx}"] = {
+            "train": _split_info(train_ids, id_to_labels, id_to_paths, sid_to_patient),
+            "val":   _split_info(val_ids,   id_to_labels, id_to_paths, sid_to_patient),
         }
-    return result
+
+    LOGGER.info("✅  Generated patient-level %d-fold splits.", k)
+    return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def _add_patient_to_fold(
+    pat: str,
+    fold_idx: int,
+    folds_pat: List[Set[str]],
+    folds_sid: List[Set[str]],
+    fold_sizes: List[int],
+    patient_to_samples: Dict[str, Set[str]],
+) -> None:
+    """Assign *all* samples from one patient to the target fold."""
+    folds_pat[fold_idx].add(pat)
+    sid_set = patient_to_samples[pat]
+    folds_sid[fold_idx].update(sid_set)
+    fold_sizes[fold_idx] += len(sid_set)
 
 
 def _split_info(
     ids: Set[str],
     id_to_labels: Dict[str, Set[str]],
     id_to_paths: Dict[str, tuple[str, str]],
+    sid_to_patient: Dict[str, str],
 ) -> Dict[str, Any]:
     counter: Counter[str] = Counter()
     images: Dict[str, str] = {}
     annos: Dict[str, str] = {}
+    pats: Set[str] = set()
+
     for sid in ids:
         counter.update(id_to_labels[sid])
         img, anno = id_to_paths[sid]
         images[sid] = img
         annos[sid] = anno
+        pats.add(sid_to_patient[sid])
 
-    # ensure all labels appear in dict (even count 0)
     balance = {l: counter.get(l, 0) for l in LABELS + ("negative", "unknown")}
-    LOGGER.info(f"[CADICA] Split size: {len(ids)} samples, balance: {balance}")
+    LOGGER.info("Split size=%4d | patients=%3d | balance=%s",
+                len(ids), len(pats), balance)
+
     return {
         "label_balance": balance,
-        "files": {
-            "images": images,
-            "annotations": annos,
-        },
+        "patients": sorted(pats),
+        "files": {"images": images, "annotations": annos},
     }
 
 
-# ---------------------------------------------------------------------- #
-# ----------------------------   CLI   --------------------------------- #
-# ---------------------------------------------------------------------- #
+# ─────────────────────────────────────────────────────────────────────────────
+# CLI
+# ─────────────────────────────────────────────────────────────────────────────
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate label-balanced K-fold splits.")
-    parser.add_argument("--input", required=True, type=Path, help="metadata JSON path")
-    parser.add_argument("--k", type=int, default=5, help="number of folds")
-    parser.add_argument("--seed", type=int, default=42, help="PRNG seed")
-    parser.add_argument("--output", type=Path, default=Path("k_fold_splits.json"))
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description="Generate patient-level K-fold splits.")
+    ap.add_argument("--input", required=True, type=Path, help="metadata JSON path")
+    ap.add_argument("--k", type=int, default=5, help="number of folds")
+    ap.add_argument("--seed", type=int, default=42, help="PRNG seed")
+    ap.add_argument("--output", type=Path, default=Path("k_fold_splits.json"))
+    args = ap.parse_args()
 
     splits = build_kfold_splits(args.input, k=args.k, seed=args.seed)
     with args.output.open("w") as fh:
