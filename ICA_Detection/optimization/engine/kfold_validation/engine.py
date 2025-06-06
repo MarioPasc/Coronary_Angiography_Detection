@@ -322,7 +322,7 @@ def _run(cfg: EngineCfg) -> None:
     # ---- 5. spawn workers ---------------------------------------------
     manager = Manager()
     q_metrics = manager.Queue()
-    gpu_lock = manager.Lock() if len(gpu_ids) == 1 else None
+    gpu_lock = manager.Lock()
     procs: list[Process] = []
 
     for f_idx, fdir in enumerate(fold_dirs):
