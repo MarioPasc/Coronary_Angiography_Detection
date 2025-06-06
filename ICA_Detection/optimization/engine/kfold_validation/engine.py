@@ -161,10 +161,13 @@ def _worker(
     #os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     import torch, os
-    LOGGER.info(">>> CUDA_VISIBLE_DEVICES = ", os.environ.get("CUDA_VISIBLE_DEVICES", "(not set)"))
-    LOGGER.info(">>> torch.cuda.device_count() =", torch.cuda.device_count())
-    for i in range(torch.cuda.device_count()):
-        LOGGER.info(f"    - GPU {i}: {torch.cuda.get_device_name(i)}")
+    visdev = os.environ.get("CUDA_VISIBLE_DEVICES", "(not set)")
+    devices = torch.cuda.device_count()
+    LOGGER.info(f">>> CUDA_VISIBLE_DEVICES = {visdev}")
+    LOGGER.info(f">>> torch.cuda.device_count() = {devices}")
+    for i in range(devices):
+        gpu = torch.cuda.get_device_name(i)
+        LOGGER.info(f"    - GPU {i}: {gpu}")
 
 
     for task in tasks:
