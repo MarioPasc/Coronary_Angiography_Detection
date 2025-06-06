@@ -169,9 +169,14 @@ def _worker(
         gpu = torch.cuda.get_device_name(i)
         LOGGER.info(f"    - GPU {i}: {gpu}")
 
+    # ────── Acquire lock BEFORE any model initialization ──────
+    if gpu_lock:
+        gpu_lock.acquire()
+
     from datetime import datetime
     LOGGER.info(f"[fold_{fold_idx}] PID={os.getpid()} starting training at {datetime.now().isoformat()}")
 
+    # Now that we hold the lock, no other fold can move a model to CUDA until we release
     for task in tasks:
         row = task.row
         out_root: Path = task.out_root
@@ -184,7 +189,7 @@ def _worker(
             gpu_id=gpu_id,
             project_root=out_root,
             run_name=run_name,
-            save_dir = out_root,
+            save_dir=out_root,
         )
 
         TrainerCls: Type[Union[DCAYOLOv8Trainer, UltralyticsTrainer]]
@@ -192,10 +197,9 @@ def _worker(
             DCAYOLOv8Trainer if row["model_variant"].startswith("dca_") else UltralyticsTrainer
         )
 
+        # This line will (inside __init__) construct the model and move it to cuda:gpu_id
         kft = KFoldTrainer(TrainerCls.MODEL_CLS, args)
 
-        if gpu_lock:
-            gpu_lock.acquire()
         try:
             metrics = kft.train()
             if metrics is None:
@@ -224,26 +228,20 @@ def _worker(
                 f1_score=float("nan"),
                 mAP50=float("nan"),
                 mAP50_95=float("nan"),
-                elapsed=float("nan"),
+               elapsed=float("nan"),
                 model_variant=row["model_variant"],
-                optimizer=row["optimizer"],
+               optimizer=row["optimizer"],
                 fold=fold_idx,
                 args_path=str(row["args_path"]),
                 status="failed",
                 error_msg=str(exc),
             )
         finally:
-            if gpu_lock:
-                gpu_lock.release()
             metrics_q.put(rec)
 
-    """
-    # restore env
-    if prev_cuda is None:
-        os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-    else:
-        os.environ["CUDA_VISIBLE_DEVICES"] = prev_cuda
-    """
+   # ────── All tasks in this fold are done; now release the lock ──────
+    if gpu_lock:
+        gpu_lock.release()
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  CORE EXECUTION LOGIC extracted into a private function `_run(cfg)`      ║
