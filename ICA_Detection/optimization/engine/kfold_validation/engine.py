@@ -169,6 +169,8 @@ def _worker(
         gpu = torch.cuda.get_device_name(i)
         LOGGER.info(f"    - GPU {i}: {gpu}")
 
+    from datetime import datetime
+    LOGGER.info(f"[fold_{fold_idx}] PID={os.getpid()} starting training at {datetime.now().isoformat()}")
 
     for task in tasks:
         row = task.row
