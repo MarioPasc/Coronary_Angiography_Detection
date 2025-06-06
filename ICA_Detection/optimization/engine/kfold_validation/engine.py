@@ -157,8 +157,8 @@ def _worker(
     gpu_lock=None,
 ) -> None:
     """Run all tasks for a single fold on one GPU."""
-    prev_cuda = os.environ.get("CUDA_VISIBLE_DEVICES")
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    #prev_cuda = os.environ.get("CUDA_VISIBLE_DEVICES")
+    #os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     for task in tasks:
         row = task.row
@@ -225,12 +225,13 @@ def _worker(
                 gpu_lock.release()
             metrics_q.put(rec)
 
+    """
     # restore env
     if prev_cuda is None:
         os.environ.pop("CUDA_VISIBLE_DEVICES", None)
     else:
         os.environ["CUDA_VISIBLE_DEVICES"] = prev_cuda
-
+    """
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  CORE EXECUTION LOGIC extracted into a private function `_run(cfg)`      ║
