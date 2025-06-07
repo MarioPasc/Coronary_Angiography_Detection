@@ -153,7 +153,7 @@ class UltralyticsESTuner:
             data=self.cfg.data,
             epochs=self.cfg.epochs,
             imgsz=self.cfg.img_size,
-            device=0 if gpu_id is not None else "cpu",
+            device=gpu_id if gpu_id is not None else "cpu",
             project=str(Path(self.cfg.output_folder)),
             name="ultralytics_es",
             verbose=True,
