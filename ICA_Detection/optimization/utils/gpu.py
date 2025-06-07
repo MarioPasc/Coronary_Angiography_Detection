@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, torch, logging
+import os, logging
 from typing import Optional
 LOGGER = logging.getLogger("ICA_Detection.trainers")
 
@@ -13,8 +13,13 @@ def acquire_gpu(self) -> Optional[int]:
         del self.available_gpus[0]
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    import torch
     torch.cuda.set_device(0)                 # logical id 0 after masking
-    LOGGER.info("Using physical GPU %d (logical 0).", gpu_id)
+    LOGGER.info("[Acquire GPU]: CUDA_VISIBLE_DEVICES=%s  torch sees %d device(s)",
+             os.environ["CUDA_VISIBLE_DEVICES"],
+             torch.cuda.device_count())
+
+    LOGGER.info("[Acquire GPU]: Using physical GPU %d (logical 0).", gpu_id)
     return gpu_id
 
 def release_gpu(self, gpu_id: Optional[int]) -> None:
@@ -22,4 +27,4 @@ def release_gpu(self, gpu_id: Optional[int]) -> None:
         return
     with self.gpu_lock:
         self.available_gpus.append(gpu_id)
-    LOGGER.info("Released GPU %d.", gpu_id)
+    LOGGER.info("[Acquire GPU]: Released GPU %d.", gpu_id)
