@@ -94,7 +94,7 @@ def generate_plots(
     dca_res  = [r for r in results if     r.model.startswith("dca_")]
 
     # composite figure ────────────────────────────────────────────── #
-    fig, axes = plt.subplots(1, 2, sharey=True, figsize=(12, 4))
+    fig, axes = plt.subplots(1, 2, sharey=True, figsize=(16, 8))
     panel_cfgs: List[Tuple[str, Iterable[OptimisationResult]]] = [
         ("a.", yolo_res), ("b.", dca_res)
     ]
@@ -309,7 +309,7 @@ def _populate_panel(ax: plt.Axes,
 
         ax.step(frontier_x_ext, frontier_y_ext, where="post",
                 color=PARETO_COLOR, linewidth=2,
-                label="Pareto frontier", zorder=4)
+                label="Pareto frontier", zorder=4, linestyle="-")
 
         ax.fill_between(frontier_x_ext, frontier_y_ext, y2=ymin,
                         step="post", color=PARETO_COLOR,
@@ -324,7 +324,8 @@ def _populate_panel(ax: plt.Axes,
     ax.set_ylim(ymin, ymax)
     ax.set_ylabel("F1-score", fontsize=17) if panel_label == "a." else None
     ax.set_xlabel(r"Speed-up factor ($log_2$)", fontsize=17)
-    ax.text(-0.12, 1.05, panel_label, transform=ax.transAxes,
+    ax.tick_params(axis='both', labelsize=14)  # Increased x and y-tick label size
+    ax.text(-0.03, 1.03, panel_label, transform=ax.transAxes,
             fontsize=20, fontweight="bold")
 
     ax.grid(True, **GRID_STYLE)
@@ -342,8 +343,8 @@ def _build_joint_legends(fig: plt.Figure) -> None:
     pareto_handle = plt.Line2D([], [], color=PARETO_COLOR, linewidth=2,
                                label="Pareto frontier")
     fig.legend(handles=colour_handles + [pareto_handle],
-               loc="lower center", bbox_to_anchor=(0.5, 0.02),
-               ncol=len(colour_handles) + 1, frameon=False)
+               loc="lower center", bbox_to_anchor=(0.5, 0.06),
+               ncol=len(colour_handles) + 1, frameon=False, fontsize=17)
 
     # shape legend (models)  (top)
     marker_handles = [
@@ -354,8 +355,8 @@ def _build_joint_legends(fig: plt.Figure) -> None:
         for size in ["v8s", "v8m", "v8l"]
     ]
     fig.legend(handles=marker_handles,
-               loc="upper center", bbox_to_anchor=(0.5, 0.98),
-               ncol=len(marker_handles), frameon=False)
+               loc="upper center", bbox_to_anchor=(0.5, 0.95),
+               ncol=len(marker_handles), frameon=False, fontsize=17)
 
 # ─────────────────────────────  CLI  ─────────────────────────────────────── #
 

@@ -265,12 +265,13 @@ def violin_panel(ax: plt.Axes,
         y_max = df[par].max()
         ax.text(x_center, y_max * 1.1,
                 f"{par}{star}", ha="center", va="bottom",
-                fontsize=9, fontweight="bold")
+                fontsize=15, fontweight="bold")
 
     ax.set_xlim(-1, row_gap * len(param_names) - 0.5)
     ax.set_xticks([])
-    ax.set_ylabel("Value (log-scale)")
+    ax.set_ylabel("Value (log-scale)",  fontsize=17)
     ax.set_yscale("log")
+    ax.tick_params(axis='y', labelsize=14)  # Increased y-tick label size
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(True, linestyle=":", linewidth=0.5, alpha=0.5)
 
@@ -323,8 +324,9 @@ def umap_panel(ax: plt.Axes,
                                    alpha=0.15, zorder=2)
             ax.add_patch(ell)
 
-    ax.set_xlabel("UMAP-1")
-    ax.set_ylabel("UMAP-2")
+    ax.set_xlabel("UMAP-1", fontsize=17)
+    ax.set_ylabel("UMAP-2", fontsize=17)
+    ax.tick_params(axis='both', labelsize=14)  # Increased x and y-tick label size
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(True, linestyle=":", linewidth=0.5, alpha=0.5)
 
@@ -343,12 +345,13 @@ def build_one_figure(df_model: pd.DataFrame,
 
     # panel A
     violin_panel(axA, df_model, TOP_PARAMS)
-    axA.set_title("a.", loc="left", fontsize=12, pad=2)
+    axA.text(-0.03, 1.03, "a.", transform=axA.transAxes,
+            fontsize=20, fontweight="bold")
 
     # panel B
     umap_panel(axB, df_model, TOP_PARAMS)
-    axB.set_title("b.", loc="left", fontsize=12, pad=2)
-
+    axB.text(-0.03, 1.03, "b.", transform=axB.transAxes,
+            fontsize=20, fontweight="bold")
     # legends -------------------------------------------------------------- #
     optimiser_names = list(_OPTIMISER_COLOURS.keys())
     colour_handles = [
@@ -372,13 +375,13 @@ def build_one_figure(df_model: pd.DataFrame,
     if "dca" in out_path.stem: 
         # colours legend – just below shapes
         fig.legend(colour_handles, colour_labels, ncol=len(colour_handles),
-                loc="upper center", bbox_to_anchor=(0.5, 0.03),
-                frameon=False, fontsize=9)
+                loc="upper center", bbox_to_anchor=(0.5, 0.01),
+                frameon=False, fontsize=17)
     else:
             # shapes legend – top centre
         fig.legend(shape_handles, shape_labels, ncol=3,
-                loc="upper center", bbox_to_anchor=(0.5, 1.08),
-                frameon=False, fontsize=9)
+                loc="upper center", bbox_to_anchor=(0.5, 1.12),
+                frameon=False, fontsize=17)
     
     axB.spines[['right', 'top']].set_visible(False)
 
@@ -396,7 +399,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Hyper-parameter decision plots")
     ap.add_argument("--base-dir", required=True, type=Path,
                     help="Root dir with yolov8*/ and dca_yolov8*/ sub-dirs")
-    ap.add_argument("--out-dir", required=True, type=Path,
+    ap.add_argument("--out", required=True, type=Path,
                     help="Destination directory for the figures")
     ap.add_argument("--fmt", default="pdf",
                     help="Output format: pdf / png / …")
@@ -428,7 +431,10 @@ def main() -> None:
     df_yolo = elite[base_mask]
     df_dca = elite[~base_mask]
 
-    out_root = args.out_dir
+    out_root = args.out / "hyperparameter_study"
+    
+    import os
+    os.makedirs(out_root, exist_ok=True)
     build_one_figure(df_yolo, out_root / "hyperparams_yolov8", args.fmt)
     build_one_figure(df_dca, out_root / "hyperparams_dca_yolov8", args.fmt)
 
