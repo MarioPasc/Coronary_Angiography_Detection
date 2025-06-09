@@ -123,11 +123,13 @@ class UltralyticsESTuner:
         config: BHOConfig,
         gpu_lock: Any,  # multiprocessing.Manager().Lock
         available_gpus: Any,
+        selected_gpu: Optional[int] = None,
     ) -> None:
         self.cfg = config
         self.gpu_lock = gpu_lock
         self.available_gpus = available_gpus  # type: ignore[assignment]
         self.config = config
+        self.selected_gpu = selected_gpu
         try:
             self.model_cls = _MODEL_MAP[config.model_source]
         except KeyError:  # pragma: no cover
@@ -140,7 +142,10 @@ class UltralyticsESTuner:
     def optimize(self) -> None:
         gpu_id: Optional[int] = None
         try:
-            gpu_id = acquire_gpu(self)
+            if self.selected_gpu is None:
+                gpu_id = acquire_gpu(self)
+            else:
+                gpu_id = self.selected_gpu
             self._tune(gpu_id)
         finally:
             release_gpu(self, gpu_id)
@@ -153,7 +158,7 @@ class UltralyticsESTuner:
             data=self.cfg.data,
             epochs=self.cfg.epochs,
             imgsz=self.cfg.img_size,
-            device= 0 if gpu_id is not None else "cpu",
+            device= gpu_id if gpu_id is not None else "cpu",
             project=str(Path(self.cfg.output_folder)),
             name="ultralytics_es",
             verbose=True,

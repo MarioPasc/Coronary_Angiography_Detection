@@ -72,8 +72,9 @@ def run_hpo(config_path: str, gpu_ids_str: Optional[str] = None) -> None:
 
     optimizer: Union[UltralyticsESTuner, BayesianHyperparameterOptimizer]
     if cfg.sampler.lower() == "ultralytics_es":
+        selected_gpu: int | None = gpus_to_use[0] if gpus_to_use else None
         optimizer = UltralyticsESTuner(
-            config=cfg, gpu_lock=gpu_lock, available_gpus=available_gpus
+            config=cfg, gpu_lock=gpu_lock, available_gpus=available_gpus, selected_gpu=selected_gpu
         )
     else:
         optimizer = BayesianHyperparameterOptimizer(
