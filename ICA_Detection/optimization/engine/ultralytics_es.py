@@ -140,8 +140,7 @@ class UltralyticsESTuner:
     def optimize(self) -> None:
         gpu_id: Optional[int] = None
         try:
-            if gpu_id is None:
-                gpu_id = self.available_gpus.pop(0) if self.available_gpus else acquire_gpu(self)
+            gpu_id = acquire_gpu(self)
             self._tune(gpu_id)
         finally:
             release_gpu(self, gpu_id)
@@ -154,7 +153,7 @@ class UltralyticsESTuner:
             data=self.cfg.data,
             epochs=self.cfg.epochs,
             imgsz=self.cfg.img_size,
-            device=gpu_id if gpu_id is not None else "cpu",
+            device= 0 if gpu_id is not None else "cpu",
             project=str(Path(self.cfg.output_folder)),
             name="ultralytics_es",
             verbose=True,
