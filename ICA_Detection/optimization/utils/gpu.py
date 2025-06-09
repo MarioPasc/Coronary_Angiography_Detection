@@ -14,7 +14,6 @@ def acquire_gpu(self) -> Optional[int]:
 
     if "CUDA_VISIBLE_DEVICES" not in os.environ:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-        
     import torch
     torch.cuda.set_device(0)                 # logical id 0 after masking
     LOGGER.info("[Acquire GPU]: CUDA_VISIBLE_DEVICES=%s  torch sees %d device(s)",

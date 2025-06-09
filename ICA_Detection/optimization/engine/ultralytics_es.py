@@ -112,7 +112,23 @@ def _patch_tuner(tuner, model) -> None:
     for k in bad:
         tuner.args.__dict__.pop(k, None)
 
-
+def _logical_index(physical: int) -> str:
+    """
+    Return the correct 'cuda:<logical>' string for a physical GPU id,
+    honouring CUDA_VISIBLE_DEVICES if it is set.
+    """
+    import os 
+    mask = os.getenv("CUDA_VISIBLE_DEVICES")
+    if not mask:
+        return f"cuda:{physical}"
+    visible = [x.strip() for x in mask.split(",") if x.strip() != ""]
+    try:
+        logical = visible.index(str(physical))
+    except ValueError:
+        raise RuntimeError(
+            f"Physical GPU {physical} is not in CUDA_VISIBLE_DEVICES={mask}"
+        )
+    return f"cuda:{logical}"
 
 class UltralyticsESTuner:
     """Single-process evolutionary search using `model.tune()`."""
@@ -158,7 +174,7 @@ class UltralyticsESTuner:
             data=self.cfg.data,
             epochs=self.cfg.epochs,
             imgsz=self.cfg.img_size,
-            device= f"cuda:{gpu_id}" if gpu_id is not None else "cpu",
+            device= _logical_index(gpu_id) if gpu_id is not None else "cpu",
             project=str(Path(self.cfg.output_folder)),
             name="ultralytics_es",
             verbose=True,
