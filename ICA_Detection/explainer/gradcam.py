@@ -34,27 +34,51 @@ from ICA_Detection.explainer.registry import get_adapter_cls
 
 
 class _YOLOTarget(torch.nn.Module):
-    """Classic YOLO target for grad-cam – sum over objectness + bbox coords."""
+    """Grad-CAM target: sum of (class-score + bbox coords) for detections
+    whose confidence ≥ self.conf.  Always returns **one scalar**.
+    """
 
     def __init__(self, conf_thres: float, output_type: str = "all"):
-        """
-        output_type ∈ {"class", "box", "all"}
-        """
         super().__init__()
         self.conf = conf_thres
-        self.output_type = output_type
+        self.output_type = output_type  # "class", "box", or "all"
 
+    # -------------------------------------------------------------------------
     def forward(self, data):
-        post_result, pre_post_boxes = data
-        result = []
+        # ---------- normalise the many YOLO return styles --------------------
+        # unwrap list-of-one (Ultralytics eval mode)
+        if isinstance(data, (list, tuple)) and len(data) == 1:
+            data = data[0]
+
+        # tuple(post_nms, pre_nms_boxes)  → legacy path
+        if isinstance(data, (list, tuple)) and len(data) == 2:
+            post_result, pre_result_boxes = data
+        else:
+            # plain tensor:  (N, 6)  [xyxy, conf, cls]
+            post_result = data                             # (N, 6)
+            pre_result_boxes = post_result[..., :4]        # (N, 4)
+
+        if post_result.numel() == 0:                       # no detections at all
+            return post_result.sum() * 0.0                 # scalar, grads OK
+
+        # ---------- build a scalar loss -------------------------------------
+        loss = torch.zeros((), device=post_result.device)  # 0-dim tensor
         for i in range(post_result.size(0)):
-            if float(post_result[i].max()) >= self.conf:
-                if self.output_type in ("class", "all"):
-                    result.append(post_result[i].max())
-                if self.output_type in ("box", "all"):
-                    for j in range(4):
-                        result.append(pre_post_boxes[i, j])
-        return sum(result)
+            if float(post_result[i, 4]) < self.conf:
+                continue                                   # below threshold
+
+            if self.output_type in ("class", "all"):
+                # class confidence is column 5 in Ultralytics
+                loss = loss + post_result[i, 5]
+
+            if self.output_type in ("box", "all"):
+                loss = loss + pre_result_boxes[i, :4].sum()
+
+        # if nothing passed the threshold, keep graph alive with zero
+        if loss.detach().item() == 0.0:
+            loss = post_result[..., 4].sum() * 0.0
+
+        return loss
 
 
 # ------------------------------------------------ main class ------------------

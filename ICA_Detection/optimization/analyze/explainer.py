@@ -15,4 +15,3 @@ imagelist = model(
     img_path="/home/mpascual/research/datasets/angio/tasks/stenosis_detection/images/cadica_p42_v5_00010.png", 
     )
 
-display_images(imagelist)
