@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os, logging
 from typing import Optional
-LOGGER = logging.getLogger("ICA_Detection.trainers")
+from ICA_Detection.optimization import LOGGER
 
 def acquire_gpu(self) -> Optional[int]:
     """Return a *physical* GPU id, or None if none free."""
@@ -12,7 +12,9 @@ def acquire_gpu(self) -> Optional[int]:
         gpu_id = self.available_gpus[0]      # ListProxy always supports __getitem__
         del self.available_gpus[0]
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    if "CUDA_VISIBLE_DEVICES" not in os.environ:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+        
     import torch
     torch.cuda.set_device(0)                 # logical id 0 after masking
     LOGGER.info("[Acquire GPU]: CUDA_VISIBLE_DEVICES=%s  torch sees %d device(s)",
