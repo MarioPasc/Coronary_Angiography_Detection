@@ -60,34 +60,42 @@ ModelSize     = Literal["v8s", "v8m", "v8l"]
 class OptimisationResult:
     model: str
     optimiser: OptimiserName
-    total_seconds: float
+    total_seconds: float          # raw wall-clock time
     best_f1: float
-    speed_up: float = 1.0           # filled later
+    n_gpus: int = 3               # NEW  (defaults to 3)
+    speed_up: float = 1.0         # filled later
 
 # ─────────────────────────  PUBLIC ENTRY  ───────────────────────────────── #
 
 def generate_plots(
-    cadica_root: Path | str,
+    root: Path | str,
     plot_root:  Path | str,
     file_format: str = "pdf",
     cv_csv: Path | str | None = None,
+    gpu_csv: Path | str | None = None,       # NEW
     n_trials: int = FIRST_N_TRIALS,                 # ← NEW PARAM
 ) -> None:
     """
     Parameters
     ----------
-    cadica_root : root folder with yolov8*/ and dca_yolov8*/ sub-dirs
+    root : root folder with yolov8*/ and dca_yolov8*/ sub-dirs
     plot_root   : destination; <plot_root>/performance/ created if needed
     file_format : «pdf», «png», …
     cv_csv      : optional CSV with columns  model_variant, optimizer, f1_score
     n_trials    : analyse only the first *n* Optuna trials  (default 100)
     """
-    cadica_root = Path(cadica_root).expanduser().resolve()
+    root = Path(root).expanduser().resolve()
     out_dir     = Path(plot_root).expanduser().resolve() / "performance"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    results = _collect_all_results(cadica_root, n_trials)
+    gpu_map  = _read_gpu_map(gpu_csv)
+    results = _collect_all_results(root, n_trials)
     cv_stats = _read_cv_stats(cv_csv) if cv_csv else None
+
+    # attach GPU counts + normalise run times to 3-GPU baseline
+    for r in results:
+        r.n_gpus = gpu_map.get((r.model, r.optimiser), 3)
+        r.total_seconds *= r.n_gpus / 3          # <-- key line
 
     # split groups ────────────────────────────────────────────────── #
     yolo_res = [r for r in results if not r.model.startswith("dca_")]
@@ -112,6 +120,14 @@ def generate_plots(
     plt.close(fig)
 
 # ─────────────────────────────  HELPERS  ─────────────────────────────────── #
+
+def _read_gpu_map(csv_path: Path | str | None
+                  ) -> dict[tuple[str, str], int]:
+    if csv_path is None:
+        return {}
+    df = pd.read_csv(csv_path)
+    return {(m, o): int(g) for m, o, g in df.itertuples(index=False)}
+
 
 def _read_cv_stats(csv_path: Path | str | None
                    ) -> dict[Tuple[str, str], Tuple[float, float]]:
@@ -253,7 +269,7 @@ def _populate_panel(ax: plt.Axes,
     # ── speed-up values and x-axis limits ─────────────────────────── #
     slowest = max(r.total_seconds for r in results)
     for r in results:
-        r.speed_up = slowest / r.total_seconds            # type: ignore[attr-defined]
+        r.speed_up = slowest / r.total_seconds
 
     right_bound = 2 ** np.ceil(np.log2(max(r.speed_up for r in results)))  # next power-of-2
 
@@ -364,13 +380,10 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Generate performance overview")
     parser.add_argument("--base-dir", required=True, type=Path,
-                        help="Directory with yolov8*/ and dca_yolov8*/ sub-dirs")
-    parser.add_argument("--out", required=True, type=Path,
-                        help="Destination root; <out>/performance/ will be created")
+                        help="Root directory with optimization/kfold/gpu_usage_combined",
+                        default=Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica"))
     parser.add_argument("--fmt", default="pdf",
                         help="Matplotlib output format (default: pdf)")
-    parser.add_argument("--cv-csv", type=Path,
-                        help="CSV file with k-fold validation results")
     parser.add_argument("--n-trials", type=int, default=FIRST_N_TRIALS,
                         help="Use only the first N Optuna trials (default 100)")
     parser.add_argument("--verbose", action="store_true",
@@ -379,10 +392,22 @@ if __name__ == "__main__":
     if args.verbose:
         LOGGER.setLevel(logging.DEBUG)
 
+    LOGGER.info("The following folder structure is expected:")
+    LOGGER.info("  <base_dir>/optimization/<model_name>/")
+    LOGGER.info("  <base_dir>/kfold/kfold_metrics.csv")
+    LOGGER.info("  <base_dir>/gpu_usage_combined/gpu_usage_combined.csv")
+    
+    optimization_path = args.base_dir / "optimization"
+    cv_csv_path = args.base_dir / "kfold" / "kfold_metrics.csv"
+    gpus_csv_path = args.base_dir / "gpu_usage_combined" / "gpu_usage_combined.csv"
+    figures_out_dir = args.base_dir / "figures"
+    figures_out_dir.mkdir(parents=True, exist_ok=True)
+
     generate_plots(
-        cadica_root=args.base_dir,
-        plot_root=args.out,
+        root=optimization_path,
+        plot_root=figures_out_dir,  
         file_format=args.fmt,
-        cv_csv=args.cv_csv,
+        cv_csv=cv_csv_path,
+        gpu_csv=gpus_csv_path, # Pass the determined gpus_csv_path
         n_trials=args.n_trials,
     )

@@ -54,9 +54,7 @@ import scienceplots
 
 plt.style.use(["science", "ieee", "grid"])
 
-LOGGER = logging.getLogger("hyperparam-decisions")
-LOGGER.setLevel(logging.INFO)
-LOGGER.addHandler(logging.StreamHandler())
+from ICA_Detection.optimization import LOGGER
 
 FIRST_N_TRIALS = 100
 ELITE_FRAC = 0.10                      # fraction of best trials kept per group
@@ -397,15 +395,19 @@ def build_one_figure(df_model: pd.DataFrame,
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Hyper-parameter decision plots")
-    ap.add_argument("--base-dir", required=True, type=Path,
-                    help="Root dir with yolov8*/ and dca_yolov8*/ sub-dirs")
-    ap.add_argument("--out", required=True, type=Path,
-                    help="Destination directory for the figures")
+    ap.add_argument("--base-dir", required=False, type=Path,
+                        help="Root directory with optimization/kfold/gpu_usage_combined",
+                        default=Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica"))
     ap.add_argument("--fmt", default="pdf",
                     help="Output format: pdf / png / …")
     args = ap.parse_args()
 
-    trials = collect_trials(args.base_dir, first_n=FIRST_N_TRIALS)
+    LOGGER.info("The following folder structure is expected:")
+    LOGGER.info("  <base_dir>/optimization/<model_name>/")
+
+    optimization_dir = args.base_dir / "optimization"
+
+    trials = collect_trials(optimization_dir, first_n=FIRST_N_TRIALS)
     if not trials:
         LOGGER.error("No trial data found – check --base-dir")
         return
@@ -431,7 +433,7 @@ def main() -> None:
     df_yolo = elite[base_mask]
     df_dca = elite[~base_mask]
 
-    out_root = args.out / "hyperparameter_study"
+    out_root = args.base_dir / "figures" / "hyperparameter_study"
     
     import os
     os.makedirs(out_root, exist_ok=True)
