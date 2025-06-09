@@ -24,12 +24,12 @@ IMAGES_DIR = Path("/home/mpascual/research/datasets/angio/tasks/stenosis_detecti
 LABELS_DIR = Path("/home/mpascual/research/datasets/angio/tasks/stenosis_detection/labels/yolo")                   # ← change me
 
 IMAGE_NAMES = [
-    "cadica_p14_v1_00014"
+    "cadica_p12_v22_00031"
 ]
 
 ADAPTER      = "ultralytics"         # or "dca_yolov8"
 OUT_DIR      = Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica/figures/gradcam")
-CONF_THRESH  = 0.10                  # float
+CONF_THRESH  = 0.25                  # float
 ADD_CBAR     = True                  # bool
 ADD_LEGEND   = True                  # bool
 CAM_METHOD   = "eigencam"            # e.g. "eigencam", "gradcam"
