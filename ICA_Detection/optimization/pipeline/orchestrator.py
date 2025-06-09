@@ -68,8 +68,7 @@ def run_hpo(config_path: str, gpu_ids_str: Optional[str] = None) -> None:
     gpu_lock = manager.Lock()
     available_gpus = manager.list(gpus_to_use) # Use the determined list of GPUs
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, gpus_to_use))
-
+    LOGGER.info(f"Available GPUs: {available_gpus}")
 
     optimizer: Union[UltralyticsESTuner, BayesianHyperparameterOptimizer]
     if cfg.sampler.lower() == "ultralytics_es":
