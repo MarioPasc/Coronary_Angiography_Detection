@@ -1,17 +1,17 @@
-model_source: dca # Options: dca, ultralytics
-model: /home/mariopascual/Projects/CADICA/Research/tests/cadica/yolov8/model/yolov8l.pt
+model_source: ultralytics # Options: dca, ultralytics
+model: /home/mariopascual/Projects/CADICA/research/tests/models/yolov8m.pt
 data: /media/hddb/mario/data/COMBINED/tasks/stenosis_detection/datasets/yolo/yolo_ica_detection.yaml
 epochs: 1000
 img_size: 512
-n_trials: 3
+n_trials: 100
 save_plots: true
 direction: maximize
-startup_trials: 1
-storage: CADICA_BHO_TPE.db
-study_name: try_local
+startup_trials: 0
+storage: arcade_yolov8m_ultralyticsES.db
+study_name: arcade_yolov8m_ultralyticsES
 seed: 42
-sampler: "random"
-output_folder: "my_experiment_outputs" # Add this line
+sampler: "ultralytics_es"
+output_folder: /home/mariopascual/Projects/CADICA/research/tests/arcade/optimization/yolov8m # Add this line
 
 hyperparameters:
   optimizer:
