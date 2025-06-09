@@ -26,9 +26,10 @@ from pytorch_grad_cam import (
 from pytorch_grad_cam.activations_and_gradients import ActivationsAndGradients
 from pytorch_grad_cam.utils.image import scale_cam_image, show_cam_on_image
 
-from ICA_Detection.explainer.utils import display_images
+from ICA_Detection.explainer.utils import display_images, letterbox
 from ICA_Detection.explainer.registry import get_adapter_cls
 
+from cmap import Colormap
 
 # ------------------------------------------------ helpers ---------------------
 
@@ -134,6 +135,8 @@ class GradCAMExplainer:
         ratio: float = 0.02,
         show_box: bool = True,
         renormalize: bool = False,
+        cam_threshold: float = 0.05,     # transparency gate
+        pred_box_style: dict | None = None,   # fixed colour/label for PRED
     ):
         #  ---------- bind + sanity -------------------------------------------------
         device = (
@@ -173,7 +176,14 @@ class GradCAMExplainer:
         self.ratio = ratio
         self.show_box = show_box
         self.renormalize = renormalize
-
+        self.cam_threshold = cam_threshold
+        # default prediction-box style (over-ride via kwarg)
+        self.pred_box_style = pred_box_style or {
+            "colour": (187, 85, 102),   # red, BGR for cv2
+            "labelname": "Detection",
+            "fontsize": 0.6,
+            "linewidth": 2,
+        }
     # ------------------------------------------------------------------------- API
 
     def __call__(self, path: str | Path):
@@ -203,7 +213,13 @@ class GradCAMExplainer:
                 gray_cam,
             )
         else:
-            cam_img = show_cam_on_image(img_np, gray_cam, use_rgb=True)
+            cam_img = show_cam_on_image(img_np, gray_cam, use_rgb=True, image_weight=0.8)
+
+        # ---------- make low-activation pixels transparent ---------------
+        if self.cam_threshold > 0:
+            mask = gray_cam < self.cam_threshold        # bool H×W
+            # restore the original image where CAM is weak
+            cam_img[mask] = (img_np[mask] * 255).astype(np.uint8)
 
         if self.show_box and len(preds) > 0:
             cam_img = self._draw_boxes(preds, cam_img)
@@ -223,26 +239,21 @@ class GradCAMExplainer:
             renorm[y1:y2, x1:x2] = scale_cam_image(gray_cam[y1:y2, x1:x2].copy())
 
         renorm = scale_cam_image(renorm)
-        return show_cam_on_image(img_np, renorm, use_rgb=True)
+        return show_cam_on_image(img_np, renorm, use_rgb=True, colormap=Colormap("tol:nightfall"))
 
     def _draw_boxes(self, preds, img):
-        import cv2
+        import cv2 
+        col = self.pred_box_style["colour"]
+        lw  = self.pred_box_style["linewidth"]
+        txt = self.pred_box_style["labelname"]
+        fs  = self.pred_box_style["fontsize"]
 
-        for det in preds.detach():
-            det = det.cpu().numpy()
-            cls = int(det[5])
-            x1, y1, x2, y2 = map(int, det[:4])
-            cv2.rectangle(
-                img, (x1, y1), (x2, y2), tuple(int(c) for c in self.adapter.colors[cls]), 2
-            )
+        preds = preds.detach()
+        for det in preds:
+            x1, y1, x2, y2 = map(int, det[:4].cpu().numpy())
+            cv2.rectangle(img, (x1, y1), (x2, y2), col, lw)
             cv2.putText(
-                img,
-                self.adapter.names[cls],
-                (x1, y1 - 4),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                tuple(int(c) for c in self.adapter.colors[cls]),
-                2,
-                lineType=cv2.LINE_AA,
+                img, txt, (x1, y1 - 4),
+                cv2.FONT_HERSHEY_SIMPLEX, fs, col, lw, lineType=cv2.LINE_AA
             )
         return img

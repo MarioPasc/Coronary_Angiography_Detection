@@ -35,7 +35,8 @@ dependencies = [
   "types-PyYAML",
   "pycocotools",
   "requests",
-  "umap-learn"
+  "umap-learn",
+  "cmap"
   # shap
   # lightgbm
   # pyarrow

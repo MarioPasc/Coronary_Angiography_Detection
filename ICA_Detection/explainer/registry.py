@@ -51,7 +51,6 @@ def build_explainer(
     from ICA_Detection.explainer import LOGGER
 
     LOGGER.info(
-        f"Building GradCAMExplainer for model '{model_name}' "
-        f"using adapter '{adapter_cls.__name__}' with weight '{weight}'"
+        f"Building GradCAMExplainer for model '{model_name}' with adapter '{adapter_cls.__name__}'"
     )
     return GradCAMExplainer(adapter_cls=adapter_cls, weight=weight, **kwargs)

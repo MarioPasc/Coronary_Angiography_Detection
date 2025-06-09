@@ -25,20 +25,19 @@ python scripts/explainer/optimization_gradcam.py \
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 from pathlib import Path
-from typing import List
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-
 import torch
+from matplotlib.cm import ScalarMappable, get_cmap
+from matplotlib.gridspec import GridSpec
 
-# 3rd-party (your new explainer package)
-from ICA_Detection.explainer import build_explainer, utils as xutils
+from ICA_Detection.explainer import build_explainer, LOGGER, letterbox
 
+from cmap import Colormap
 # --------------------------------------------------------------------------- CLI
 
 
@@ -48,146 +47,185 @@ def get_args():
     p.add_argument("--images", required=True, type=Path, help="image folder")
     p.add_argument("--labels", required=True, type=Path, help="label folder (YOLO txt)")
     p.add_argument("--name", required=True, help="image / label stem (without suffix)")
-    p.add_argument("--adapter", default="ultralytics", choices=["ultralytics", "dca_yolov8"])
+    p.add_argument(
+        "--adapter", default="ultralytics", choices=["ultralytics", "dca_yolov8"]
+    )
     p.add_argument("--out", required=True, type=Path, help="output directory")
-    p.add_argument("--alpha", type=float, default=0.5, help="CAM overlay opacity")
-    p.add_argument("--conf-thres", type=float, default=0.25, help="confidence for predictions")
-    p.add_argument("--add-cbar", action="store_true", help="add horizontal colour-bar")
+    p.add_argument("--conf-thres", type=float, default=0.1, help="confidence threshold")
+    p.add_argument("--add-cbar", action="store_true", help="add colour-bar")
     p.add_argument("--cam-method", default="eigencam")
+    p.add_argument("--add-legend", action="store_true",
+                   help="draw legend for GT / PRED boxes")
     return p.parse_args()
+
+# ---------------------------------------------------------------- bbox styles
+BBOX_CONF = {
+    "GT":   {"colour": (0,68,136), "labelname": "",   "fontsize": 0.6, "linewidth": 4},
+    "PRED": {"colour": (204,51,17), "labelname": "", "fontsize": 0.6, "linewidth": 4},
+}
 
 
 # ---------------------------------------------------------------- utilities
 
 
-def collect_layout(root: Path) -> tuple[list[str], list[str], int]:
-    """
-    Returns (model_sizes, optimisers, n_folds)
-
-        root/
-           yolov8l/{opt}/out/fold_k/weights/best.pt
-           yolov8m/...
-           yolov8s/...
-    """
-    model_sizes = sorted(d.name for d in root.iterdir() if d.is_dir())
-    if not model_sizes:
+def collect_layout(root: Path):
+    sizes = sorted(d.name for d in root.iterdir() if d.is_dir())
+    if not sizes:
         raise FileNotFoundError(f"No model folders inside {root}")
 
-    # assume the first model folder is representative
-    first_model = root / model_sizes[0]
-    optimisers = sorted(d.name for d in first_model.iterdir() if d.is_dir())
-    if not optimisers:
-        raise FileNotFoundError(f"No optimiser folders inside {first_model}")
+    optim = sorted((root / sizes[0]).iterdir())
+    optim = [d.name for d in optim if d.is_dir()]
+    if not optim:
+        raise FileNotFoundError(f"No optimiser folders inside {root/sizes[0]}")
 
-    # assume optimiser/out/fold_* exists and count folds
-    sample_opt_out = next((first_model / optimisers[0]).glob("*/fold_*"), None)
-    if sample_opt_out is None:
-        raise FileNotFoundError("Could not detect any fold directories.")
-    n_folds = len(list((first_model / optimisers[0] / "out").glob("fold_*")))
-    return model_sizes, optimisers, n_folds
+    n_folds = len(list((root / sizes[0] / optim[0] / "out").glob("fold_*")))
+    return sizes, optim, n_folds
 
 
-def read_ground_truth(label_path: Path, img_w: int, img_h: int) -> np.ndarray:
+def read_yolo_txt(txt: Path, img_np: np.ndarray, new_shape=(640, 640)) -> np.ndarray:
     """
-    Converts YOLO-txt labels to pixel xyxy. Returns array[N,4]
+    Return GT boxes **in the 640×640 letter-boxed coordinate system**
+    so they align with the overlay created inside GradCAMExplainer.
     """
-    if not label_path.exists():
+    if not txt.exists():
         return np.empty((0, 4), dtype=int)
-    boxes = []
-    with label_path.open() as fh:
-        for line in fh:
-            parts = line.strip().split()
-            if len(parts) != 5:
-                continue
-            _, xc, yc, w, h = map(float, parts)
-            # denormalise
-            xc, yc, w, h = xc * img_w, yc * img_h, w * img_w, h * img_h
-            x1 = int(xc - w / 2)
-            y1 = int(yc - h / 2)
-            x2 = int(xc + w / 2)
-            y2 = int(yc + h / 2)
-            boxes.append((x1, y1, x2, y2))
-    return np.asarray(boxes, dtype=int)
+
+    h0, w0 = img_np.shape[:2]                      # original size
+    _, ratio, (dw, dh) = letterbox(img_np, new_shape, auto=False)
+
+    out = []
+    for line in txt.read_text().splitlines():
+        cls, xc, yc, bw, bh = map(float, line.split())
+        # 1. denormalise to original pixels
+        xc, yc, bw, bh = xc * w0, yc * h0, bw * w0, bh * h0
+        x1, y1 = xc - bw / 2, yc - bh / 2
+        x2, y2 = xc + bw / 2, yc + bh / 2
+        # 2. map through letter-box
+        rw, rh = ratio            # unpack tuple
+        x1 = int(x1 * rw + dw);  y1 = int(y1 * rh + dh)
+        x2 = int(x2 * rw + dw);  y2 = int(y2 * rh + dh)
+        out.append((x1, y1, x2, y2))
+
+    return np.asarray(out, dtype=int)
 
 
-def draw_boxes(img: np.ndarray, boxes: np.ndarray, colour: tuple, thickness: int = 2):
+def draw_boxes(img: np.ndarray, boxes: np.ndarray, colour=(255, 0, 255), thick=2):
     for (x1, y1, x2, y2) in boxes:
-        cv2.rectangle(img, (x1, y1), (x2, y2), colour, thickness)
+        cv2.rectangle(img, (x1, y1), (x2, y2), colour, thick)
+
+
+# ---------------------------------------------------------------- plotting
 
 
 def plot_fold(
-    fold_idx: int,
+    fold: int,
     root: Path,
-    model_sizes: list[str],
+    sizes: list[str],
     optimisers: list[str],
-    explainer_kwargs: dict,
+    explainer_kw: dict,
     img_path: Path,
     gt_boxes: np.ndarray,
-    alpha: float,
     add_cbar: bool,
+    add_legend: bool,
     out_dir: Path,
 ):
-    n_rows, n_cols = len(model_sizes), len(optimisers)
-    fig, axes = plt.subplots(
-        n_rows,
-        n_cols,
-        figsize=(3.5 * n_cols, 3.5 * n_rows),
-        squeeze=False,
-    )
+    n_rows, n_cols = len(sizes), len(optimisers)
 
-    for r, model_size in enumerate(model_sizes):
+    # -- GridSpec: gives us equal-size cells & space for c-bar --------------
+    height = 3.4 * n_rows + (0.7 if add_cbar else 0)
+    width = 3.4 * n_cols
+    fig = plt.figure(figsize=(width, height), constrained_layout=True)
+    grid = GridSpec(n_rows, n_cols, figure=fig)
+
+    # prepare axes array for colour-bar later
+    axes = np.empty((n_rows, n_cols), dtype=object)
+
+    for r, size in enumerate(sizes):
         for c, opt in enumerate(optimisers):
-            weight = (
-                root
-                / model_size
-                / opt
-                / "out"
-                / f"fold_{fold_idx}"
-                / "weights"
-                / "best.pt"
+            ax = fig.add_subplot(grid[r, c])
+            axes[r, c] = ax
+
+            w_path = (
+                root / size / opt / "out" / f"fold_{fold}" / "weights" / "best.pt"
             )
-            if not weight.exists():
-                axes[r, c].set_title("missing")
-                axes[r, c].axis("off")
+            if not w_path.exists():
+                ax.set_axis_off()
+                ax.set_title("missing", fontsize=17)
                 continue
 
-            cam = build_explainer(weight=weight, **explainer_kwargs)
+            cam = build_explainer(weight=w_path, **explainer_kw)
 
-            cam_imgs = cam(img_path)
-            cam_img = np.array(cam_imgs[0])
+            overlay = np.array(cam(img_path)[0])
+            draw_boxes(
+                overlay,
+                gt_boxes,
+                colour=BBOX_CONF["GT"]["colour"],
+                thick=BBOX_CONF["GT"]["linewidth"],
+            )
 
-            # draw GT boxes in magenta (prediction boxes already drawn inside)
-            draw_boxes(cam_img, gt_boxes, colour=(255, 0, 255), thickness=2)
+            ax.imshow(overlay)
+            ax.set_axis_off()
 
-            axes[r, c].imshow(cam_img)
-            axes[r, c].set_axis_off()
+            # columns – upper row only
             if r == 0:
-                axes[r, c].set_title(opt, fontsize=10)
+                ax.set_title(opt.upper(), fontsize=17, pad=6)
+
+            # rows – first column only
             if c == 0:
-                axes[r, c].text(
-                    -5,
-                    0.5,
-                    model_size,
+                row_lbl = size.replace("yolo", "")  # v8l|v8m|v8s
+                ax.annotate(
+                    row_lbl,
+                    xy=(-0.05, 0.5),
+                    xycoords="axes fraction",
                     va="center",
                     ha="right",
                     rotation=90,
-                    fontsize=10,
-                    transform=axes[r, c].transAxes,
+                    fontsize=17,
                 )
 
+    # -------------- colour-bar under the whole grid -------------------------
     if add_cbar:
-        # create fake mappable so the colour-bar matches jet colormap 0-1
-        from matplotlib.cm import ScalarMappable, get_cmap
-
-        sm = ScalarMappable(cmap=get_cmap("jet"))
+        sm = ScalarMappable(cmap=Colormap('tol:nightfall').to_mpl())
         sm.set_array([0.0, 1.0])
-        fig.colorbar(sm, ax=axes.ravel().tolist(), orientation="horizontal", fraction=0.04)
+        cax = fig.add_axes([0.1, -0.05, 0.8, 0.03])  # [left, bottom, width, height]
+        cb = fig.colorbar(sm, cax=cax, orientation="horizontal")
+        cb.ax.tick_params(labelsize=17)
 
-    out_file = out_dir / f"fold_{fold_idx}_cam.png"
-    fig.tight_layout()
-    fig.savefig(out_file, dpi=150)
+    # ---------------------------------------------------------------- legend
+    if add_legend:
+        import matplotlib.patches as mpatches
+
+        def _patch(style):
+            rgb = tuple(c / 255 for c in style["colour"])  # BGR→RGB + 0-1
+            return mpatches.Patch(
+                facecolor='none',
+                edgecolor=rgb,
+                linewidth=style["linewidth"],
+                label=style["labelname"],
+            )
+
+        BBOX_CONF["GT"]["labelname"] = "Ground Truth"
+        BBOX_CONF["PRED"]["labelname"] = "Predicted"
+        handles = [_patch(BBOX_CONF["GT"]), _patch(BBOX_CONF["PRED"])]
+        fig.legend(
+            handles=handles,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.05),
+            ncol=2,
+            frameon=False,
+            fontsize=17,
+        )
+        BBOX_CONF["GT"]["labelname"] = ""
+        BBOX_CONF["PRED"]["labelname"] = ""
+
+    out_dir = out_dir / img_path.stem
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fmt = "png"
+    fname = out_dir / f"fold_{fold}_cam_{img_path.stem}.{fmt}"
+
+    fig.savefig(fname, dpi=150, bbox_inches="tight", format=fmt)
     plt.close(fig)
-    logging.info("Saved %s", out_file)
+    LOGGER.info("Saved %s", fname)
 
 
 # --------------------------------------------------------------------------- main
@@ -195,47 +233,37 @@ def plot_fold(
 
 def main():
     args = get_args()
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-    )
 
     img_path = args.images / f"{args.name}.png"
-    label_path = args.labels / f"{args.name}.txt"
+    lbl_path = args.labels / f"{args.name}.txt"
     if not img_path.exists():
         sys.exit(f"Image {img_path} not found.")
     img_np = cv2.cvtColor(cv2.imread(str(img_path)), cv2.COLOR_BGR2RGB)
-    gt_boxes = read_ground_truth(label_path, img_np.shape[1], img_np.shape[0])
+    gt_boxes = read_yolo_txt(lbl_path, img_np)      # ← passes full image
 
-    model_sizes, optimisers, n_folds = collect_layout(args.root)
-    logging.info(
-        "Detected %d model sizes %s | %d optimisers %s | %d folds",
-        len(model_sizes),
-        model_sizes,
-        len(optimisers),
-        optimisers,
-        n_folds,
-    )
+    sizes, optim, n_folds = collect_layout(args.root)
+    LOGGER.info("Detected %d model sizes %s | %d optimisers %s | %d folds", len(sizes), sizes, len(optim), optim, n_folds)
 
-    args.out.mkdir(parents=True, exist_ok=True)
-
-    explainer_kwargs = dict(
+    explainer_kw = dict(
         model_name=args.adapter,
         method=args.cam_method,
         conf_threshold=args.conf_thres,
         show_box=True,
+        cam_threshold=0.2,  
+        pred_box_style=BBOX_CONF["PRED"], # unified colour/label
     )
 
-    for fold in range(n_folds):
+    for k in range(n_folds):
         plot_fold(
-            fold,
+            k,
             args.root,
-            model_sizes,
-            optimisers,
-            explainer_kwargs,
+            sizes,
+            optim,
+            explainer_kw,
             img_path,
             gt_boxes,
-            args.alpha,
             args.add_cbar,
+            args.add_legend,
             args.out,
         )
 
