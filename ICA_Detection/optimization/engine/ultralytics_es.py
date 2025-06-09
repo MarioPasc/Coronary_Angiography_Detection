@@ -140,15 +140,7 @@ class UltralyticsESTuner:
     def optimize(self) -> None:
         gpu_id: Optional[int] = None
         try:
-            gpu_id = acquire_gpu(self)
-            import torch
-            if not torch.cuda.is_available():
-                LOGGER.info("No CUDA devices available; training will fall back to CPU.")
-            else:
-                n = torch.cuda.device_count()
-                LOGGER.info(f"{n} CUDA device(s) detected:")
-                for i in range(n):
-                    LOGGER.info(f"  • GPU {i}: {torch.cuda.get_device_name(i)}")
+            #gpu_id = acquire_gpu(self)
             
             self._tune(gpu_id)
         finally:
