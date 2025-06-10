@@ -23,6 +23,7 @@ import optuna
 import pandas as pd
 from scipy import stats
 import scienceplots
+import argparse
 
 plt.style.use(["science", "ieee", "grid"])
 
@@ -374,40 +375,57 @@ def _build_joint_legends(fig: plt.Figure) -> None:
                loc="upper center", bbox_to_anchor=(0.5, 0.95),
                ncol=len(marker_handles), frameon=False, fontsize=17)
 
+DEFAULT_FIRST_N_TRIALS: int = 100
 # ─────────────────────────────  CLI  ─────────────────────────────────────── #
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="Generate performance overview")
-    parser.add_argument("--base-dir", required=True, type=Path,
-                        help="Root directory with optimization/kfold/gpu_usage_combined",
-                        default=Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica"))
-    parser.add_argument("--fmt", default="pdf",
-                        help="Matplotlib output format (default: pdf)")
-    parser.add_argument("--n-trials", type=int, default=FIRST_N_TRIALS,
-                        help="Use only the first N Optuna trials (default 100)")
+    DEFAULT_BASE_DIR_CLI = Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica")
+    DEFAULT_FMT_CLI = "pdf"
+    # DEFAULT_FIRST_N_TRIALS is already defined globally
+
+    parser = argparse.ArgumentParser(description="Generate performance overview plots. Compares optimisation strategies for YOLOv8 and DCA-YOLOv8.")
+    parser.add_argument("--base-dir", type=Path, default=DEFAULT_BASE_DIR_CLI,
+                        help=f"Root directory containing 'optimization', 'kfold', and 'gpu_usage_combined' subdirectories. (default: {DEFAULT_BASE_DIR_CLI})")
+    parser.add_argument("--fmt", type=str, default=DEFAULT_FMT_CLI,
+                        help=f"Output image format (e.g., pdf, png, svg). (default: {DEFAULT_FMT_CLI})")
+    parser.add_argument("--n-trials", type=int, default=DEFAULT_FIRST_N_TRIALS,
+                        help=f"Analyze only the first N completed Optuna trials per study. (default: {DEFAULT_FIRST_N_TRIALS})")
     parser.add_argument("--verbose", action="store_true",
-                        help="Verbose console output")
+                        help="Enable verbose console output (DEBUG level).")
+    
     args = parser.parse_args()
+
     if args.verbose:
         LOGGER.setLevel(logging.DEBUG)
+        for handler in LOGGER.handlers: # Ensure all handlers respect the new level
+            handler.setLevel(logging.DEBUG)
+        LOGGER.debug("Verbose logging enabled.")
 
-    LOGGER.info("The following folder structure is expected:")
-    LOGGER.info("  <base_dir>/optimization/<model_name>/")
-    LOGGER.info("  <base_dir>/kfold/kfold_metrics.csv")
-    LOGGER.info("  <base_dir>/gpu_usage_combined/gpu_usage_combined.csv")
+    LOGGER.info("Running performance_overview.py as a script.")
+    LOGGER.info("Expected folder structure under --base-dir:")
+    LOGGER.info("  <base_dir>/optimization/<model_name>/<optimizer_name>/")
+    LOGGER.info("  <base_dir>/kfold/kfold_metrics.csv (optional)")
+    LOGGER.info("  <base_dir>/gpu_usage_combined/gpu_usage_combined.csv (optional)")
     
     optimization_path = args.base_dir / "optimization"
     cv_csv_path = args.base_dir / "kfold" / "kfold_metrics.csv"
     gpus_csv_path = args.base_dir / "gpu_usage_combined" / "gpu_usage_combined.csv"
-    figures_out_dir = args.base_dir / "figures"
-    figures_out_dir.mkdir(parents=True, exist_ok=True)
+    figures_out_dir = args.base_dir / "figures" # Figures will be in <base_dir>/figures/performance/
+
+    # Check existence of optional files and inform user
+    if not cv_csv_path.exists():
+        LOGGER.info(f"Optional CV metrics file not found: {cv_csv_path}. Proceeding without CV error bars.")
+        cv_csv_path = None # Set to None if not found
+    if not gpus_csv_path.exists():
+        LOGGER.info(f"Optional GPU usage file not found: {gpus_csv_path}. Proceeding with default GPU assumptions for normalization.")
+        gpus_csv_path = None # Set to None if not found
+
 
     generate_plots(
         root=optimization_path,
-        plot_root=figures_out_dir,  
+        plot_root=figures_out_dir,  # generate_plots will create a 'performance' subdir here
         file_format=args.fmt,
         cv_csv=cv_csv_path,
-        gpu_csv=gpus_csv_path, # Pass the determined gpus_csv_path
+        gpu_csv=gpus_csv_path,
         n_trials=args.n_trials,
     )

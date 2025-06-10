@@ -392,27 +392,27 @@ def build_one_figure(df_model: pd.DataFrame,
 
 # ─────────────────────────────  MAIN  ─────────────────────────────────── #
 
+def generate_hyperparameter_figures(
+    base_dir: Path,
+    output_format: str,
+    num_trials: int
+) -> None:
+    """
+    Generates hyperparameter overview figures.
+    This function contains the core logic previously in main().
+    """
+    LOGGER.info("Starting hyperparameter figure generation...")
+    LOGGER.info(f"  Base directory: {base_dir}")
+    LOGGER.info(f"  Output format: {output_format}")
+    LOGGER.info(f"  Number of trials to analyze (per study): {num_trials}")
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Hyper-parameter decision plots")
-    ap.add_argument("--base-dir", required=False, type=Path,
-                        help="Root directory with optimization/kfold/gpu_usage_combined",
-                        default=Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica"))
-    ap.add_argument("--fmt", default="pdf",
-                    help="Output format: pdf / png / …")
-    args = ap.parse_args()
+    optimization_dir = base_dir / "optimization"
 
-    LOGGER.info("The following folder structure is expected:")
-    LOGGER.info("  <base_dir>/optimization/<model_name>/")
-
-    optimization_dir = args.base_dir / "optimization"
-
-    trials = collect_trials(optimization_dir, first_n=FIRST_N_TRIALS)
+    trials = collect_trials(optimization_dir, first_n=num_trials)
     if not trials:
-        LOGGER.error("No trial data found – check --base-dir")
+        LOGGER.error("No trial data found – check base_dir and optimization subdirectory.")
         return
 
-    # dataframe
     df = pd.DataFrame([{
         "model": t.model,
         "optimiser": t.optimiser,
@@ -421,25 +421,65 @@ def main() -> None:
         **{k: v for k, v in t.params.items()}
     } for t in trials])
 
-    # choose elite
+    if df.empty:
+        LOGGER.error("DataFrame from trials is empty. Cannot proceed.")
+        return
+
     elite_chunks = []
     for _, grp in df.groupby(["model", "size", "optimiser"]):
         k = max(1, int(len(grp) * ELITE_FRAC))
         elite_chunks.append(grp.nlargest(k, "f1"))
+    
+    if not elite_chunks:
+        LOGGER.error("No elite trials found. Cannot proceed.")
+        return
+        
     elite = pd.concat(elite_chunks, ignore_index=True)
+    if elite.empty:
+        LOGGER.error("Elite DataFrame is empty after concatenation. Cannot proceed.")
+        return
 
-    # split by model family
     base_mask = ~elite["model"].str.startswith("dca_")
     df_yolo = elite[base_mask]
     df_dca = elite[~base_mask]
 
-    out_root = args.base_dir / "figures" / "hyperparameter_study"
+    out_root = base_dir / "figures" / "hyperparameter_study"
     
     import os
     os.makedirs(out_root, exist_ok=True)
-    build_one_figure(df_yolo, out_root / "hyperparams_yolov8", args.fmt)
-    build_one_figure(df_dca, out_root / "hyperparams_dca_yolov8", args.fmt)
+
+    if not df_yolo.empty:
+        build_one_figure(df_yolo, out_root / "hyperparams_yolov8", output_format)
+    else:
+        LOGGER.warning("No data for YOLOv8 hyperparameter figure.")
+    
+    if not df_dca.empty:
+        build_one_figure(df_dca, out_root / "hyperparams_dca_yolov8", output_format)
+    else:
+        LOGGER.warning("No data for DCA-YOLOv8 hyperparameter figure.")
+    LOGGER.info("Hyperparameter figure generation complete.")
 
 
 if __name__ == "__main__":
-    main()
+    DEFAULT_BASE_DIR_CLI = Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica")
+    DEFAULT_FMT_CLI = "pdf"
+    DEFAULT_N_TRIALS_CLI = 100
+
+    ap = argparse.ArgumentParser(description="Hyper-parameter decision plots")
+    ap.add_argument("--base-dir", type=Path,
+                    default=DEFAULT_BASE_DIR_CLI,
+                    help=f"Root directory with optimization/ (default: {DEFAULT_BASE_DIR_CLI})")
+    ap.add_argument("--fmt", default=DEFAULT_FMT_CLI,
+                    help=f"Output format: pdf / png / … (default: {DEFAULT_FMT_CLI})")
+    ap.add_argument("--n-trials", type=int, default=DEFAULT_N_TRIALS_CLI,
+                    help=f"Number of trials to analyze from each study (default: {DEFAULT_N_TRIALS_CLI})")
+    args = ap.parse_args()
+
+    LOGGER.info("Running hyperparameter_overview.py as a script.")
+    LOGGER.info("Expected folder structure: <base_dir>/optimization/<model_name>/")
+    
+    generate_hyperparameter_figures(
+        base_dir=args.base_dir,
+        output_format=args.fmt,
+        num_trials=args.n_trials
+    )

@@ -53,6 +53,7 @@ def get_args():
     p.add_argument("--out", required=True, type=Path, help="output directory")
     p.add_argument("--conf-thres", type=float, default=0.1, help="confidence threshold")
     p.add_argument("--add-cbar", action="store_true", help="add colour-bar")
+    p.add_argument("--add-opt-str", action="store_true", help="add optimiser string to title")
     p.add_argument("--cam-method", default="eigencam")
     p.add_argument("--add-legend", action="store_true",
                    help="draw legend for GT / PRED boxes")
@@ -127,6 +128,7 @@ def plot_fold(
     gt_boxes: np.ndarray,
     add_cbar: bool,
     add_legend: bool,
+    add_opt_str: bool,
     out_dir: Path,
 ):
     n_rows, n_cols = len(sizes), len(optimisers)
@@ -167,7 +169,7 @@ def plot_fold(
             ax.set_axis_off()
 
             # columns – upper row only
-            if r == 0:
+            if r == 0 and add_opt_str:
                 ax.set_title(opt.upper(), fontsize=17, pad=6)
 
             # rows – first column only
@@ -220,7 +222,7 @@ def plot_fold(
 
     out_dir = out_dir / img_path.stem
     out_dir.mkdir(parents=True, exist_ok=True)
-    fmt = "png"
+    fmt = "pdf"
     fname = out_dir / f"fold_{fold}_cam_{img_path.stem}.{fmt}"
 
     fig.savefig(fname, dpi=150, bbox_inches="tight", format=fmt)
@@ -255,16 +257,17 @@ def main():
 
     for k in range(n_folds):
         plot_fold(
-            k,
-            args.root,
-            sizes,
-            optim,
-            explainer_kw,
-            img_path,
-            gt_boxes,
-            args.add_cbar,
-            args.add_legend,
-            args.out,
+            fold = k,
+            root = args.root,
+            sizes = sizes,
+            optimisers = optim,
+            explainer_kw = explainer_kw,
+            img_path = img_path,
+            gt_boxes = gt_boxes,
+            add_cbar = args.add_cbar,
+            add_legend = args.add_legend,
+            out_dir = args.out,
+            add_opt_str = args.add_opt_str,
         )
 
 

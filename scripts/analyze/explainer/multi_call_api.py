@@ -31,9 +31,9 @@ ADAPTER      = "ultralytics"         # or "dca_yolov8"
 OUT_DIR      = Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica/figures/gradcam")
 CONF_THRESH  = 0.25                  # float
 ADD_CBAR     = True                  # bool
-ADD_LEGEND   = True                  # bool
+ADD_LEGEND   = False                  # bool
 CAM_METHOD   = "eigencam"            # e.g. "eigencam", "gradcam"
-
+ADD_OPT_STR = False                  # bool
 
 # -------------------------------------------------------------------- runner
 def _run_one(stem: str):
@@ -50,6 +50,7 @@ def _run_one(stem: str):
         add_cbar    = ADD_CBAR,
         cam_method  = CAM_METHOD,
         add_legend  = ADD_LEGEND,
+        add_opt_str = ADD_OPT_STR
     )
 
     # Monkey-patch get_args(), run main(), restore original
