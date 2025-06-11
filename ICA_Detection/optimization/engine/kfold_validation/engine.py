@@ -148,56 +148,61 @@ def _prepare_args(
 # ════════════════════════════════════════════════════════════════════════════
 # Worker
 # ════════════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════════════
+# Worker  – lock-free version (2025-06-11)
+# ════════════════════════════════════════════════════════════════════════════
 def _worker(
     fold_idx: int,
     gpu_id: int,
     fold_yaml: Path,
     tasks: List[KFoldTask],
     metrics_q,
-    gpu_lock=None,
 ) -> None:
-    """Run all tasks for a single fold on one GPU."""
-    #prev_cuda = os.environ.get("CUDA_VISIBLE_DEVICES")
-    #os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    """
+    Run all tasks for one fold on exactly **one** physical GPU.
 
-    import torch, os
-    visdev = os.environ.get("CUDA_VISIBLE_DEVICES", "(not set)")
-    devices = torch.cuda.device_count()
-    LOGGER.info(f">>> CUDA_VISIBLE_DEVICES = {visdev}")
-    LOGGER.info(f">>> torch.cuda.device_count() = {devices}")
-    for i in range(devices):
-        gpu = torch.cuda.get_device_name(i)
-        LOGGER.info(f"    - GPU {i}: {gpu}")
+    Each subprocess first masks every other device by overwriting
+    CUDA_VISIBLE_DEVICES, so the only visible GPU is addressed as index 0.
+    """
+    # ── guarantee single-GPU visibility for this process ───────────────
+    import os
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)          # must precede torch
 
-    # ────── Acquire lock BEFORE any model initialization ──────
-    if gpu_lock:
-        gpu_lock.acquire()
-
+    import torch
     from datetime import datetime
-    LOGGER.info(f"[fold_{fold_idx}] PID={os.getpid()} starting training at {datetime.now().isoformat()}")
+    import traceback
 
-    # Now that we hold the lock, no other fold can move a model to CUDA until we release
+    LOGGER.info(
+        "[fold_%d] PID=%d → physical GPU %d (visible as cuda:0)",
+        fold_idx,
+        os.getpid(),
+        gpu_id,
+    )
+    LOGGER.info("torch sees %d device(s)", torch.cuda.device_count())
+
+    # ── loop over all tasks assigned to this fold ───────────────────────
     for task in tasks:
         row = task.row
         out_root: Path = task.out_root
+        out_root.mkdir(parents=True, exist_ok=True)
+
         run_name = f"fold_{fold_idx}"
 
-        out_root.mkdir(parents=True, exist_ok=True)
+        # local index 0 is always correct after masking
         args = _prepare_args(
             original_yaml=Path(row["args_path"]),
             fold_yaml=fold_yaml,
-            gpu_id=gpu_id,
+            gpu_id=0,
             project_root=out_root,
             run_name=run_name,
             save_dir=out_root,
         )
 
-        TrainerCls: Type[Union[DCAYOLOv8Trainer, UltralyticsTrainer]]
         TrainerCls = (
-            DCAYOLOv8Trainer if row["model_variant"].startswith("dca_") else UltralyticsTrainer
+            DCAYOLOv8Trainer
+            if row["model_variant"].startswith("dca_")
+            else UltralyticsTrainer
         )
-
-        # This line will (inside __init__) construct the model and move it to cuda:gpu_id
         kft = KFoldTrainer(TrainerCls.MODEL_CLS, args)
 
         try:
@@ -228,9 +233,9 @@ def _worker(
                 f1_score=float("nan"),
                 mAP50=float("nan"),
                 mAP50_95=float("nan"),
-               elapsed=float("nan"),
+                elapsed=float("nan"),
                 model_variant=row["model_variant"],
-               optimizer=row["optimizer"],
+                optimizer=row["optimizer"],
                 fold=fold_idx,
                 args_path=str(row["args_path"]),
                 status="failed",
@@ -239,9 +244,8 @@ def _worker(
         finally:
             metrics_q.put(rec)
 
-   # ────── All tasks in this fold are done; now release the lock ──────
-    if gpu_lock:
-        gpu_lock.release()
+    LOGGER.info("[fold_%d] all tasks finished at %s", fold_idx, datetime.now().isoformat())
+
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  CORE EXECUTION LOGIC extracted into a private function `_run(cfg)`      ║
@@ -325,6 +329,9 @@ def _run(cfg: EngineCfg) -> None:
     gpu_lock = manager.Lock()
     procs: list[Process] = []
 
+    # Create a lock per GPU
+    gpu_locks = {gpu_id: manager.Lock() for gpu_id in set(gpu_map.values())}
+
     for f_idx, fdir in enumerate(fold_dirs):
         p_ = Process(
             target=_worker,
@@ -334,7 +341,7 @@ def _run(cfg: EngineCfg) -> None:
                 fdir / f"fold_{f_idx}.yaml",
                 tasks_per_fold[f_idx],
                 q_metrics,
-                gpu_lock,
+                gpu_locks[gpu_map[f_idx]]
             ),
             daemon=False,
         )
