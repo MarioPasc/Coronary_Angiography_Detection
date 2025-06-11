@@ -5,13 +5,11 @@ generate_latex_table.py
 Create a LaTeX table that summarises 3-fold-CV results for YOLOv8 and
 DCA-YOLOv8 hyper-parameter optimisation experiments.
 
-Columns:
   Dataset | Model | Size | CMAES | GPSAMPLER | TPE | RANDOM | ULTRALYTICS ES
 Each cell shows mean ± error (half-width of a two-sided (1–alpha) CI).  
 The best optimiser per (Dataset, Model, Size) row is typeset in **bold**.  
 Repeated Dataset / Model entries are blanked to avoid duplication.
 
-Author: Your Name <you@example.com>
 """
 
 from __future__ import annotations
@@ -24,7 +22,7 @@ from typing import Iterable
 
 import numpy as np
 import pandas as pd
-from scipy import stats
+from scipy import stats # type: ignore[import-untyped]
 
 
 # ---------- configuration -------------------------------------------------- #
@@ -103,163 +101,153 @@ def load_metrics(path: Path, metric: str, alpha: float) -> pd.DataFrame:
     )
     return grouped
 
+# ---------------------------------------------------------------------------
+# REPLACE the old 'combine_tables' and 'to_latex' with the versions below
+# ---------------------------------------------------------------------------
 
 def combine_tables(frames: Iterable[pd.DataFrame]) -> pd.DataFrame:
-    """Concatenate per-CSV summaries and pivot to the desired wide format."""
-    wide_frames: list[pd.DataFrame] = []
-    for g in frames:
-        # Build "mean ± CI" string
-        g["stat"] = g.apply(
-            lambda r: f"{r['μ']:.3f} ± {r['Δ']:.3f}", axis=1
-        )
-        # Pivot so each optimiser becomes a column
-        pivot = (
-            g.pivot(
-                index=["Dataset", "Model", "Size"],
-                columns="Optimiser",
-                values="stat",
-            )
-            .reindex([k for k, _ in OPTIMISER_ORDER], axis=1)
-        )
-        wide_frames.append(pivot)
+    """
+    Return a tidy DataFrame ready for LaTeX with layout:
 
-    if not wide_frames:
-        # Return an empty DataFrame with expected columns if no data
-        empty_cols = ["Dataset", "Model", "Size"] + [label for _, label in OPTIMISER_ORDER]
-        return pd.DataFrame(columns=empty_cols)
+        Optimiser | Size |  (Dataset₁,Model₁) … (Datasetₙ,Model₂)
 
-    merged = pd.concat(wide_frames).sort_index()
+    i.e. three rows per optimiser (sizes v8s/m/l) and
+    two columns per dataset (DCA-YOLOv8, YOLOv8).
+    """
+    if not frames:
+        return pd.DataFrame()                      # nothing to do
 
-    # Highlight the best (highest μ) in bold
-    def bold_best(row: pd.Series) -> pd.Series:
-        # Extract the numeric means for comparison
-        means = row.str.extract(r"^([0-9.]+)", expand=False).astype(float)
-        best = means.idxmax()
-        if pd.notna(best) and best in row and pd.notna(row[best]):
-            row[best] = rf"\textbf{{{row[best]}}}"
-        return row
+    long = pd.concat(frames, ignore_index=True)
 
-    merged = merged.apply(bold_best, axis=1)
-    merged = merged.fillna("")
+    # ------------------------------------------------------------------ #
+    # Make "μ ± Δ" strings **and** remember numeric μ for “best optimizer”
+    # ------------------------------------------------------------------ #
+    long["stat"] = long.apply(lambda r: f"{r['μ']:.3f} ± {r['Δ']:.3f}", axis=1)
+    long["__mu__"] = long["μ"]                  # keep plain mean for ranking
 
-    # Reset index to operate on columns for multirow
-    df_for_latex = merged.reset_index()
+    # Mark best optimiser (max μ) for every (Dataset,Model,Size)
+    best_mask = (
+        long
+        .groupby(["Dataset", "Model", "Size"])["__mu__"]
+        .transform(lambda s: s == s.max())
+    )
+    long.loc[best_mask, "stat"] = (
+        r"\textbf{" + long.loc[best_mask, "stat"] + r"}"
+    )
 
-    if df_for_latex.empty:
-        return df_for_latex # Return empty if no data after processing
+    # ------------------------------------------------------------------ #
+    # Pivot so rows = (Optimiser, Size)   and   columns = (Dataset, Model)
+    # ------------------------------------------------------------------ #
+    wide = long.pivot(
+        index=["Optimiser", "Size"],
+        columns=["Dataset", "Model"],
+        values="stat",
+    ).sort_index(axis=1, level=[0, 1])           # keep datasets alphabetic
 
-    # Apply multirow for 'Dataset'
-    new_dataset_col = df_for_latex['Dataset'].copy()
-    if not df_for_latex.empty:
-        current_dataset_val = df_for_latex.loc[0, 'Dataset']
-        current_dataset_start_idx = 0
-        for i in range(1, len(df_for_latex)):
-            if df_for_latex.loc[i, 'Dataset'] != current_dataset_val:
-                count = i - current_dataset_start_idx
-                if count > 1:
-                    new_dataset_col[current_dataset_start_idx] = \
-                        rf"\multirow{{{count}}}{{*}}{{{current_dataset_val}}}"
-                    for j in range(current_dataset_start_idx + 1, i):
-                        new_dataset_col[j] = ""
-                current_dataset_val = df_for_latex.loc[i, 'Dataset']
-                current_dataset_start_idx = i
-        # Process the last dataset block
-        count = len(df_for_latex) - current_dataset_start_idx
-        if count > 1:
-            new_dataset_col[current_dataset_start_idx] = \
-                rf"\multirow{{{count}}}{{*}}{{{current_dataset_val}}}"
-            for j in range(current_dataset_start_idx + 1, len(df_for_latex)):
-                new_dataset_col[j] = ""
-        df_for_latex['Dataset'] = new_dataset_col
+    # Bring optimiser order back to the one defined in OPTIMISER_ORDER
+    opt_order = [k for k, _ in OPTIMISER_ORDER]
+    wide = wide.reindex(opt_order, level=0)      # row-level re-order
 
-    # Apply multirow for 'Model' (within each Dataset group)
-    new_model_col = df_for_latex['Model'].copy()
-    if not df_for_latex.empty:
-        current_model_val = df_for_latex.loc[0, 'Model']
-        # Use original dataset value from the sorted MultiIndex for correct model grouping
-        current_dataset_group_val_for_model = merged.index[0][0] 
-        current_model_start_idx = 0
-
-        for i in range(1, len(df_for_latex)):
-            original_dataset_at_i = merged.index[i][0] # Dataset from original multi-index
-            if (df_for_latex.loc[i, 'Model'] != current_model_val or
-                original_dataset_at_i != current_dataset_group_val_for_model):
-                count = i - current_model_start_idx
-                if count > 1:
-                    new_model_col[current_model_start_idx] = \
-                        rf"\multirow{{{count}}}{{*}}{{{current_model_val}}}"
-                    for j in range(current_model_start_idx + 1, i):
-                        new_model_col[j] = ""
-                
-                current_model_val = df_for_latex.loc[i, 'Model']
-                current_dataset_group_val_for_model = original_dataset_at_i
-                current_model_start_idx = i
-        
-        # Process the last model block
-        count = len(df_for_latex) - current_model_start_idx
-        if count > 1:
-            new_model_col[current_model_start_idx] = \
-                rf"\multirow{{{count}}}{{*}}{{{current_model_val}}}"
-            for j in range(current_model_start_idx + 1, len(df_for_latex)):
-                new_model_col[j] = ""
-        df_for_latex['Model'] = new_model_col
-    
-    return df_for_latex
+    # Compact index for nicer LaTeX: Optimiser shown once every three rows
+    wide = wide.reset_index()
+    wide["Optimiser"] = pd.Categorical(
+        wide["Optimiser"], categories=opt_order, ordered=True
+    )
+    return wide
 
 
 def to_latex(df: pd.DataFrame, ci_value: float) -> str:
-    """Render DataFrame to LaTeX using booktabs + multirow."""
-    # Get mappings of lowercase keys to uppercase labels
-    optimiser_map = {k: label for k, label in OPTIMISER_ORDER}
-    
-    # Check which optimiser columns are actually present in the DataFrame
-    # Note: The column names in df are lowercase after pivoting
-    present_optimiser_keys = []
-    for k, _ in OPTIMISER_ORDER:
-        if k in df.columns:
-            present_optimiser_keys.append(k)
-    
-    # Define column order with actual present columns (using lowercase keys)
-    column_order = ["Dataset", "Model", "Size"] + present_optimiser_keys
-    
-    # Handle cases where df might be empty or not have all expected columns
+    """
+    Render our wide table with a two-line header:
+
+         ┌───────────── top line  ──────────────┐
+         │   Dataset₁        …      Datasetₙ    │
+         │ DCA-YOLOv8 YOLOv8 … DCA-YOLOv8 YOLOv8│
+         └──────────────────────────────────────┘
+    """
     if df.empty:
-        df = pd.DataFrame(columns=column_order)
-    else:
-        # Make sure we're not dropping any columns - only reordering them
-        # Keep only columns that exist in df to avoid KeyError
-        existing_columns = [col for col in column_order if col in df.columns]
-        df = df[existing_columns]
-    
-    # Calculate the proper column format string based on actual columns
-    col_format = "lll" + "c" * len(present_optimiser_keys)
-    
-    # Use the uppercase labels for the header but lowercase keys for accessing columns
-    header = [
-        "Dataset",
-        "Model",
-        "Size",
-        *[optimiser_map[k] for k in present_optimiser_keys]
+        return "% (no data)\n"
+
+    # ----- 1. Build column format ------------------------------------------------
+    n_datasets = (df.columns.nlevels == 3 and df.columns.get_level_values(0)[3:].nunique()) or \
+                 (df.columns.nlevels == 2 and df.columns.get_level_values(0)[3:].nunique())
+    # 3 leading cols (Optimiser, Size) + 2 per dataset
+    col_fmt = "ll" + "c" * (df.shape[1] - 2)
+
+    # ----- 2. Flatten the MultiIndex columns to strings Pandas can keep ----------
+    #        We'll supply real multicolumn commands ourselves.
+    flat_cols = [
+        "{}␟{}".format(*c) if isinstance(c, tuple) else c  # ␟ is just a placeholder
+        for c in df.columns
     ]
-    
-    latex = df.to_latex(
-        index=False,
-        escape=False,
-        multicolumn=False,
-        multicolumn_format="c",
-        column_format=col_format,
-        caption=(
-            "Mean $F_1$‐score at 0.5 IoU under 3-fold cross-validation "
-            f"($\\pm$ {int(ci_value*100)} \\% CI) for each optimiser."
-        ),
-        label="tab:cadica_hpo_results",
-        longtable=False,
-        bold_rows=False,
-        na_rep="",
-        header=header,
+    out = df.set_axis(flat_cols, axis=1)
+
+    # ----- 3. Dump to latex WITHOUT header and index -----------------------------
+    body = out.to_latex(index=False,
+                        header=False,
+                        escape=False,
+                        column_format=col_fmt,
+                        multicolumn=False)
+
+    # ----- 4. Craft a two-row header by hand -------------------------------------
+    # split again on our placeholder
+    header_groups = [
+        tuple(col.split("␟")) if "␟" in col else (col,)
+        for col in flat_cols
+    ]
+
+    top = []
+    bottom = []
+    span = 0
+    for h in header_groups:
+        if len(h) == 1:          # "Optimiser" or "Size"
+            if span:
+                top.append(f"& \\multicolumn{{{span}}}{{c}}{{}}")
+                span = 0
+            top.append(f"& {h[0]}")
+            bottom.append(f"& {h[0]}")
+        else:                    # (Dataset, Model)
+            ds, mdl = h
+            if span == 0:
+                top.append("& \\multicolumn{{2}}{{c}}{{" + ds + "}}")
+            span = (span + 1) % 2
+            bottom.append(f"& {mdl}")
+    if span:                     # flush remainder
+        top.append(f"& \\multicolumn{{{span}}}{{c}}{{}}")
+
+    top_line = " ".join(top).lstrip("& ") + r"\\"
+    mid_line = " ".join(bottom).lstrip("& ") + r"\\"
+    midrule = r"\midrule"
+    toprule = r"\toprule"
+
+    header = (
+        toprule + "\n"
+        + top_line + "\n"
+        + r"\cmidrule(lr){3-" + f"{df.shape[1]}" + r"}" + "\n"
+        + mid_line + "\n"
+        + midrule + "\n"
     )
-    # Optional: centre the table
-    return "\\begin{center}\n" + latex + "\\end{center}\n"
+
+    # ----- 5. Splice header + body and wrap with \begin{center} ------------------
+    table = header + "\n".join(body.splitlines()[3:])  # drop Pandas’ own toprule etc.
+
+    caption = (
+        "Mean $F_1$-score at 0.5 IoU under 3-fold CV "
+        f"($\\pm$ {int(ci_value*100)}\\,\\% CI)."
+    )
+
+    return (
+        "\\begin{center}\n"
+        "\\footnotesize\n"
+        "\\begin{tabular}{" + col_fmt + "}\n"
+        + table +
+        "\\bottomrule\n"
+        "\\end{tabular}\n"
+        f"\\caption{{{caption}}}\n"
+        "\\label{{tab:hpo_results}}\n"
+        "\\end{center}\n"
+    )
+
 
 
 # ---------- CLI ------------------------------------------------------------ #

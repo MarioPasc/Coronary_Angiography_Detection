@@ -70,7 +70,7 @@ def run_visualizations(
 
     # Derive paths from the base_dir
     optimization_dir = base_dir / "optimization"
-    kfold_csv_path = base_dir / "kfold" / "kfold_metrics.csv"
+    kfold_csv_path = base_dir / "kfold" / "CADICA_kfold_metrics.csv"
     gpus_csv_path = base_dir / "gpu_usage_combined" / "gpu_usage_combined.csv"
     # Figures output directory will be managed by the individual plot generation scripts,
     # typically <base_dir>/figures/<plot_type>/
