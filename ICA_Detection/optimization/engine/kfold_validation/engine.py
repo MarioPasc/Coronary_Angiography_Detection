@@ -326,7 +326,6 @@ def _run(cfg: EngineCfg) -> None:
     # ---- 5. spawn workers ---------------------------------------------
     manager = Manager()
     q_metrics = manager.Queue()
-    gpu_lock = manager.Lock()
     procs: list[Process] = []
 
     # Create a lock per GPU
@@ -341,7 +340,6 @@ def _run(cfg: EngineCfg) -> None:
                 fdir / f"fold_{f_idx}.yaml",
                 tasks_per_fold[f_idx],
                 q_metrics,
-                gpu_locks[gpu_map[f_idx]]
             ),
             daemon=False,
         )
