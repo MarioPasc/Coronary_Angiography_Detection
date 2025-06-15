@@ -61,8 +61,8 @@ def get_args():
 
 # ---------------------------------------------------------------- bbox styles
 BBOX_CONF = {
-    "GT":   {"colour": (0,68,136), "labelname": "",   "fontsize": 0.6, "linewidth": 4},
-    "PRED": {"colour": (204,51,17), "labelname": "", "fontsize": 0.6, "linewidth": 4},
+    "GT":   {"colour": (0,68,136), "labelname": "",   "fontsize": 0.9, "linewidth": 4},
+    "PRED": {"colour": (204,51,17), "labelname": "", "fontsize": 0.9, "linewidth": 4},
 }
 
 
@@ -170,11 +170,13 @@ def plot_fold(
 
             # columns – upper row only
             if r == 0 and add_opt_str:
-                ax.set_title(opt.upper(), fontsize=17, pad=6)
+                ax.set_title(opt.upper(), fontsize=20, pad=6)
 
             # rows – first column only
             if c == 0:
                 row_lbl = size.replace("yolo", "")  # v8l|v8m|v8s
+                if "dca" in size:
+                    row_lbl = size.replace("dca_yolo", "")  # v8l|v8m|v8s
                 ax.annotate(
                     row_lbl,
                     xy=(-0.05, 0.5),
@@ -182,7 +184,7 @@ def plot_fold(
                     va="center",
                     ha="right",
                     rotation=90,
-                    fontsize=17,
+                    fontsize=20,
                 )
 
     # -------------- colour-bar under the whole grid -------------------------
@@ -191,7 +193,7 @@ def plot_fold(
         sm.set_array([0.0, 1.0])
         cax = fig.add_axes([0.1, -0.05, 0.8, 0.03])  # [left, bottom, width, height]
         cb = fig.colorbar(sm, cax=cax, orientation="horizontal")
-        cb.ax.tick_params(labelsize=17)
+        cb.ax.tick_params(labelsize=20)
 
     # ---------------------------------------------------------------- legend
     if add_legend:
@@ -215,7 +217,7 @@ def plot_fold(
             bbox_to_anchor=(0.5, 1.05),
             ncol=2,
             frameon=False,
-            fontsize=17,
+            fontsize=20,
         )
         BBOX_CONF["GT"]["labelname"] = ""
         BBOX_CONF["PRED"]["labelname"] = ""

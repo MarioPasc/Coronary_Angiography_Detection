@@ -263,13 +263,13 @@ def violin_panel(ax: plt.Axes,
         y_max = df[par].max()
         ax.text(x_center, y_max * 1.1,
                 f"{par}{star}", ha="center", va="bottom",
-                fontsize=15, fontweight="bold")
+                fontsize=18, fontweight="bold")
 
     ax.set_xlim(-1, row_gap * len(param_names) - 0.5)
     ax.set_xticks([])
-    ax.set_ylabel("Value (log-scale)",  fontsize=17)
+    ax.set_ylabel("Value (log-scale)",  fontsize=20)
     ax.set_yscale("log")
-    ax.tick_params(axis='y', labelsize=14)  # Increased y-tick label size
+    ax.tick_params(axis='y', labelsize=18)  # Increased y-tick label size
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(True, linestyle=":", linewidth=0.5, alpha=0.5)
 
@@ -322,9 +322,9 @@ def umap_panel(ax: plt.Axes,
                                    alpha=0.15, zorder=2)
             ax.add_patch(ell)
 
-    ax.set_xlabel("UMAP-1", fontsize=17)
-    ax.set_ylabel("UMAP-2", fontsize=17)
-    ax.tick_params(axis='both', labelsize=14)  # Increased x and y-tick label size
+    ax.set_xlabel("UMAP-1", fontsize=20)
+    ax.set_ylabel("UMAP-2", fontsize=20)
+    ax.tick_params(axis='both', labelsize=18)  # Increased x and y-tick label size
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(True, linestyle=":", linewidth=0.5, alpha=0.5)
 
@@ -379,7 +379,7 @@ def build_one_figure(df_model: pd.DataFrame,
             # shapes legend – top centre
         fig.legend(shape_handles, shape_labels, ncol=3,
                 loc="upper center", bbox_to_anchor=(0.5, 1.12),
-                frameon=False, fontsize=17)
+                frameon=False, fontsize=20)
     
     axB.spines[['right', 'top']].set_visible(False)
 

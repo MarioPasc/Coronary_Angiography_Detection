@@ -6,9 +6,9 @@ logging:
 
 # Dataset processing parameters
 dataset_processing:
-  datasets_to_process: ["CADICA"] # Options: ["CADICA", "ARCADE", "KEMEROVO"]
-  root_dir_source_datasets: /home/mpascual/research/datasets/angio/source
-  output_folder: /home/mpascual/research/datasets/angio/tasks
+  datasets_to_process: ["ARCADE"] # Options: ["CADICA", "ARCADE", "KEMEROVO"]
+  root_dir_source_datasets: /mnt/home/users/tic_163_uma/mpascual/fscratch/datasets/angiosource
+  output_folder: /mnt/home/users/tic_163_uma/mpascual/fscratch/datasets/angio/tasks
 
 # Data splitting parameters
 splitting:

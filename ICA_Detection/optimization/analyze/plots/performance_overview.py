@@ -339,8 +339,8 @@ def _populate_panel(ax: plt.Axes,
     ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{int(x):d}×"))
 
     ax.set_ylim(ymin, ymax)
-    ax.set_ylabel("F1-score", fontsize=17) if panel_label == "a." else None
-    ax.set_xlabel(r"Speed-up factor ($log_2$)", fontsize=17)
+    ax.set_ylabel("F1-score", fontsize=20) if panel_label == "a." else None
+    ax.set_xlabel(r"Speed-up factor ($log_2$)", fontsize=20)
     ax.tick_params(axis='both', labelsize=14)  # Increased x and y-tick label size
     ax.text(-0.03, 1.03, panel_label, transform=ax.transAxes,
             fontsize=20, fontweight="bold")
@@ -361,7 +361,7 @@ def _build_joint_legends(fig: plt.Figure) -> None:
                                label="Pareto frontier")
     fig.legend(handles=colour_handles + [pareto_handle],
                loc="lower center", bbox_to_anchor=(0.5, 0.06),
-               ncol=len(colour_handles) + 1, frameon=False, fontsize=17)
+               ncol=len(colour_handles) + 1, frameon=False, fontsize=20)
 
     # shape legend (models)  (top)
     marker_handles = [
@@ -373,7 +373,7 @@ def _build_joint_legends(fig: plt.Figure) -> None:
     ]
     fig.legend(handles=marker_handles,
                loc="upper center", bbox_to_anchor=(0.5, 0.95),
-               ncol=len(marker_handles), frameon=False, fontsize=17)
+               ncol=len(marker_handles), frameon=False, fontsize=20)
 
 DEFAULT_FIRST_N_TRIALS: int = 100
 # ─────────────────────────────  CLI  ─────────────────────────────────────── #
