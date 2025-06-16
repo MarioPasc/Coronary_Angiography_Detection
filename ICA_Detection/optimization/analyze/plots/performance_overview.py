@@ -103,7 +103,7 @@ def generate_plots(
     dca_res  = [r for r in results if     r.model.startswith("dca_")]
 
     # composite figure ────────────────────────────────────────────── #
-    fig, axes = plt.subplots(1, 2, sharey=True, figsize=(16, 8))
+    fig, axes = plt.subplots(1, 2, sharey=True, figsize=(18, 10))
     panel_cfgs: List[Tuple[str, Iterable[OptimisationResult]]] = [
         ("a.", yolo_res), ("b.", dca_res)
     ]
@@ -339,11 +339,11 @@ def _populate_panel(ax: plt.Axes,
     ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{int(x):d}×"))
 
     ax.set_ylim(ymin, ymax)
-    ax.set_ylabel("F1-score", fontsize=20) if panel_label == "a." else None
-    ax.set_xlabel(r"Speed-up factor ($log_2$)", fontsize=20)
-    ax.tick_params(axis='both', labelsize=14)  # Increased x and y-tick label size
+    ax.set_ylabel("F1-score", fontsize=22) if panel_label == "a." else None
+    ax.set_xlabel(r"Speed-up factor ($log_2$)", fontsize=22)
+    ax.tick_params(axis='both', labelsize=20)  # Increased x and y-tick label size
     ax.text(-0.03, 1.03, panel_label, transform=ax.transAxes,
-            fontsize=20, fontweight="bold")
+            fontsize=22, fontweight="bold")
 
     ax.grid(True, **GRID_STYLE)
     ax.spines[['right', 'top']].set_visible(False)
@@ -360,8 +360,8 @@ def _build_joint_legends(fig: plt.Figure) -> None:
     pareto_handle = plt.Line2D([], [], color=PARETO_COLOR, linewidth=2,
                                label="Pareto frontier")
     fig.legend(handles=colour_handles + [pareto_handle],
-               loc="lower center", bbox_to_anchor=(0.5, 0.06),
-               ncol=len(colour_handles) + 1, frameon=False, fontsize=20)
+               loc="lower center", bbox_to_anchor=(0.5, 0.04),
+               ncol=(len(colour_handles) + 1)/2, frameon=False, fontsize=22)
 
     # shape legend (models)  (top)
     marker_handles = [
@@ -373,7 +373,7 @@ def _build_joint_legends(fig: plt.Figure) -> None:
     ]
     fig.legend(handles=marker_handles,
                loc="upper center", bbox_to_anchor=(0.5, 0.95),
-               ncol=len(marker_handles), frameon=False, fontsize=20)
+               ncol=len(marker_handles), frameon=False, fontsize=22)
 
 DEFAULT_FIRST_N_TRIALS: int = 100
 # ─────────────────────────────  CLI  ─────────────────────────────────────── #
