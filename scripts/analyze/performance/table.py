@@ -278,7 +278,7 @@ def parse_args() -> argparse.Namespace:
         "-o",
         "--output",
         type=Path,
-        default="/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica/figures/table/table.tex",
+        default="/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/arcade/figures/table/table.tex",
         help="Write LaTeX to this file instead of stdout.",
     )
     return p.parse_args()

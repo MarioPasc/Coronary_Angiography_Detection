@@ -41,7 +41,7 @@ VIS_LOGGER.setLevel(logging.INFO)
 # ─────────────────────────── CONFIG ───────────────────────────────────── #
 
 # Define global paths - adjust these as per your project structure
-DEFAULT_BASE_DIR = Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica")
+DEFAULT_BASE_DIR = Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/arcade")
 # Sub-paths will be derived from base_dir in the function
 
 # Default values from the original scripts / or sensible defaults
@@ -70,7 +70,7 @@ def run_visualizations(
 
     # Derive paths from the base_dir
     optimization_dir = base_dir / "optimization"
-    kfold_csv_path = base_dir / "kfold" / "CADICA_kfold_metrics.csv"
+    kfold_csv_path = base_dir / "kfold" / "ARCADE_kfold_metrics.csv"
     gpus_csv_path = base_dir / "gpu_usage_combined" / "gpu_usage_combined.csv"
     # Figures output directory will be managed by the individual plot generation scripts,
     # typically <base_dir>/figures/<plot_type>/

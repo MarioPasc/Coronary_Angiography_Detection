@@ -19,21 +19,27 @@ import optimization_gradcam as opt  # ← the script you already have
 
 
 # ------------------------------------------------------------------ parameters
-ROOT_DIR   = Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica/kfold/kfold_results/dca_yolo")            # ← change me
+ADAPTER = "dca_yolov8"  # "ultralytics" or "dca_yolov8"
+ROOT_DIR   = Path(f"/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/arcade/kfold/kfold_results/{ADAPTER}")            # ← change me
 IMAGES_DIR = Path("/home/mpascual/research/datasets/angio/tasks/stenosis_detection/images")                   # ← change me
 LABELS_DIR = Path("/home/mpascual/research/datasets/angio/tasks/stenosis_detection/labels/yolo")                   # ← change me
 
 IMAGE_NAMES = [
-    "cadica_p31_v12_00045"
+    "arcadetrain_p847_v847_00847"
 ]
 
-ADAPTER      = "dca_yolov8"         # ultralytics or "dca_yolov8"
-OUT_DIR      = Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/cadica/figures/gradcam")
+OUT_DIR      = Path("/media/mpascual/PortableSSD/Coronariografías/CompBioMed/bho_compbiomed/arcade/figures/gradcam")
 CONF_THRESH  = 0.25                  # float
-ADD_CBAR     = True                  # bool
-ADD_LEGEND   = False                  # bool
 CAM_METHOD   = "eigencam"            # e.g. "eigencam", "gradcam"
-ADD_OPT_STR = False                  # bool
+
+if ADAPTER == "dca_yolov8":
+    ADD_CBAR     = True                  # bool
+    ADD_LEGEND   = False                  # bool
+    ADD_OPT_STR = False                  # bool
+else:
+    ADD_CBAR     = False                 # bool
+    ADD_LEGEND   = True                  # bool
+    ADD_OPT_STR = True                  # bool
 
 # -------------------------------------------------------------------- runner
 def _run_one(stem: str):
