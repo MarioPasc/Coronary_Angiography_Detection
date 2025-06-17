@@ -170,7 +170,7 @@ def plot_fold(
 
             # columns – upper row only
             if r == 0 and add_opt_str:
-                ax.set_title(opt.upper(), fontsize=20, pad=6)
+                ax.set_title(opt.upper(), fontsize=25, pad=6)
 
             # rows – first column only
             if c == 0:
@@ -184,7 +184,7 @@ def plot_fold(
                     va="center",
                     ha="right",
                     rotation=90,
-                    fontsize=20,
+                    fontsize=25,
                 )
 
     # -------------- colour-bar under the whole grid -------------------------
@@ -193,7 +193,7 @@ def plot_fold(
         sm.set_array([0.0, 1.0])
         cax = fig.add_axes([0.1, -0.05, 0.8, 0.03])  # [left, bottom, width, height]
         cb = fig.colorbar(sm, cax=cax, orientation="horizontal")
-        cb.ax.tick_params(labelsize=20)
+        cb.ax.tick_params(labelsize=25)
 
     # ---------------------------------------------------------------- legend
     if add_legend:
@@ -214,10 +214,10 @@ def plot_fold(
         fig.legend(
             handles=handles,
             loc="upper center",
-            bbox_to_anchor=(0.5, 1.05),
+            bbox_to_anchor=(0.5, 1.1),
             ncol=2,
             frameon=False,
-            fontsize=20,
+            fontsize=25,
         )
         BBOX_CONF["GT"]["labelname"] = ""
         BBOX_CONF["PRED"]["labelname"] = ""
