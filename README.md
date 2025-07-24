@@ -6,7 +6,7 @@
 
 ## Paper
 
-Our paper, "Hyperparameter Optimization of YOLO Models for Invasive Coronary Angiography Lesion Detection and Assessment" has been accepted in (Computers in Biology and Medicine)[https://www.sciencedirect.com/journal/computers-in-biology-and-medicine]. CompBioMed is a Q1 journal in the areas of "Computer Science, Interdisciplinary Applications" (26/175) and "Health Informatics" (7/107, Biology). As soon as the issue is published, the README will be updated with the paper's information.
+Our paper, "Hyperparameter Optimization of YOLO Models for Invasive Coronary Angiography Lesion Detection and Assessment" has been accepted in [Computers in Biology and Medicine](https://www.sciencedirect.com/journal/computers-in-biology-and-medicine). CompBioMed is a Q1 journal in the areas of "Computer Science, Interdisciplinary Applications" (26/175) and "Health Informatics" (7/107, Biology). As soon as the issue is published, the README will be updated with the paper's information.
 
 ## Overview
 
